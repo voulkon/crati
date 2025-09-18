@@ -1,0 +1,7 @@
+docker exec -it diavgeia_backend_dev python manage.py seed_data --organizations --dictionaries --dictionary-items --types --force
+
+docker exec -it diavgeia_backend_dev python manage.py seed_data --dictionaries --dictionary-items --types --force
+
+# With smaller batch sizes for both organizations and dictionary items
+python manage.py seed_data --organizations --dictionaries --dictionary-items --types --force \
+  --organizations-batch-size 25 --dictionary-items-batch-size 50

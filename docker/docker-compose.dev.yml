@@ -1,0 +1,270 @@
+services:
+  # Development Database
+  db-dev:
+    image: pgvector/pgvector:0.8.0-pg17
+    container_name: diavgeia_db_dev
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ../init-scripts:/docker-entrypoint-initdb.d
+    environment: 
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - POSTGRES_DB=${POSTGRES_DB:-diavgeia_dev}
+    networks:
+      - dev-net
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Development Redis
+  redis-dev:
+    image: redis:8.0.0-alpine
+    container_name: diavgeia_redis_dev
+    networks:
+      - dev-net
+    ports:
+      - "127.0.0.1:${REDIS_PORT}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Development Backend
+  backend-dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: diavgeia_backend_dev
+    volumes:
+      - ../backend:/code
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+      - "127.0.0.1:${DJANGO_DEBUG_PORT:-8002}:8002"
+      - "127.0.0.1:${EXTRA_PORT:-8003}:8003"
+    env_file:
+      - ../.env_files/.env.local.secrets
+    environment:
+      - DEBUG=True
+      - DJANGO_DEBUG_PORT=8002
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db-dev:5432/${POSTGRES_DB}
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq-dev:5672//
+      - REDIS_HOST=redis-dev
+      - REDIS_PORT=6379
+      - OPENSEARCH_URL=http://opensearch-dev:9200
+      - JAEGER_HOST=jaeger-dev
+      - JAEGER_PORT=4317
+      - GEMI_API_KEY=${GEMI_API_KEY}
+    networks:
+      - dev-net
+    depends_on:
+      db-dev:
+        condition: service_healthy
+      redis-dev:
+        condition: service_healthy
+      opensearch-dev:
+        condition: service_healthy
+
+  redis-commander-dev:
+    image: rediscommander/redis-commander:latest
+    container_name: redis_commander_dev
+    environment:
+      - REDIS_HOSTS=local:redis-dev:6379:0:${REDIS_PASSWORD}
+    ports:
+      - "127.0.0.1:${REDIS_COMMANDER_PORT:-8081}:8081"
+    networks:
+      - dev-net
+    depends_on:
+      - redis-dev
+
+  # Development RabbitMQ
+  rabbitmq-dev:
+    image: rabbitmq:3.12-management
+    container_name: diavgeia_rabbitmq_dev
+    ports:
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_PORT_2:-15672}:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    networks:
+      - dev-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 15s
+      retries: 5
+
+  # Development Worker
+  worker-dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    container_name: diavgeia_worker_dev
+    command: ["/code/worker_entrypoint.sh"]
+    networks:
+      - dev-net
+    volumes:
+      - ../backend:/code
+    ports:
+      - "127.0.0.1:${WORKER_PORT:-8004}:8004"
+    depends_on:
+      db-dev:
+        condition: service_healthy
+      rabbitmq-dev:
+        condition: service_healthy
+      opensearch-dev:
+        condition: service_healthy
+    env_file:
+      - ../.env_files/.env.local.secrets
+    environment:
+      - CELERY_DEBUG_PORT=8004
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db-dev:5432/${POSTGRES_DB}
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq-dev:5672//
+      - REDIS_HOST=redis-dev
+      - REDIS_PORT=6379
+      - OPENSEARCH_URL=http://opensearch-dev:9200
+      - JAEGER_HOST=jaeger-dev
+      - JAEGER_PORT=4317
+      - GEMI_API_KEY=${GEMI_API_KEY}
+
+  # Development OpenSearch
+  opensearch-dev:
+    build: 
+      context: ./opensearch-custom
+      dockerfile: Dockerfile
+    container_name: diavgeia_opensearch_dev
+    environment:
+      - "discovery.type=single-node"
+      - "plugins.security.disabled=true"
+      - "OPENSEARCH_JAVA_OPTS=-Xms256m -Xmx256m"
+    ports:
+      - "127.0.0.1:${OPENSEARCH_PORT:-9200}:9200"
+    networks:
+      - dev-net
+    volumes:
+      - opensearch_dev_data:/usr/share/opensearch/data
+      - ./opensearch-config:/usr/share/opensearch/config/custom
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Development Celery Beat
+  beat-dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.celery-light
+    container_name: diavgeia_beat_dev
+    command: celery -A diavgeia_project beat -l INFO
+    networks:
+      - dev-net
+    volumes:
+      - ../backend:/code
+    depends_on:
+      db-dev:
+        condition: service_healthy
+      rabbitmq-dev:
+        condition: service_healthy
+      backend-dev:
+        condition: service_started
+      opensearch-dev:
+        condition: service_healthy
+    env_file:
+      - ../.env_files/.env.local.secrets
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db-dev:5432/${POSTGRES_DB}
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq-dev:5672//
+      - JAEGER_HOST=jaeger-dev
+      - JAEGER_PORT=4317
+      - GEMI_API_KEY=${GEMI_API_KEY}
+
+  # Development Flower (Celery monitoring)
+  flower-dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.celery-light
+    container_name: diavgeia_flower_dev
+    command: celery -A diavgeia_project flower --port=5555
+    networks:
+      - dev-net
+    ports:
+      - "127.0.0.1:${FLOWER_PORT:-5555}:5555"
+    volumes:
+      - ../backend:/code
+    depends_on:
+      db-dev:
+        condition: service_healthy
+      rabbitmq-dev:
+        condition: service_healthy
+      backend-dev:
+        condition: service_started
+      opensearch-dev:
+        condition: service_healthy
+    env_file:
+      - ../.env_files/.env.local.secrets
+    environment:
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq-dev:5672//
+      - JAEGER_HOST=jaeger-dev
+      - JAEGER_PORT=4317
+
+  # Development Frontend
+  frontend-dev:
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    container_name: diavgeia_frontend_dev
+    networks:
+      - dev-net
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_API_URL=http://localhost:${NGINX_PORT:-80}/api
+
+  # Development Jaeger (tracing)
+  jaeger-dev:
+    image: jaegertracing/all-in-one:latest
+    container_name: diavgeia_jaeger_dev
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "127.0.0.1:${JAEGER_PORT:-16686}:16686"
+      - "127.0.0.1:4317:4317"
+      - "127.0.0.1:4318:4318"
+    networks:
+      - dev-net
+
+  nginx-dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.nginx
+    volumes:
+      - ../nginx/local.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:${NGINX_PORT:-80}:80"
+    depends_on: [backend-dev, frontend-dev, flower-dev, jaeger-dev]
+    environment:
+    - HOST=0.0.0.0
+    - STAGING_MODE=${STAGING_MODE:-false}
+    - STAGING_USERNAME=${STAGING_USERNAME:-}
+    - STAGING_PASSWORD=${STAGING_PASSWORD:-}
+    networks:
+      - dev-net
+
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  opensearch_dev_data:
+    driver: local
+  
+networks:
+  dev-net:
+    driver: bridge

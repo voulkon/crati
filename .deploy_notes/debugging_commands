@@ -1,0 +1,9 @@
+When Working from Dev Container:
+python debug_command.py seed_data --types
+
+python debug_command.py seed_data --types
+
+python debug_command.py debug_organization 6174 --verbose
+
+
+docker exec -it diavgeia_backend_dev python debug_command.py import_decisions_daily --date 2025-08-01 --distributed

@@ -1,0 +1,43 @@
+# ──────────── STAGE 1: Build dependencies ────────────
+FROM python:3.13.3-slim AS deps-builder
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install build tools
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    make \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN pip install poetry==1.8.2
+
+WORKDIR /code
+
+# Copy poetry files
+COPY backend/pyproject.toml backend/poetry.lock ./
+COPY backend/gemi ./gemi/
+
+# Configure poetry
+RUN poetry config virtualenvs.create false
+
+# Install main dependencies (no worker group) + flower
+RUN poetry install --no-root --no-interaction --no-ansi --without worker
+RUN pip install flower
+
+# ──────────── STAGE 2: Final runtime image ────────────
+FROM python:3.13.3-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /code
+
+# Copy installed packages from builder stage
+COPY --from=deps-builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
+COPY --from=deps-builder /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY backend/ .

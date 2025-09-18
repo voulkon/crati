@@ -1,0 +1,187 @@
+import React, { useState } from 'react';
+import { SignInButton, SignOutButton } from '@clerk/clerk-react';
+import { useTranslation } from '../contexts/TranslationContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
+import './UserMenu.css';
+
+const UserMenu = () => {
+  const [isOpen, setIsOpen] = useState(false);
+  const { t, language, switchLanguage, availableLanguages } = useTranslation();
+  const { 
+    theme, 
+    palette,
+    themes, 
+    palettes,
+    changeTheme,
+    changePalette,
+    currentThemeName,
+    currentPaletteName
+  } = useTheme();
+  const { user, isSignedIn } = useAuth();
+
+  const handleLanguageChange = (langCode) => {
+    switchLanguage(langCode);
+  };
+
+  const handleThemeChange = (themeId) => {
+    changeTheme(themeId);
+  };
+
+  const handlePaletteChange = (paletteId) => {
+    changePalette(paletteId);
+  };
+
+  const getCurrentPaletteColor = () => {
+    const currentPalette = palettes.find(p => p.id === palette);
+    if (!currentPalette) return '#4299E1';
+    return theme === 'dark' ? currentPalette.darkColor : currentPalette.color;
+  };
+
+  return (
+    <div className="user-menu">
+      <button 
+        className="user-menu-trigger"
+        onClick={() => setIsOpen(!isOpen)}
+        onBlur={() => setTimeout(() => setIsOpen(false), 150)}
+        style={{
+          borderLeft: `3px solid ${getCurrentPaletteColor()}`
+        }}
+      >
+        <div className="user-avatar">
+          {isSignedIn && user?.imageUrl ? (
+            <img src={user.imageUrl} alt={user.firstName} className="avatar-image" />
+          ) : (
+            <div className="avatar-placeholder">
+              {isSignedIn && user?.firstName ? user.firstName.charAt(0).toUpperCase() : '👤'}
+            </div>
+          )}
+        </div>
+        <span className="user-menu-arrow">▼</span>
+      </button>
+
+      {isOpen && (
+        <div className="user-menu-dropdown">
+          {/* User Section */}
+          <div className="menu-section">
+            {isSignedIn ? (
+              <div className="user-info">
+                <div className="user-details">
+                  <div className="user-name">{user?.firstName} {user?.lastName}</div>
+                  <div className="user-email">{user?.primaryEmailAddress?.emailAddress}</div>
+                </div>
+              </div>
+            ) : (
+              <div className="sign-in-prompt">
+                <div className="sign-in-text">Not signed in</div>
+              </div>
+            )}
+          </div>
+
+          <div className="menu-divider"></div>
+
+          {/* Language Section */}
+          <div className="menu-section">
+            <div className="menu-section-label">{t('common.language')}</div>
+            <div className="menu-options">
+              {availableLanguages.map((lang) => (
+                <button
+                  key={lang.code}
+                  className={`menu-option ${lang.code === language ? 'active' : ''}`}
+                  onClick={() => handleLanguageChange(lang.code)}
+                >
+                  <span className="option-flag">
+                    {lang.code === 'el' ? '🇬🇷' : '🇺🇸'}
+                  </span>
+                  <span className="option-name">{lang.nativeName}</span>
+                  {lang.code === language && <span className="option-check">✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="menu-divider"></div>
+
+          {/* Theme Mode Section */}
+          <div className="menu-section">
+            <div className="menu-section-label">
+              <span className="section-icon">🌓</span>
+              {t('common.themeMode')}
+            </div>
+            <div className="menu-options">
+              {themes.map((themeOption) => (
+                <button
+                  key={themeOption.id}
+                  className={`menu-option ${themeOption.id === theme ? 'active' : ''}`}
+                  onClick={() => handleThemeChange(themeOption.id)}
+                >
+                  <span className="option-icon">{themeOption.icon}</span>
+                  <span className="option-name">{themeOption.name}</span>
+                  {themeOption.id === theme && <span className="option-check">✓</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="menu-divider"></div>
+
+          {/* Color Palette Section */}
+          <div className="menu-section">
+            <div className="menu-section-label">
+              <span className="section-icon">🎨</span>
+              {t('common.colorPalette')}
+            </div>
+            <div className="palette-grid">
+              {palettes.map((paletteOption) => (
+                <button
+                  key={paletteOption.id}
+                  className={`palette-option ${paletteOption.id === palette ? 'active' : ''}`}
+                  onClick={() => handlePaletteChange(paletteOption.id)}
+                  title={paletteOption.name}
+                  style={{
+                    backgroundColor: theme === 'dark' ? paletteOption.darkColor : paletteOption.color
+                  }}
+                >
+                  {paletteOption.id === palette && <span className="palette-check">✓</span>}
+                  <span className="palette-name">{paletteOption.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Show current theme info */}
+          <div className="menu-divider"></div>
+          <div className="menu-section">
+            <div className="current-theme-display">
+              <span className="current-theme-label">Current:</span>
+              <span className="current-theme-value">
+                {currentThemeName} • {currentPaletteName}
+              </span>
+            </div>
+          </div>
+
+          <div className="menu-divider"></div>
+
+          {/* Authentication Section */}
+          <div className="menu-section">
+            {isSignedIn ? (
+              <SignOutButton>
+                <button className="menu-action danger" onClick={() => setIsOpen(false)}>
+                  🚪 {t('common.signOut')}
+                </button>
+              </SignOutButton>
+            ) : (
+              <SignInButton mode="modal">
+                <button className="menu-action primary" onClick={() => setIsOpen(false)}>
+                  🔑 {t('common.signIn')}
+                </button>
+              </SignInButton>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default UserMenu;

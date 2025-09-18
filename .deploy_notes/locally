@@ -1,0 +1,9 @@
+docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets up
+docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets down
+docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets up --build
+
+cd frontend
+npm start
+
+docker-compose -f docker/docker-compose-lite.yml --env-file=.env_files/.env.local.secrets.lite up
+docker-compose -f docker/docker-compose-lite.yml --env-file=.env_files/.env.local.secrets.lite down

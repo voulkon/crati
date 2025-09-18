@@ -1,0 +1,1 @@
+python manage.py migrate_to_opensearch --batch-size=50

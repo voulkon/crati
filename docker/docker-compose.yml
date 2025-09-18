@@ -1,0 +1,257 @@
+services:
+
+  # ───────────────────── Observability ──────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true         # enable modern OTLP receiver
+    # expose *one* port for the UI only
+    ports:
+      - "16686:16686"                       # http://<host>/jaeger (proxied)
+      - "4317:4317"                         # OTLP gRPC port
+      - "4318:4318"                         # OTLP HTTP port
+    networks: 
+      - diavgeia-net 
+  db:
+    image: pgvector/pgvector:pg17
+    container_name: diavgeia_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../init-scripts:/docker-entrypoint-initdb.d
+    environment: 
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    env_file:
+      - ../.env_files/.env.local.secrets
+    networks:
+      - diavgeia-net
+    ports:
+      - "3871:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ───────────────────────── Broker ──────────────────────────
+  rabbitmq:
+    # image: rabbitmq:4.01-management
+    image: rabbitmq:3.12-management
+    container_name: diavgeia_rabbitmq
+    ports:
+      - "5672:5672"  # AMQP protocol
+      - "15672:15672"  # Management interface
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-guest}
+    networks:
+      - diavgeia-net
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 15s
+      retries: 5
+
+  # ──────────────────────── Cache ─────────────────────────
+  redis:
+    image: redis:8.0.0-alpine
+    container_name: diavgeia_redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - diavgeia-net
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Add to docker-compose.yml
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: diavgeia_redis_commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:${REDIS_PASSWORD}
+    ports:
+      - "8081:8081"
+    networks:
+      - diavgeia-net
+    depends_on:
+      - redis
+
+  # ───────────────────────── Backend ─────────────────────────
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    container_name: diavgeia_backend
+    volumes:
+      - ../backend:/code
+    ports:
+      - "8000:8000"
+      - "${DJANGO_DEBUG_PORT:-8002}:${DJANGO_DEBUG_PORT:-8002}"
+      - "8003:8003"
+    env_file:
+      - ../.env_files/.env.local.secrets
+    environment:
+      - DJANGO_DEBUG_PORT=${DJANGO_DEBUG_PORT:-8002}
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${DB_PORT}/${POSTGRES_DB}
+      - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+      - JAEGER_HOST=${JAEGER_HOST:-jaeger}
+      - JAEGER_PORT=${JAEGER_PORT:-4317}
+      - OPENSEARCH_URL=${OPENSEARCH_URL:-http://opensearch:9200}
+    networks:
+      - diavgeia-net
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    container_name: diavgeia_worker
+    command: ["/code/worker_entrypoint.sh"]
+    networks:
+      - diavgeia-net
+    volumes:
+      - ../backend:/code
+    ports:
+      - "${CELERY_DEBUG_PORT:-8004}:${CELERY_DEBUG_PORT:-8004}"
+    depends_on:
+      db:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    env_file:
+      - ../.env_files/.env.local.secrets
+    environment:
+      - CELERY_DEBUG_PORT=${CELERY_DEBUG_PORT:-8004}
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+      - JAEGER_HOST=${JAEGER_HOST:-jaeger}
+      - JAEGER_PORT=${JAEGER_PORT:-4317}
+
+  beat:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.celery-light
+    container_name: diavgeia_beat
+    command: celery -A diavgeia_project beat -l INFO
+    networks:
+      - diavgeia-net
+    volumes:
+      - ../backend:/code
+    depends_on:
+      db:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    env_file:
+      - ../.env_files/.env.local.secrets
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+
+  flower:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.celery-light
+    container_name: diavgeia_flower
+    command: celery -A diavgeia_project flower --port=5555
+    networks:
+      - diavgeia-net
+    ports:
+      - "5555:5555"
+    volumes:
+      - ../backend:/code
+    depends_on:
+      db:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    env_file:
+      - ../.env_files/.env.local.secrets
+    environment:
+      - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+
+  # ───────────────────────── Front end ───────────────────────
+  frontend:
+    build: 
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    networks:
+      - diavgeia-net
+
+  # ──────────────────────── Gateway ──────────────────────────
+  nginx:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.nginx
+    volumes:
+      - ../nginx/local.nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:80"                        # ← the single public port
+    depends_on: [backend, frontend, flower, jaeger]
+    environment:
+    - HOST=0.0.0.0
+    - STAGING_MODE=${STAGING_MODE:-false}
+    - STAGING_USERNAME=${STAGING_USERNAME:-}
+    - STAGING_PASSWORD=${STAGING_PASSWORD:-}
+    networks:
+      - diavgeia-net
+  
+  # Step 1a: Add OpenSearch
+  opensearch:
+    build: 
+      context: ./opensearch-custom
+      dockerfile: Dockerfile
+    container_name: diavgeia_opensearch
+    environment:
+      - "discovery.type=single-node"
+      - "plugins.security.disabled=true"
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-eu-north-1}
+    ports:
+      - "9200:9200"
+    networks:
+      - diavgeia-net
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+      - ./opensearch-config:/usr/share/opensearch/config/custom
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  opensearch_data:
+    driver: local
+  postgres_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  redis_data:
+    driver: local
+    
+networks:
+  diavgeia-net:
+    driver: bridge

@@ -1,0 +1,346 @@
+from datetime import date, timedelta
+from typing import Dict, List, Any, Optional
+from django.db.models import Count, Q, Avg, Min, Max
+from django.db.models.functions import TruncHour, Extract
+from loguru import logger
+
+from core.models.decisions import Decision
+from core.models.organizations import Organization
+from core.models.types import ActType
+
+
+class DecisionAnalysisService:
+    """
+    Service for analyzing decision data structure and composition.
+    Provides reusable logic for admin dashboards and API endpoints.
+    """
+    publish_date_field_name = 'publish_timestamp'
+
+    def get_daily_decision_analysis(self, target_date: date) -> Dict[str, Any]:
+        """
+        Get comprehensive analysis of decisions for a specific day.
+        
+        Args:
+            target_date: Date to analyze
+            
+        Returns:
+            Dictionary with various analysis metrics
+        """
+        logger.info(f"Analyzing decisions for {target_date}")
+        
+        # Base queryset for the target date
+        decisions_qs = Decision.objects.filter(issue_date__date=target_date)
+        total_count = decisions_qs.count()
+        
+        # Get day of week info
+        day_of_week = target_date.strftime('%A')  # Full day name (e.g., "Monday")
+        is_weekend = target_date.weekday() >= 5  # Saturday=5, Sunday=6
+        
+        if total_count == 0:
+            return {
+                'date': target_date,
+                'day_of_week': day_of_week,
+                'is_weekend': is_weekend,
+                'total_count': 0,
+                'has_data': False,
+                'message': f'No decisions found for {target_date} ({day_of_week})'
+            }
+        
+        # Get all analysis components
+        analysis = {
+            'date': target_date,
+            'day_of_week': day_of_week,
+            'is_weekend': is_weekend,
+            'total_count': total_count,
+            'has_data': True,
+            
+            # Basic composition
+            'by_type': self._analyze_by_type(decisions_qs),
+            'by_organization': self._analyze_by_organization(decisions_qs),
+            'by_signer': self._analyze_by_signer(decisions_qs),
+            
+            # Temporal patterns
+            'by_hour': self._analyze_by_hour(decisions_qs),
+            'timing_stats': self._get_timing_stats(decisions_qs),
+            
+            # Content analysis
+            'content_stats': self._get_content_stats(decisions_qs),
+            
+            # Document analysis
+            'document_stats': self._get_document_stats(decisions_qs),
+            
+            # Top entities
+            'top_organizations': self._get_top_organizations(decisions_qs, limit=10),
+            'top_signers': self._get_top_signers(decisions_qs, limit=10),
+            'top_types': self._get_top_types(decisions_qs, limit=10),
+            
+            # Quality indicators
+            'quality_indicators': self._get_quality_indicators(decisions_qs),
+        }
+        
+        return analysis
+
+    def _analyze_by_type(self, decisions_qs) -> List[Dict[str, Any]]:
+        """Analyze decisions by act type"""
+        return list(
+            decisions_qs.values('decision_type__label', 'decision_type__uid')
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+
+    def _analyze_by_organization(self, decisions_qs) -> List[Dict[str, Any]]:
+        """Analyze decisions by organization"""
+        return list(
+            decisions_qs.values('organization__label', 'organization__uid')
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+
+    def _analyze_by_signer(self, decisions_qs) -> List[Dict[str, Any]]:
+        """Analyze decisions by signer"""
+        return list(
+            decisions_qs.values(
+                'signers__first_name', 
+                'signers__last_name', 
+                'signers__uid'
+            )
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+
+    def _analyze_by_hour(self, decisions_qs) -> List[Dict[str, Any]]:
+        """Analyze decisions by hour of day"""
+        return list(
+            decisions_qs.annotate(hour=TruncHour(self.publish_date_field_name))
+            .values('hour')
+            .annotate(count=Count('id'))
+            .order_by('hour')
+        )
+
+    def _get_timing_stats(self, decisions_qs) -> Dict[str, Any]:
+        """Get timing statistics for decisions"""
+        stats = decisions_qs.aggregate(
+            earliest=Min(self.publish_date_field_name),
+            latest=Max(self.publish_date_field_name)
+        )
+        
+        # Calculate average hour separately using Extract
+        avg_hour_stats = decisions_qs.aggregate(
+            avg_hour=Avg(Extract(self.publish_date_field_name, 'hour'))
+        )
+        
+        return {
+            'earliest_time': stats['earliest'],
+            'latest_time': stats['latest'],
+            'avg_hour': avg_hour_stats['avg_hour'],
+            'time_span_hours': (
+                (stats['latest'] - stats['earliest']).total_seconds() / 3600
+                if stats['earliest'] and stats['latest'] else 0
+            )
+        }
+
+    def _get_content_stats(self, decisions_qs) -> Dict[str, Any]:
+        """Analyze content characteristics"""
+        # Get decisions with subject/document_url data
+        with_subject = decisions_qs.exclude(Q(subject__isnull=True) | Q(subject__exact=''))
+        with_documents = decisions_qs.exclude(Q(document_url__isnull=True) | Q(document_url__exact=''))
+        
+        return {
+            'with_subject': with_subject.count(),
+            'with_documents': with_documents.count(),
+            'subject_coverage': round(with_subject.count() / decisions_qs.count() * 100, 1),
+            'document_coverage': round(with_documents.count() / decisions_qs.count() * 100, 1),
+        }
+
+    def _get_document_stats(self, decisions_qs) -> Dict[str, Any]:
+        """Analyze document extraction status"""
+        from core.models.document_analysis import DocumentExtraction, ProcessingStatus
+        
+        # Get extraction stats for decisions with documents
+        decisions_with_docs = decisions_qs.exclude(
+            Q(document_url__isnull=True) | Q(document_url__exact='')
+        )
+        
+        if decisions_with_docs.count() == 0:
+            return {
+                'total_with_docs': 0,
+                'extracted': 0,
+                'pending': 0,
+                'failed': 0,
+                'extraction_rate': 0
+            }
+        
+        # Count extractions by status
+        extracted = DocumentExtraction.objects.filter(
+            decision__in=decisions_with_docs,
+            extraction_status=ProcessingStatus.COMPLETED
+        ).count()
+        
+        pending = DocumentExtraction.objects.filter(
+            decision__in=decisions_with_docs,
+            extraction_status__in=[
+                ProcessingStatus.PENDING,
+                ProcessingStatus.PROCESSING,
+                ProcessingStatus.NEEDS_VISION
+            ]
+        ).count()
+        
+        failed = DocumentExtraction.objects.filter(
+            decision__in=decisions_with_docs,
+            extraction_status=ProcessingStatus.FAILED
+        ).count()
+        
+        total_with_docs = decisions_with_docs.count()
+        
+        return {
+            'total_with_docs': total_with_docs,
+            'extracted': extracted,
+            'pending': pending,
+            'failed': failed,
+            'extraction_rate': round(extracted / total_with_docs * 100, 1) if total_with_docs > 0 else 0
+        }
+
+    def _get_top_organizations(self, decisions_qs, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get top organizations by decision count"""
+        return list(
+            decisions_qs.values('organization__label', 'organization__uid')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:limit]
+        )
+
+    def _get_top_signers(self, decisions_qs, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get top signers by decision count"""
+        return list(
+            decisions_qs.values(
+                'signers__first_name',
+                'signers__last_name', 
+                'signers__uid'
+            )
+            .annotate(count=Count('id'))
+            .order_by('-count')[:limit]
+        )
+
+    def _get_top_types(self, decisions_qs, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get top decision types by count"""
+        return list(
+            decisions_qs.values('decision_type__label', 'decision_type__uid')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:limit]
+        )
+
+    def _get_quality_indicators(self, decisions_qs) -> Dict[str, Any]:
+        """Calculate data quality indicators"""
+        total = decisions_qs.count()
+        
+        # Count decisions with various quality issues
+        missing_subject = decisions_qs.filter(Q(subject__isnull=True) | Q(subject__exact='')).count()
+        missing_org = decisions_qs.filter(organization__isnull=True).count()
+        no_signers = decisions_qs.filter(signers__isnull=True).count()
+        missing_type = decisions_qs.filter(decision_type__isnull=True).count()
+        
+        return {
+            'completeness_score': round(
+                (total - missing_subject - missing_org - no_signers - missing_type) / (total) * 100, 1
+            ) if total > 0 else 0,
+            'missing_subject_count': missing_subject,
+            'missing_organization_count': missing_org,
+            'no_signers_count': no_signers,
+            'missing_type_count': missing_type,
+        }
+
+    def get_date_range_analysis(
+        self, 
+        start_date: date, 
+        end_date: date,
+        group_by: str = 'day'  # 'day', 'week', 'month'
+    ) -> Dict[str, Any]:
+        """
+        Get analysis for a date range with grouping.
+        Useful for trends and comparisons.
+        """
+        logger.info(f"Analyzing decisions from {start_date} to {end_date}, grouped by {group_by}")
+        
+        decisions_qs = Decision.objects.filter(
+            issue_date__date__gte=start_date,
+            issue_date__date__lte=end_date
+        )
+        
+        # Group by time period
+        if group_by == 'day':
+            from django.db.models.functions import TruncDate
+            grouped_data = (
+                decisions_qs.annotate(period=TruncDate('issue_date'))
+                .values('period')
+                .annotate(count=Count('id'))
+                .order_by('period')
+            )
+        elif group_by == 'week':
+            from django.db.models.functions import TruncWeek
+            grouped_data = (
+                decisions_qs.annotate(period=TruncWeek('issue_date'))
+                .values('period')
+                .annotate(count=Count('id'))
+                .order_by('period')
+            )
+        elif group_by == 'month':
+            from django.db.models.functions import TruncMonth
+            grouped_data = (
+                decisions_qs.annotate(period=TruncMonth('issue_date'))
+                .values('period')
+                .annotate(count=Count('id'))
+                .order_by('period')
+            )
+        else:
+            raise ValueError(f"Invalid group_by value: {group_by}")
+        
+        return {
+            'start_date': start_date,
+            'end_date': end_date,
+            'group_by': group_by,
+            'total_decisions': decisions_qs.count(),
+            'grouped_data': list(grouped_data),
+            'summary': self._get_range_summary(decisions_qs)
+        }
+
+    def _get_range_summary(self, decisions_qs) -> Dict[str, Any]:
+        """Get summary stats for a decision queryset"""
+        return {
+            'total_count': decisions_qs.count(),
+            'unique_organizations': decisions_qs.values('organization').distinct().count(),
+            'unique_types': decisions_qs.values('decision_type').distinct().count(),
+            'unique_signers': decisions_qs.values('signers').distinct().count(),
+        }
+
+    def compare_daily_patterns(self, dates: List[date]) -> Dict[str, Any]:
+        """
+        Compare decision patterns across multiple specific dates.
+        Useful for understanding variations.
+        """
+        logger.info(f"Comparing decision patterns for {len(dates)} dates")
+        
+        comparisons = []
+        for target_date in dates:
+            daily_analysis = self.get_daily_decision_analysis(target_date)
+            comparisons.append({
+                'date': target_date,
+                'day_of_week': target_date.strftime('%A'),
+                'is_weekend': target_date.weekday() >= 5,
+                'total_count': daily_analysis['total_count'],
+                'top_organization': daily_analysis['top_organizations'][0] if daily_analysis['top_organizations'] else None,
+                'top_type': daily_analysis['top_types'][0] if daily_analysis['top_types'] else None,
+                'quality_score': daily_analysis['quality_indicators']['completeness_score'],
+                'extraction_rate': daily_analysis['document_stats']['extraction_rate'],
+            })
+        
+        return {
+            'dates': dates,
+            'comparisons': comparisons,
+            'avg_daily_count': sum(c['total_count'] for c in comparisons) / len(comparisons) if comparisons else 0,
+            'max_daily_count': max(c['total_count'] for c in comparisons) if comparisons else 0,
+            'min_daily_count': min(c['total_count'] for c in comparisons) if comparisons else 0,
+            'weekend_days': sum(1 for c in comparisons if c['is_weekend']),
+            'weekday_avg': sum(c['total_count'] for c in comparisons if not c['is_weekend']) / 
+                          sum(1 for c in comparisons if not c['is_weekend']) if any(not c['is_weekend'] for c in comparisons) else 0,
+            'weekend_avg': sum(c['total_count'] for c in comparisons if c['is_weekend']) / 
+                          sum(1 for c in comparisons if c['is_weekend']) if any(c['is_weekend'] for c in comparisons) else 0,
+        }

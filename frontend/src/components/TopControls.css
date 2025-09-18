@@ -1,0 +1,61 @@
+/* Add any layout-specific styling here if needed */
+
+.top-controls-container {
+  /* Base styles that apply to all layouts */
+}
+
+/* Suggested code changes */
+.top-controls {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+}
+
+.top-controls.horizontal-right {
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  flex-direction: row;
+}
+
+.top-controls.vertical-right {
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  flex-direction: column;
+}
+
+.top-controls.horizontal-left {
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  flex-direction: row;
+}
+
+.top-controls.split-corners {
+  top: var(--spacing-md);
+  right: var(--spacing-md);
+  flex-direction: row;
+}
+
+/* Ensure controls don't interfere with page content */
+.top-controls > * {
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+
+/* Responsive adjustments for different layouts */
+@media (max-width: 768px) {
+  /* On mobile, maybe force vertical layout */
+  .top-controls-horizontal {
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    gap: 8px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* On very small screens, maybe use split corners */
+  .top-controls-split-mobile {
+    /* Custom mobile layout */
+  }
+}

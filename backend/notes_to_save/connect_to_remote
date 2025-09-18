@@ -1,0 +1,26 @@
+ssh -i ~/.ssh/id_ed25519 root@49.13.136.52
+ssh -i ~/.ssh/id_ed25519 root@78.47.115.211
+
+tail -f /var/log/auth.log
+
+# sshd -T | grep authorizedkeysfile
+
+/etc/ssh/sshd_config
+
+
+# See all active jails
+fail2ban-client status
+
+# Check IPs in a specific jail
+fail2ban-client status JAIL_NAME
+
+# Check all jails and their banned IPs at once
+for jail in $(fail2ban-client status | grep "Jail list:" | cut -d: -f2 | tr ',' '\n' | tr -d ' '); do
+    echo "=== $jail ==="
+    fail2ban-client status $jail
+    echo
+done
+
+
+# Check current SSH log level
+sshd -T | grep loglevel

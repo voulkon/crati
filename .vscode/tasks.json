@@ -1,0 +1,44 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Start Frontend",
+            "type": "shell",
+            "command": "npm start",
+            "options": {
+                "cwd": "${workspaceFolder}/frontend"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Add Package",
+            "type": "shell",
+            "command": "cd backend; if ($?) { poetry add ${input:packageName} }; if ($?) { cd .. }; if ($?) { docker-compose -f docker/docker-compose.yml build backend }; if ($?) { docker-compose -f docker/docker-compose.yml up -d --no-deps backend }",
+            "problemMatcher": [],
+            "windows": {
+                "command": "cd backend; if ($?) { py -m poetry add ${input:packageName} }; if ($?) { cd .. }; if ($?) { docker-compose -f docker/docker-compose.yml build backend }; if ($?) { docker-compose -f docker/docker-compose.yml up -d --no-deps backend }"
+            }
+        },
+        {
+            "label": "Add Dev Package",
+            "type": "shell",
+            "command": "cd backend; if ($?) { poetry add ${input:packageName} --group dev }; if ($?) { cd .. }; if ($?) { docker-compose -f docker/docker-compose.yml build backend }; if ($?) { docker-compose -f docker/docker-compose.yml up -d --no-deps backend }",
+            "problemMatcher": [],
+            "windows": {
+                "command": "cd backend; if ($?) { py -m poetry add ${input:packageName} --group dev }; if ($?) { cd .. }; if ($?) { docker-compose -f docker/docker-compose.yml build backend }; if ($?) { docker-compose -f docker/docker-compose.yml up -d --no-deps backend }"
+            }
+        }
+    ],
+    "inputs": [
+        {
+            "id": "packageName",
+            "description": "Package name to add",
+            "default": "",
+            "type": "promptString"
+        }
+    ]
+}

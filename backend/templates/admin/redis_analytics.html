@@ -1,0 +1,201 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}API Analytics{% endblock %}
+
+{% block extrastyle %}
+<style>
+    .analytics-container {
+        padding: 20px;
+    }
+
+    .stat-card {
+        background: #fff;
+        border: 1px solid #ddd;
+        padding: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .stat-value {
+        font-size: 24px;
+        font-weight: bold;
+        color: #447e9b;
+    }
+
+    .export-btn {
+        margin-top: 20px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    th,
+    td {
+        padding: 8px;
+        border: 1px solid #ddd;
+        text-align: left;
+    }
+
+    th {
+        background-color: #f5f5f5;
+    }
+
+    .chart-container {
+        height: 300px;
+        margin-bottom: 30px;
+    }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="analytics-container">
+    <h1>API Analytics Dashboard</h1>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="stat-card">
+                <h3>Total API Requests</h3>
+                <div class="stat-value">{{ total_requests }}</div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="stat-card">
+                <h3>Unique IP Addresses</h3>
+                <div class="stat-value">{{ unique_ips }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="stat-card">
+                <h3>Daily Traffic</h3>
+                <div class="chart-container">
+                    <canvas id="dailyChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="stat-card">
+                <h3>Hourly Traffic</h3>
+                <div class="chart-container">
+                    <canvas id="hourlyChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="stat-card">
+                <h3>Popular Endpoints</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Endpoint</th>
+                            <th>Requests</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for endpoint, count in popular_endpoints %}
+                        <tr>
+                            <td>{{ endpoint }}</td>
+                            <td>{{ count }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="stat-card">
+                <h3>HTTP Methods</h3>
+                <div class="chart-container" style="height: 200px;">
+                    <canvas id="methodsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="export-btn">
+        <a href="{% url 'admin:export_redis_analytics' %}" class="button">Export as CSV</a>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Daily traffic chart
+        var dailyLabels = [{% for day, count in daily_traffic %}'{{ day }}', {% endfor %}];
+    var dailyData = [{% for day, count in daily_traffic %}{ { count } }, {% endfor %}];
+
+    var dailyChart = new Chart(document.getElementById('dailyChart'), {
+        type: 'line',
+        data: {
+            labels: dailyLabels,
+            datasets: [{
+                label: 'Daily Requests',
+                data: dailyData,
+                borderColor: '#447e9b',
+                backgroundColor: 'rgba(68, 126, 155, 0.1)',
+                borderWidth: 2,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+
+    // Hourly traffic chart
+    var hourlyLabels = [{% for hour, count in hourly_traffic %}'{{ hour }}', {% endfor %}];
+    var hourlyData = [{% for hour, count in hourly_traffic %}{ { count } }, {% endfor %}];
+
+    var hourlyChart = new Chart(document.getElementById('hourlyChart'), {
+        type: 'bar',
+        data: {
+            labels: hourlyLabels,
+            datasets: [{
+                label: 'Hourly Requests',
+                data: hourlyData,
+                backgroundColor: 'rgba(68, 126, 155, 0.7)'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+
+    // Methods chart
+    var methodLabels = [{% for method, count in methods %}'{{ method }}', {% endfor %}];
+    var methodData = [{% for method, count in methods %}{ { count } }, {% endfor %}];
+
+    var methodsChart = new Chart(document.getElementById('methodsChart'), {
+        type: 'doughnut',
+        data: {
+            labels: methodLabels,
+            datasets: [{
+                data: methodData,
+                backgroundColor: [
+                    '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false
+        }
+    });
+  });
+</script>
+{% endblock %}

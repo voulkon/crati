@@ -9,3 +9,5 @@ python manage.py seed_data --organizations --dictionaries --dictionary-items --t
 
 python manage.py import_decisions_daily \ 
   --date 2025-09-18
+
+python debug_command.py import_decisions_daily --date 2025-09-18

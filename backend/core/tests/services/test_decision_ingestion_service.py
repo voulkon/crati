@@ -2,6 +2,7 @@ from typing import List
 import pytest
 from unittest.mock import MagicMock, call, patch
 from datetime import date, datetime, timedelta, timezone
+from django.test import TransactionTestCase
 from core.tests.utils import create_decision_dto as create_mock_decision
 from core.tests.utils import create_search_response as create_mock_search_response
 # Models from the SDK library might be needed for creating mock responses
@@ -183,3 +184,18 @@ def test_single_increment_multiple_pages(
 # test_rate_limiting_delay_value (might need more complex time mocking)
 # test_end_date_exact_match
 # test_invalid_increment_value_raises_error
+
+
+@pytest.mark.django_db(transaction=True)
+def test_fetch_daily_decisions_normal_weekday(
+    a_test_decision_service:DecisionIngestionService,
+    daily_decisions_vcr_cassette
+    ):
+    with daily_decisions_vcr_cassette("test_fetch_daily_decisions_normal_weekday.yaml"):
+        target_date = date(2025, 9, 8)
+        a_test_decision_service.fetch_daily_decisions(
+            target_date=target_date,
+            save_to_db=True,
+            want_it_distributed=False
+        )
+        ...

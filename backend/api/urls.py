@@ -12,6 +12,7 @@ from .views import entities as entities_views
 from .views.companies.details import company_detail, company_decisions, company_decision_stats
 from .views.summary import amounts as summary_amounts_views
 from .views.organy import details as details_between_companies_and_orgs
+from .views.tracing_test_views import tracing_test_views
 
 router = DefaultRouter()
 # Register your viewsets
@@ -84,5 +85,13 @@ urlpatterns = [
     path('organizations/<str:organization_uid>/transactions/', details_between_companies_and_orgs.organization_entity_transactions, name='organization-transactions'),
     path('organizations/<str:organization_uid>/transactions/<str:afm>/', details_between_companies_and_orgs.organization_entity_transactions, name='organization-entity-transactions'),
 
+    path('debug-tracing/test-tracing/', tracing_test_views.test_tracing, name='test-tracing'),
+    path('debug-tracing/test-tracing-verbose/', tracing_test_views.test_tracing_verbose, name='test-tracing-verbose'),
+    path('debug-tracing/force-export/', tracing_test_views.force_trace_export, name='force-export'),
+    path('debug-tracing/environment/', tracing_test_views.debug_environment, name='debug-environment'),
+    path('debug-tracing/test-celery/', tracing_test_views.test_celery_tracing, name='test-celery'),
+    path('debug-tracing/test-simple-task/', tracing_test_views.test_simple_task, name='test-simple-task'),
+    path('debug-tracing/test-error/', tracing_test_views.test_error_tracing, name='test-error'),
+    path('debug-tracing/test-nested/', tracing_test_views.test_nested_tracing, name='test-nested'),
 
 ]

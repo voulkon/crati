@@ -1,27 +1,26 @@
 import os
 from celery import Celery
-from diavgeia_project.otel_setup import setup_tracing
-
-# Instrument Celery
+from opentelemetry import trace
 from opentelemetry.instrumentation.celery import CeleryInstrumentor
-from celery.schedules import crontab
+from .otel_init import initialize_otel
 
-# Set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "diavgeia_project.settings")
 
-# Initialize OpenTelemetry for Celery
-tracer = setup_tracing(service_name="diavgeia-celery")
+# Initialize OpenTelemetry FIRST
+tracer = initialize_otel("diavgeia-celery")
 
+# Create Celery app
 app = Celery("diavgeia_project")
-
-# Using a string here means the worker doesn't have to serialize
-# the configuration object to child processes.
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
-# Instrument Celery after creating the app
-CeleryInstrumentor().instrument(app=app)
+# Modern instrumentation for v0.53b1+
+CeleryInstrumentor().instrument(
+    tracer_provider=trace.get_tracer_provider(),
+    # Optional: Add any specific instrumentation configurations
+    # enable_propagators=["tracecontext", "baggage"],
+    # disable_span_enrich=False
+)
 
-# Load task modules from all registered Django apps.
 app.autodiscover_tasks()
 
 # Configure result backend to store task results

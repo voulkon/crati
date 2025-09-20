@@ -1,25 +1,42 @@
 """
 WSGI config for diavgeia_project project.
-
-It exposes the WSGI callable as a module-level variable named ``application``.
-
-For more information on this file, see
-https://docs.djangoproject.com/en/5.0/howto/deployment/wsgi/
 """
 
 import os
 from django.core.wsgi import get_wsgi_application
-from opentelemetry.instrumentation.django import DjangoInstrumentor
+
+# Add this at the very top to see if wsgi.py is loaded
+print("🚨🚨🚨 WSGI.PY IS BEING EXECUTED 🚨🚨🚨")
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "diavgeia_project.settings")
 
-# Initialize OpenTelemetry before the application starts
-from diavgeia_project.otel_setup import setup_tracing
-
-setup_tracing(service_name="diavgeia-django")
-
-# Instrument Django
-DjangoInstrumentor().instrument()
+try:
+    # Simple approach - just force the Django service name
+    print("🚀 Setting Django service name...")
+    os.environ["OTEL_SERVICE_NAME"] = "diavgeia-django"
+    
+    # Import and initialize after setting the service name
+    from .otel_init import initialize_otel
+    from opentelemetry.instrumentation.django import DjangoInstrumentor
+    from opentelemetry.instrumentation.requests import RequestsInstrumentor
+    from opentelemetry.instrumentation.psycopg2 import Psycopg2Instrumentor
+    
+    # Initialize with Django service name
+    tracer = initialize_otel("diavgeia-django")
+    print(f"✅ OpenTelemetry initialized for Django with tracer: {tracer}")
+    
+    # Auto-instrument
+    DjangoInstrumentor().instrument()
+    RequestsInstrumentor().instrument()
+    Psycopg2Instrumentor().instrument()
+    print("✅ All Django instrumentations complete")
+    
+except Exception as e:
+    print(f"❌ OpenTelemetry initialization failed in wsgi.py: {e}")
+    import traceback
+    traceback.print_exc()
 
 # Get the Django application
+print("📱 Getting Django WSGI application...")
 application = get_wsgi_application()
+print("✅ WSGI application ready")

@@ -253,13 +253,26 @@ class DecisionImporter(BaseImporter):
                     logger.warning(f"Unit {entity_id} has no organization ID - attempting to resolve through parent chain")
                     
                     # Try to resolve organization through parent units - NOW RETURNS RESOLUTION PATH TOO
-                    org_id, resolution_path = self._resolve_unit_organization_through_parents(entity_id, fetcher, max_depth=5)
+                    org_id, resolution_path, units_to_import = self._resolve_unit_organization_through_parents(entity_id, fetcher, max_depth=5)
                     
                     if org_id:
+                        for unit_id, unit_dto in units_to_import:
+                            unit_dto._resolved_organization_id = org_id
+                            unit_dto._resolution_path = resolution_path
+                            with transaction.atomic():
+                                import_defaults = {
+                                    'organization_id': org_id,
+                                    'resolution_path': resolution_path
+                                }
+                                if hasattr(unit_dto, 'parentId') and unit_dto.parentId:
+                                    import_defaults['parent_id'] = unit_dto.parentId
+                                    
+                                created_count = importer.import_many([unit_dto], defaults=import_defaults)
                         # Assign the resolved organization ID to the unit DTO
-                        entity_dto.organizationId = org_id
-                        entity_dto.resolution_path = resolution_path  # Store for later use during import
+                        entity_dto._resolved_organization_id = org_id
+                        entity_dto._resolution_path = resolution_path  # Store for later use during import
                         logger.info(f"Resolved organization {org_id} for unit {entity_id} through parent chain")
+
                     else:
                         # Use default organization as last resort
                         default_org_uid = self._ensure_default_organization('unit', entity_id)
@@ -355,7 +368,16 @@ class DecisionImporter(BaseImporter):
                 
                 # Now import the entity
                 with transaction.atomic():
-                    created_count = importer.import_many([entity_dto])
+                    import_defaults = {}
+                    if hasattr(entity_dto, '_resolved_organization_id'):
+                        import_defaults['organization_id'] = entity_dto._resolved_organization_id
+                    if hasattr(entity_dto, '_resolution_path'):
+                        import_defaults['resolution_path'] = entity_dto._resolution_path
+                    
+                    if import_defaults:
+                        created_count = importer.import_many([entity_dto], defaults=import_defaults)
+                    else:
+                        created_count = importer.import_many([entity_dto])
                     
                     if created_count > 0:
                         # Add this entity to our list of available entities
@@ -763,11 +785,15 @@ class DecisionImporter(BaseImporter):
     def import_decisions(self, decisions: list[DecisionDTO]) -> int:
         return self.import_many(decisions)
 
+
     def _resolve_unit_organization_through_parents(self, unit_id, fetcher, max_depth=5, visited=None):
         """
         Resolves the organization ID for a unit by traversing up the parent chain.
+        Checks DB first, then API. Handles cases where IDs might be orgs instead of units.
         Also returns the resolution path for auditing.
         """
+        units_to_import = []
+
         if visited is None:
             visited = set()
         
@@ -785,78 +811,211 @@ class DecisionImporter(BaseImporter):
             return None, resolution_path
         
         visited.add(unit_id)
-        current_unit_id = unit_id
+        current_id = unit_id
         depth = 0
         
         while depth < max_depth:
+            path_step = {
+                "id": current_id,
+                "depth": depth,
+                "checked_db_unit": False,
+                "checked_api_unit": False,
+                "checked_db_org": False,
+                "checked_api_org": False
+            }
+            
             try:
-                # Fetch the current unit
-                unit_dto = fetcher.fetch_a_unit(current_unit_id)
-                
-                # Record each step in the path
-                path_step = {
-                    "unit_id": current_unit_id, 
-                    "found": unit_dto is not None
-                }
-                
-                if unit_dto:
-                    path_step["has_org_id"] = hasattr(unit_dto, 'organizationId') and bool(unit_dto.organizationId)
-                    path_step["has_parent_id"] = hasattr(unit_dto, 'parentId') and bool(unit_dto.parentId)
+                # 1. First check if it exists as a unit in our DB
+                try:
+                    existing_unit = Unit.objects.get(uid=current_id)
+                    path_step["checked_db_unit"] = True
+                    path_step["found_in_db_as_unit"] = True
                     
-                    # If there's an organizationId, we found what we're looking for
-                    if hasattr(unit_dto, 'organizationId') and unit_dto.organizationId:
-                        path_step["resolved_org_id"] = unit_dto.organizationId
+                    if existing_unit.organization_id:
+                        path_step["resolved_org_id"] = existing_unit.organization_id
                         resolution_path["path"].append(path_step)
-                        resolution_path["result"] = "found_organization"
-                        resolution_path["resolved_through_unit"] = current_unit_id
-                        resolution_path["organization_id"] = unit_dto.organizationId
+                        resolution_path["result"] = "found_in_db"
+                        resolution_path["organization_id"] = existing_unit.organization_id
+                        resolution_path["resolved_through_unit"] = current_id
                         
-                        logger.info(f"Found organization {unit_dto.organizationId} for unit {current_unit_id}")
-                        return unit_dto.organizationId, resolution_path
+                        logger.info(f"Found unit {current_id} in DB with organization {existing_unit.organization_id}")
+                        return existing_unit.organization_id, resolution_path, units_to_import
                     
-                    # No organization ID - record parent and move up
-                    if hasattr(unit_dto, 'parentId') and unit_dto.parentId:
-                        if unit_dto.parentId in visited:
+                    # Unit exists in DB but has no organization - check parent
+                    if existing_unit.parent_id:
+                        if existing_unit.parent_id in visited:
                             path_step["cycle_detected"] = True
                             resolution_path["path"].append(path_step)
                             resolution_path["result"] = "cycle_detected"
-                            logger.warning(f"Would create cycle with parent {unit_dto.parentId}, stopping")
-                            return None, resolution_path
+                            logger.warning(f"Would create cycle with parent {existing_unit.parent_id}, stopping")
+                            return None, resolution_path, units_to_import
                         
-                        path_step["parent_id"] = unit_dto.parentId
+                        path_step["parent_id"] = existing_unit.parent_id
+                        path_step["has_parent"] = True
                         resolution_path["path"].append(path_step)
                         
-                        logger.info(f"Unit {current_unit_id} has no organization ID, checking parent {unit_dto.parentId}")
-                        current_unit_id = unit_dto.parentId
-                        visited.add(current_unit_id)
+                        logger.info(f"Unit {current_id} in DB has no organization, checking parent {existing_unit.parent_id}")
+                        current_id = existing_unit.parent_id
+                        visited.add(current_id)
                         depth += 1
                         continue
+                    else:
+                        # Unit in DB has no parent - dead end
+                        path_step["has_parent"] = False
+                        resolution_path["path"].append(path_step)
+                        resolution_path["result"] = "no_parent_in_db"
+                        logger.warning(f"Unit {current_id} in DB has no parent, cannot resolve further")
+                        return None, resolution_path, units_to_import
+                        
+                except Unit.DoesNotExist:
+                    path_step["checked_db_unit"] = True
+                    path_step["found_in_db_as_unit"] = False
                     
-                    # No parent either - we're at a dead end
+                    # 2. Not in DB as unit, try API as unit
+                    try:
+                        unit_dto = fetcher.fetch_a_unit(current_id)
+                        path_step["checked_api_unit"] = True
+                        
+                        if unit_dto:
+                            units_to_import.append((current_id, unit_dto))
+                            path_step["found_in_api_as_unit"] = True
+                            path_step["has_org_id"] = hasattr(unit_dto, 'organizationId') and bool(unit_dto.organizationId)
+                            path_step["has_parent_id"] = hasattr(unit_dto, 'parentId') and bool(unit_dto.parentId)
+                            
+                            # If there's an organizationId, we found what we're looking for
+                            if hasattr(unit_dto, 'organizationId') and unit_dto.organizationId:
+                                path_step["resolved_org_id"] = unit_dto.organizationId
+                                resolution_path["path"].append(path_step)
+                                resolution_path["result"] = "found_in_api_as_unit"
+                                resolution_path["resolved_through_unit"] = current_id
+                                resolution_path["organization_id"] = unit_dto.organizationId
+                                
+                                logger.info(f"Found unit {current_id} in API with organization {unit_dto.organizationId}")
+                                return unit_dto.organizationId, resolution_path, units_to_import
+                            
+                            # No organization ID - check if there's a parent
+                            if hasattr(unit_dto, 'parentId') and unit_dto.parentId:
+                                if unit_dto.parentId in visited:
+                                    path_step["cycle_detected"] = True
+                                    resolution_path["path"].append(path_step)
+                                    resolution_path["result"] = "cycle_detected"
+                                    logger.warning(f"Would create cycle with parent {unit_dto.parentId}, stopping")
+                                    return None, resolution_path, units_to_import
+                                
+                                path_step["parent_id"] = unit_dto.parentId
+                                resolution_path["path"].append(path_step)
+                                
+                                logger.info(f"Unit {current_id} in API has no organization ID, checking parent {unit_dto.parentId}")
+                                current_id = unit_dto.parentId
+                                visited.add(current_id)
+                                depth += 1
+                                continue
+                            
+                            # No parent either - dead end
+                            path_step["has_parent_id"] = False
+                            resolution_path["path"].append(path_step)
+                            resolution_path["result"] = "no_parent_in_api"
+                            logger.warning(f"Unit {current_id} in API has no parent ID, cannot resolve further")
+                            return None, resolution_path, units_to_import
+                        else:
+                            path_step["found_in_api_as_unit"] = False
+                            logger.info(f"ID {current_id} not found as unit in API, trying as organization")
+                            
+                    except Exception as unit_api_error:
+                        path_step["checked_api_unit"] = True
+                        path_step["api_unit_error"] = str(unit_api_error)
+                        logger.warning(f"Error fetching {current_id} as unit from API: {unit_api_error}")
+                    
+                    # 3. Not found as unit, check if it exists as organization in DB
+                    try:
+                        existing_org = Organization.objects.get(uid=current_id)
+                        path_step["checked_db_org"] = True
+                        path_step["found_in_db_as_org"] = True
+                        
+                        resolution_path["path"].append(path_step)
+                        resolution_path["result"] = "found_in_db_as_organization"
+                        resolution_path["organization_id"] = current_id
+                        
+                        logger.info(f"Found {current_id} as organization in DB")
+                        return current_id, resolution_path, units_to_import
+                        
+                    except Organization.DoesNotExist:
+                        path_step["checked_db_org"] = True
+                        path_step["found_in_db_as_org"] = False
+                        
+                        # 4. Not in DB as org, try API as organization
+                        try:
+                            org_dto = fetcher.fetch_an_organization(current_id)
+                            path_step["checked_api_org"] = True
+                            
+                            if org_dto:
+                                path_step["found_in_api_as_org"] = True
+                                resolution_path["path"].append(path_step)
+                                resolution_path["result"] = "found_in_api_as_organization"
+                                resolution_path["organization_id"] = current_id
+                                
+                                # Import the organization if found
+                                self._ensure_organization_exists(current_id, org_dto)
+                                
+                                logger.info(f"Found {current_id} as organization in API")
+                                return current_id, resolution_path, units_to_import
+                            else:
+                                path_step["found_in_api_as_org"] = False
+                                
+                        except Exception as org_api_error:
+                            path_step["checked_api_org"] = True
+                            path_step["api_org_error"] = str(org_api_error)
+                            logger.warning(f"Error fetching {current_id} as organization from API: {org_api_error}")
+                    
+                    # 5. Not found anywhere - probably bad data
                     resolution_path["path"].append(path_step)
-                    resolution_path["result"] = "no_parent"
-                    logger.warning(f"Unit {current_unit_id} has no parent ID, cannot resolve further")
-                    return None, resolution_path
-                else:
-                    # Unit not found
-                    resolution_path["path"].append(path_step)
-                    resolution_path["result"] = "unit_not_found"
-                    logger.warning(f"Parent unit {current_unit_id} not found")
-                    return None, resolution_path
+                    resolution_path["result"] = "not_found_anywhere"
+                    logger.warning(f"ID {current_id} not found as unit or organization in DB or API - probably bad data")
+                    return None, resolution_path, units_to_import
                     
             except Exception as e:
-                resolution_path["path"].append({
-                    "unit_id": current_unit_id,
-                    "error": str(e)
-                })
-                resolution_path["result"] = "error"
+                path_step["unexpected_error"] = str(e)
+                resolution_path["path"].append(path_step)
+                resolution_path["result"] = "unexpected_error"
                 resolution_path["error"] = str(e)
-                logger.error(f"Error resolving parent for unit {current_unit_id}: {e}")
-                return None, resolution_path
-        
+                logger.error(f"Unexpected error resolving ID {current_id}: {e}")
+                return None, resolution_path, units_to_import
+
         resolution_path["result"] = "max_depth_reached"
         logger.warning(f"Reached max depth ({max_depth}) while resolving organization for unit {unit_id}")
-        return None, resolution_path
+        return None, resolution_path, units_to_import
+
+    def _ensure_organization_exists(self, org_id, org_dto):
+        """
+        Ensures the organization exists in the database, importing it if necessary.
+        """
+        # Check cache first
+        if org_id in self.org_cache:
+            org_exists = self.org_cache[org_id]
+        else:
+            org_exists = Organization.objects.filter(uid=org_id).exists()
+            self.org_cache[org_id] = org_exists
+        
+        if not org_exists:
+            logger.info(f"Organization {org_id} not found in DB. Importing it...")
+            
+            try:
+                from core.importers.organization import OrganizationImporter
+                org_importer = OrganizationImporter()
+                created_count = org_importer.import_many([org_dto])
+                
+                if created_count > 0:
+                    self.org_cache[org_id] = True
+                    logger.info(f"Successfully imported organization {org_id}")
+                else:
+                    # Organization might already exist and was updated
+                    self.org_cache[org_id] = True
+                    logger.info(f"Organization {org_id} already exists or was updated")
+                    
+            except Exception as import_error:
+                logger.error(f"Failed to import organization {org_id}: {import_error}")
+                # Don't raise - we'll use a placeholder if needed
+
 
     def _resolve_signer_organization(self, signer_id, fetcher, max_depth=5, visited=None):
         """

@@ -1,99 +1,61 @@
 import pytest
-from unittest.mock import Mock, patch
-from diavgeia_api.models.decisions import Decision as DecisionDTO
-from diavgeia_api.models.organizations import (
-    Unit as UnitDTO, 
-    Organization as OrganizationDTO
-    )
 from core.importers.decisions import DecisionImporter
 from core.models import Decision, Unit, Organization
 from core.tests.utils import create_decision_dto
 
 pytestmark = pytest.mark.django_db
 
-def test_unit_organization_resolution_through_parent_chain():
+# Test constants - no more magic strings!
+TEST_ORG_ID = "5009"
+TEST_UNIT_CHILD_ID = "100026211"
+TEST_UNIT_PARENT_ID = "100026195"
+TEST_SIGNER_ID = "110954"
+TEST_ADA = "9ΜΤΝ7ΛΛ-ΠΩΓ"
+
+def test_unit_organization_resolution_through_parent_chain_with_vcr(vcr_cassette):
     """
     Test the specific case where:
     - Decision has unit 100026211
     - Unit 100026211 has parentId 100026195 (no organizationId)
-    - Unit 100026195 has organizationId 5009 (no parentId)
+    - Unit 100026195 has parentId 5009 (no organizationId)
+    - 5009 is an organization (not a unit)
     - Both units should end up with organizationId 5009
     """
     
-    # Mock the fetcher responses
-    unit_100026211_dto = UnitDTO(
-        uid="100026211",
-        label="ΔΙΕΥΘΥΝΣΗ ΟΙΚΟΝΟΜΙΚΟΥ ( ΠΚΜ )",
-        parentId="100026195",
-        active = True,
-        category = "ADMINISTRATION"
-    )
-    
-    unit_100026195_dto = UnitDTO(
-        uid="100026195", 
-        label="ΓΕΝΙΚΗ ΔΙΕΥΘΥΝΣΗ ΕΣΩΤΕΡΙΚΗΣ ΟΡΓΑΝΩΣΗΣ ΚΑΙ ΛΕΙΤΟΥΡΓΙΑΣ",
-        active = True,
-        category = "ADMINISTRATION",
-        parentId="100026195",
-    )
-    
-    org_5009_dto = OrganizationDTO(
-        uid="5009",
-        label="ΠΕΡΙΦΕΡΕΙΑ ΚΕΝΤΡΙΚΗΣ ΜΑΚΕΔΟΝΙΑΣ",
-        status="ACTIVE"
+    with vcr_cassette("test_unit_organization_resolution_through_parent_chain.yaml"):
+        # Create the decision DTO
+        decision_dto = create_decision_dto(
+            ada=TEST_ADA,
+            org_id=TEST_ORG_ID,
+            unit_ids=[TEST_UNIT_CHILD_ID],  # Fixed: unit_ids not unitIds
+            signer_ids=[TEST_SIGNER_ID],
         )
-    
-    decision_dto = create_decision_dto(
-        ada="9ΜΤΝ7ΛΛ-ΠΩΓ",
-        org_id = "5009",
-        # subject="Ανάγκες της Π.Ε Χαλκιδικής για τηλεπικοινωνίες",
-        unitIds=["100026211"],
-        signer_ids=["110954"],
-        # status="PUBLISHED"
-    )
-    
-    with patch('core.importers.decisions.DiavgeiaFetcher') as mock_fetcher_class:
-        mock_fetcher = Mock()
-        mock_fetcher_class.return_value = mock_fetcher
         
-        # Configure fetcher responses
-        def fetch_unit_side_effect(unit_id):
-            if unit_id == "100026211":
-                return unit_100026211_dto
-            elif unit_id == "100026195":
-                return unit_100026195_dto
-            return None
-            
-        def fetch_org_side_effect(org_id):
-            if org_id == "5009":
-                return org_5009_dto
-            return None
-            
-        mock_fetcher.fetch_a_unit.side_effect = fetch_unit_side_effect
-        mock_fetcher.fetch_an_organization.side_effect = fetch_org_side_effect
-        
-        # Import the decision
+        # Import the decision - this will trigger the resolution logic
         importer = DecisionImporter()
         created_count = importer.import_many([decision_dto])
         
         # Verify the decision was created
         assert created_count == 1
-        decision = Decision.objects.get(ada="9ΜΤΝ7ΛΛ-ΠΩΓ")
+        decision = Decision.objects.get(ada=TEST_ADA)
         
         # Verify both units were created with the correct organization
-        unit_211 = Unit.objects.get(uid="100026211")
-        unit_195 = Unit.objects.get(uid="100026195")
-        org = Organization.objects.get(uid="5009")
+        unit_child = Unit.objects.get(uid=TEST_UNIT_CHILD_ID)
+        unit_parent = Unit.objects.get(uid=TEST_UNIT_PARENT_ID)
+        org = Organization.objects.get(uid=TEST_ORG_ID)
         
         # Both units should have the same organization
-        assert unit_211.organization_id == "5009"
-        assert unit_195.organization_id == "5009"
+        assert unit_child.organization_id == TEST_ORG_ID
+        assert unit_parent.organization_id == TEST_ORG_ID
         
-        # Unit 211 should have 195 as parent
-        assert unit_211.parent_id == "100026195"
-        
-        # Unit 195 should have no parent (it's the top-level unit in this chain)
-        assert unit_195.parent_id is None
+        # Unit relationships
+        assert unit_child.parent_id == TEST_UNIT_PARENT_ID
+        assert unit_parent.parent_id == TEST_ORG_ID  # Parent points to org
         
         # Decision should be linked to the unit
-        assert decision.units.filter(uid="100026211").exists()
+        assert decision.units.filter(uid=TEST_UNIT_CHILD_ID).exists()
+        
+        # Verify the resolution path was tracked
+        assert unit_child.resolution_path is not None
+        assert unit_child.resolution_path["result"] in ["found_in_api_as_organization", "found_in_db_as_organization"]
+        assert unit_child.resolution_path["organization_id"] == TEST_ORG_ID

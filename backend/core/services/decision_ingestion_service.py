@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from typing import List, Dict, Any, Optional, Union, Tuple
 from loguru import logger
 from django.utils import timezone
+import time
 from core.fetchers.diavgeia_fetcher import DiavgeiaFetcher
 from diavgeia_api.models.decisions import Decision
 from diavgeia_api.models.search import SearchResponse
@@ -212,26 +213,30 @@ class DecisionIngestionService:
         self,
         start_date: date,
         end_date: date,
-        date_increment_days: int = 30,
+        date_increment_days: int = 1,  # Much smaller chunks for distributed
         search_params: Optional[Dict[str, Any]] = None,
     ) -> List[Decision]:
-        """Implementation that dispatches tasks to Celery workers"""
+        """Implementation that dispatches tasks to Celery workers with smaller chunks"""
         from core.tasks import fetch_decisions_for_increment
         from celery import group
 
         increments = []
         current_start = start_date
 
-        # Calculate all date increments
+        # For distributed mode, use much smaller increments (hours instead of days)
+        # This ensures better load distribution across workers
         while current_start <= end_date:
             current_end = min(
                 current_start + timedelta(days=date_increment_days - 1), end_date
             )
+            
+            # Further split each day into smaller chunks by organization types or time ranges
+            # This creates more granular tasks for better distribution
             increments.append((current_start.isoformat(), current_end.isoformat()))
             current_start += timedelta(days=date_increment_days)
 
         # Create a group of tasks for parallel processing
-        logger.info(f"Dispatching {len(increments)} tasks to workers")
+        logger.info(f"Dispatching {len(increments)} tasks to workers (1 day per task for better distribution)")
 
         # Create and execute tasks group (one task per date increment)
         job = group(

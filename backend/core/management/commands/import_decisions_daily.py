@@ -7,6 +7,7 @@ from django.utils import timezone
 import requests
 from loguru import logger
 from core.services.decision_analysis_service import DecisionAnalysisService
+import os
 
 
 class Command(BaseCommand):
@@ -36,10 +37,31 @@ class Command(BaseCommand):
         parser.add_argument(
             "--distributed",
             action="store_true",
-            help="Use Celery for distributed processing",
+            help="Use Celery for distributed processing (fetches full day, distributes storage)",
         )
 
     def handle(self, *args, **options):
+        # Setup file logging for this import run
+        target_date = options.get("date") or (date.today() - timedelta(days=1))
+        log_dir = "/code/logs"
+        os.makedirs(log_dir, exist_ok=True)
+        
+        log_file = f"{log_dir}/import_decisions_{target_date.strftime('%Y%m%d')}_{datetime.now().strftime('%H%M%S')}.log"
+        
+        # Configure loguru to write to file
+        logger.add(
+            log_file,
+            rotation="100 MB",
+            retention="30 days",
+            level="INFO",
+            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {name}:{function}:{line} - {message}",
+            compression="gz"
+        )
+        
+        logger.info(f"Starting import for {target_date} - Logs will be saved to: {log_file}")
+        self.stdout.write(f"Starting sync for {target_date}")
+        self.stdout.write(f"Logs are being saved to: {log_file}")
+
         # Create service components
         fetcher = DiavgeiaFetcher()
         decision_importer = DecisionImporter()
@@ -48,38 +70,81 @@ class Command(BaseCommand):
             decision_importer=decision_importer,
         )
 
-        target_date = options.get("date") or (date.today() - timedelta(days=1))
-
-        self.stdout.write(f"Starting sync for {target_date}")
-
         try:
             if options["incremental"]:
                 # Use incremental sync
+                logger.info("Starting incremental sync")
                 result = service.fetch_decisions_since_timestamp(save_to_db=True)
+                logger.info(f"Incremental sync completed. Processed {result['processed_count']} decisions.")
                 self.stdout.write(
                     self.style.SUCCESS(
                         f"Incremental sync completed. Processed {result['processed_count']} decisions."
                     )
                 )
             else:
-                # Fetch specific day
-                result = service.fetch_daily_decisions(
-                    target_date=target_date,
-                    save_to_db=True,
-                    want_it_distributed=options["distributed"],
-                )
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"Daily sync completed for {target_date}. Processed {result['processed_count']} decisions."
+                # Check if we should use the new distributed approach
+                if options["distributed"]:
+                    # Use the new pickle-based distributed approach
+                    from core.tasks.tasks_decisions_import import fetch_daily_decisions_distributed
+                    
+                    logger.info(f"Starting distributed sync for {target_date}")
+                    
+                    task = fetch_daily_decisions_distributed.delay(
+                        target_date_str=target_date.isoformat()
                     )
-                )
+                    
+                    logger.info(f"Dispatched orchestrator task: {task.id}")
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Distributed sync dispatched for {target_date}. "
+                            f"Orchestrator task ID: {task.id}"
+                        )
+                    )
+                    self.stdout.write(
+                        f"The system will:"
+                    )
+                    self.stdout.write(
+                        f"  1. Fetch all ~1500 decisions for {target_date} (single task)"
+                    )
+                    self.stdout.write(
+                        f"  2. Split storage work into ~30 parallel tasks (50 decisions each)"
+                    )
+                    self.stdout.write(
+                        f"Monitor: python manage.py monitor_distributed_import --status --pickles"
+                    )
+                    
+                    result = {
+                        'status': 'dispatched',
+                        'processed_count': 'pending',
+                        'task_id': task.id
+                    }
+                else:
+                    # Use traditional single-process approach with batching
+                    logger.info(f"Starting single-process sync for {target_date}")
+                    result = service.fetch_daily_decisions(
+                        target_date=target_date,
+                        save_to_db=True,
+                        want_it_distributed=False,  # Force local processing
+                    )
+                    logger.info(f"Single-process sync completed for {target_date}. Processed {result['processed_count']} decisions.")
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Single-process sync completed for {target_date}. Processed {result['processed_count']} decisions."
+                        )
+                    )
 
             # Reconciliation
             if options["reconcile"]:
+                logger.info("Starting reconciliation")
                 self._reconcile_counts(target_date, result["processed_count"])
 
+            logger.info(f"Import process completed successfully. Check logs at: {log_file}")
+            self.stdout.write(f"Import completed. Full logs available at: {log_file}")
+
         except Exception as e:
+            logger.error(f"Import process failed: {str(e)}", exc_info=True)
             self.stdout.write(self.style.ERROR(f"Sync failed: {str(e)}"))
+            self.stdout.write(f"Check detailed error logs at: {log_file}")
             raise
 
     def _reconcile_counts(self, target_date: date, our_count: int):

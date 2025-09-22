@@ -783,7 +783,127 @@ class DecisionImporter(BaseImporter):
 
     # Keep the specific method alias if used elsewhere
     def import_decisions(self, decisions: list[DecisionDTO]) -> int:
-        return self.import_many(decisions)
+        return self.import_decisions_in_batches(decisions)
+
+    def import_decisions_in_batches(self, decisions: list[DecisionDTO], batch_size: int = 50) -> int:
+        """
+        Import decisions in smaller batches to prevent transaction rollback issues
+        with remote databases. Each batch is processed in its own transaction.
+        Includes recovery system to save/restore processed decisions.
+        
+        Args:
+            decisions: List of DecisionDTO objects to import
+            batch_size: Number of decisions to process per transaction
+            
+        Returns:
+            Total number of decisions created across all batches
+        """
+        from django.db import connection
+        import pickle
+        import os
+        from datetime import datetime
+        
+        total_created = 0
+        total_decisions = len(decisions)
+        
+        # Create recovery directory
+        recovery_dir = "/code/logs/recovery"
+        os.makedirs(recovery_dir, exist_ok=True)
+        
+        # Generate recovery file name based on current time
+        recovery_file = f"{recovery_dir}/decisions_batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl"
+        
+        logger.info(f"Starting batch import of {total_decisions} decisions in batches of {batch_size}")
+        logger.info(f"Recovery file: {recovery_file}")
+        
+        # Save original decisions to recovery file
+        try:
+            with open(recovery_file, 'wb') as f:
+                pickle.dump({
+                    'decisions': decisions,
+                    'batch_size': batch_size,
+                    'timestamp': datetime.now().isoformat(),
+                    'total_count': total_decisions
+                }, f)
+            logger.info(f"Saved {total_decisions} decisions to recovery file for potential retry")
+        except Exception as e:
+            logger.warning(f"Could not save recovery file: {e}")
+        
+        processed_batches = []
+        
+        for i in range(0, total_decisions, batch_size):
+            batch = decisions[i:i + batch_size]
+            batch_num = (i // batch_size) + 1
+            total_batches = (total_decisions + batch_size - 1) // batch_size
+            
+            logger.info(f"Processing batch {batch_num}/{total_batches} ({len(batch)} decisions)")
+            
+            try:
+                # Close any stale connections before each batch
+                connection.close()
+                
+                # Process this batch
+                batch_created = self.import_many(batch)
+                total_created += batch_created
+                
+                # Track successfully processed batch
+                batch_info = {
+                    'batch_num': batch_num,
+                    'start_idx': i,
+                    'end_idx': i + len(batch),
+                    'created_count': batch_created,
+                    'decision_ids': [d.ada for d in batch]  # Save ADAs for reference
+                }
+                processed_batches.append(batch_info)
+                
+                logger.info(f"Batch {batch_num}/{total_batches} completed: {batch_created} created, {total_created} total so far")
+                
+                # Update recovery file with progress
+                try:
+                    progress_file = f"{recovery_dir}/progress_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl"
+                    with open(progress_file, 'wb') as f:
+                        pickle.dump({
+                            'processed_batches': processed_batches,
+                            'total_created': total_created,
+                            'last_batch': batch_num,
+                            'remaining_decisions': decisions[i + len(batch):] if i + len(batch) < total_decisions else []
+                        }, f)
+                except Exception as e:
+                    logger.warning(f"Could not update progress file: {e}")
+                
+            except Exception as e:
+                logger.error(f"Error in batch {batch_num}/{total_batches}: {str(e)}")
+                
+                # Save remaining decisions for manual retry
+                remaining_decisions = decisions[i:]
+                retry_file = f"{recovery_dir}/retry_from_batch_{batch_num}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pkl"
+                try:
+                    with open(retry_file, 'wb') as f:
+                        pickle.dump({
+                            'remaining_decisions': remaining_decisions,
+                            'failed_at_batch': batch_num,
+                            'total_processed_so_far': total_created,
+                            'error': str(e)
+                        }, f)
+                    logger.error(f"Saved {len(remaining_decisions)} remaining decisions to {retry_file}")
+                    logger.error(f"You can retry with: python manage.py retry_decision_import --file {retry_file}")
+                except Exception as save_error:
+                    logger.error(f"Could not save retry file: {save_error}")
+                
+                logger.info(f"Continuing with next batch. Total created so far: {total_created}")
+                # Continue with next batch instead of failing entirely
+                continue
+        
+        # Clean up recovery file on success
+        try:
+            if total_created > 0:
+                os.remove(recovery_file)
+                logger.info("Removed recovery file after successful completion")
+        except:
+            pass
+        
+        logger.success(f"Batch import completed: {total_created} decisions created from {total_decisions} total")
+        return total_created
 
 
     def _resolve_unit_organization_through_parents(self, unit_id, fetcher, max_depth=5, visited=None):

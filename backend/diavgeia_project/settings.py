@@ -154,6 +154,12 @@ if DATABASE_URL:
             "PASSWORD": parsed.password,
             "HOST": parsed.hostname,
             "PORT": parsed.port or 5432,
+            "OPTIONS": {
+                "connect_timeout": 60,
+                "options": "-c statement_timeout=300000"  # 5 minutes
+            },
+            "CONN_MAX_AGE": 0,  # Don't persist connections for remote DB
+            "CONN_HEALTH_CHECKS": True,  # Enable connection health checks
         }
     }
 else:
@@ -166,6 +172,12 @@ else:
             "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "local_pass"),
             "HOST": os.environ.get("DB_HOST", "db"),
             "PORT": os.environ.get("DB_PORT", "5432"),
+            "OPTIONS": {
+                "connect_timeout": 60,
+                "options": "-c statement_timeout=300000"  # 5 minutes
+            },
+            "CONN_MAX_AGE": 0,  # Don't persist connections for remote DB
+            "CONN_HEALTH_CHECKS": True,  # Enable connection health checks
         }
     }
 

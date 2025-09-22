@@ -11,3 +11,4 @@ python manage.py import_decisions_daily \
   --date 2025-09-18
 
 python debug_command.py import_decisions_daily --date 2025-09-18
+python manage.py import_decisions_daily --date 2025-09-18

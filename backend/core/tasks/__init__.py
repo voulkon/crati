@@ -14,6 +14,12 @@ from .tasks_documents import (
     process_documents_task,
 )
 
+from .tasks_decisions_import import (
+    fetch_daily_decisions_to_pickle,
+    store_decisions_from_pickle,
+    fetch_daily_decisions_distributed,
+)
+
 from .tasks_decisions import (
     fetch_decisions_for_increment,
     process_fetch_period,
@@ -54,7 +60,11 @@ __all__ = [
     "process_document_task_enhanced",
     "process_documents_task_enhanced",
     "process_documents_task",
-    # Decisions
+    # Decisions Import (New)
+    "fetch_daily_decisions_to_pickle",
+    "store_decisions_from_pickle", 
+    "fetch_daily_decisions_distributed",
+    # Decisions (Legacy)
     "fetch_decisions_for_increment",
     "process_fetch_period",
     "collect_results",

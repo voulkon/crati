@@ -7,6 +7,7 @@ import os
 from core.fetchers.diavgeia_fetcher import DiavgeiaFetcher
 from core.importers.decisions import DecisionImporter
 
+PICKLE_DIR = "/code/logs/pickles"
 
 @shared_task(bind=True, max_retries=3)
 def fetch_daily_decisions_to_pickle(self, target_date_str: str, 
@@ -72,7 +73,7 @@ def fetch_daily_decisions_to_pickle(self, target_date_str: str,
                 break
         
         # Create pickle directory
-        pickle_dir = "/code/logs/pickles"
+        pickle_dir = f"{PICKLE_DIR}/pickles"
         os.makedirs(pickle_dir, exist_ok=True)
         
         # Generate pickle file for the full day
@@ -176,7 +177,7 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25):
             # This might not be an error if all decisions already exist, but let's log it prominently
         
         # Move pickle to completed folder
-        completed_dir = "/code/logs/pickles/completed"
+        completed_dir = f"{PICKLE_DIR}/completed"
         os.makedirs(completed_dir, exist_ok=True)
         completed_file = os.path.join(completed_dir, os.path.basename(pickle_file))
         os.rename(pickle_file, completed_file)
@@ -213,7 +214,7 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25):
             )
         else:
             # Max retries reached, move to failed folder for manual intervention
-            failed_dir = "/code/logs/pickles/failed"
+            failed_dir = f"{PICKLE_DIR}/failed"
             os.makedirs(failed_dir, exist_ok=True)
             failed_file = os.path.join(failed_dir, os.path.basename(pickle_file))
             

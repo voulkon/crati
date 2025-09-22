@@ -1,21 +1,15 @@
 import pytest
 import os
 from django.test import override_settings
+from django.db import connection
+from django.core.management import call_command
 from core.tasks.tasks_decisions_import import store_decisions_from_pickle
 from core.models.decisions import Decision as DecisionModel
 
 
-# Force SQLite for this test to avoid connection issues
-@pytest.mark.django_db
-@override_settings(
-    DATABASES={
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': ':memory:',
-        }
-    }
-)
+@pytest.mark.django_db(transaction=True)
 def test_store_decisions_from_pickle(a_pickle_to_store):
+    
     initial_count = DecisionModel.objects.count()
 
     # Call the task function directly (not through Celery)

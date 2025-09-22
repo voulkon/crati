@@ -256,18 +256,50 @@ class DecisionImporter(BaseImporter):
                     org_id, resolution_path, units_to_import = self._resolve_unit_organization_through_parents(entity_id, fetcher, max_depth=5)
                     
                     if org_id:
-                        for unit_id, unit_dto in units_to_import:
-                            unit_dto._resolved_organization_id = org_id
-                            unit_dto._resolution_path = resolution_path
+                        # FIX: Sort units so parents are imported before children
+                        # Build a dependency graph and import in correct order
+                        units_by_id = {unit_id: unit_dto for unit_id, unit_dto in units_to_import}
+                        imported_units = set()
+                        
+                        def import_unit_with_dependencies(target_unit_id, target_unit_dto):
+                            if target_unit_id in imported_units:
+                                return
+                                
+                            # If this unit has a parent that's in our import list, import parent first
+                            if hasattr(target_unit_dto, 'parentId') and target_unit_dto.parentId:
+                                parent_id = target_unit_dto.parentId
+                                if parent_id in units_by_id and parent_id not in imported_units:
+                                    parent_dto = units_by_id[parent_id]
+                                    import_unit_with_dependencies(parent_id, parent_dto)
+                            
+                            # Now import this unit
+                            target_unit_dto._resolved_organization_id = org_id
+                            target_unit_dto._resolution_path = resolution_path
+                            
                             with transaction.atomic():
                                 import_defaults = {
                                     'organization_id': org_id,
                                     'resolution_path': resolution_path
                                 }
-                                if hasattr(unit_dto, 'parentId') and unit_dto.parentId:
-                                    import_defaults['parent_id'] = unit_dto.parentId
-                                    
-                                created_count = importer.import_many([unit_dto], defaults=import_defaults)
+                                
+                                # Only set parent if it exists (either imported by us or already in DB)
+                                if hasattr(target_unit_dto, 'parentId') and target_unit_dto.parentId:
+                                    parent_id = target_unit_dto.parentId
+                                    if Unit.objects.filter(uid=parent_id).exists():
+                                        import_defaults['parent_id'] = parent_id
+                                    # If parent doesn't exist and isn't in our import list, skip setting parent
+                                    # The unit will be imported without parent relationship
+                                
+                                created_count = importer.import_many([target_unit_dto], defaults=import_defaults)
+                                imported_units.add(target_unit_id)
+                                
+                                if created_count > 0:
+                                    logger.info(f"Imported unit {target_unit_id} with organization {org_id}")
+                        
+                        # Import all units in dependency order
+                        for unit_id, unit_dto in units_to_import:
+                            import_unit_with_dependencies(unit_id, unit_dto)
+
                         # Assign the resolved organization ID to the unit DTO
                         entity_dto._resolved_organization_id = org_id
                         entity_dto._resolution_path = resolution_path  # Store for later use during import

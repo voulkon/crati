@@ -13,21 +13,12 @@ class UnitImporter(BaseImporter):
         # Add resolution path if it exists
         if hasattr(dto, 'resolution_path'):
             defaults['resolution_path'] = dto.resolution_path
-        # Remove parent from defaults - we'll handle it specially
-        if 'parent' in defaults:
-            parent_id = defaults.pop('parent')
-            
-            # Only try to set parent if it's not the same as the organization
-            if 'organization' in defaults:
-                org = defaults.get('organization')
-                if org and org.uid != parent_id:
-                    try:
-                        parent_unit = Unit.objects.get(uid=parent_id)
-                        defaults['parent'] = parent_unit
-                    except Unit.DoesNotExist:
-                        # Will be handled in the second pass
-                        pass
-        
+
+        # Store parent_id for later processing but don't set it now
+        if 'parent' in defaults or 'parent_id' in defaults:
+            # Store it as metadata for the second pass
+            defaults['_deferred_parent_id'] = defaults.pop('parent', defaults.pop('parent_id', None))
+    
         return defaults
 
 class UnitDomainImporter(BaseImporter):

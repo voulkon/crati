@@ -170,13 +170,22 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25):
         decision_importer = DecisionImporter()
         created_count = decision_importer.import_decisions_in_batches(decisions, batch_size)
         
+        # Check if we actually created any decisions
+        if len(decisions) > 0 and created_count == 0:
+            logger.warning(f"Task {self.request.id}: No decisions were created from {len(decisions)} decisions in pickle file")
+            # This might not be an error if all decisions already exist, but let's log it prominently
+        
         # Move pickle to completed folder
         completed_dir = "/code/logs/pickles/completed"
         os.makedirs(completed_dir, exist_ok=True)
         completed_file = os.path.join(completed_dir, os.path.basename(pickle_file))
         os.rename(pickle_file, completed_file)
         
-        logger.success(f"Task {self.request.id}: Stored {created_count} decisions, moved pickle to {completed_file}")
+        # Log with appropriate level based on results
+        if created_count > 0:
+            logger.success(f"Task {self.request.id}: Stored {created_count} decisions, moved pickle to {completed_file}")
+        else:
+            logger.info(f"Task {self.request.id}: No new decisions created (possibly duplicates), moved pickle to {completed_file}")
         
         return {
             'status': 'success',
@@ -184,7 +193,8 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25):
             'completed_file': completed_file,
             'decisions_loaded': len(decisions),
             'decisions_created': created_count,
-            'task_id': self.request.id
+            'task_id': self.request.id,
+            'note': 'No new decisions created' if created_count == 0 and len(decisions) > 0 else None
         }
         
     except Exception as e:

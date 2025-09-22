@@ -1,0 +1,24 @@
+100026211 --> parentId : 100026195 (which is a unit) --> parentId : 5009 (which is an org)
+100026195 --> must have 5009 organization_id and null parentId
+
+2025-09-22 17:48:46.373 | WARNING  | core.importers.decisions:_get_related_pks:457 - Could not find all units for ADA '9ΜΤΝ7ΛΛ-ΠΩΓ'. Found 0 out of 1. Missing units: {'100026211'}
+2025-09-22 17:48:46.373 | DEBUG    | diavgeia_api.client:_get_and_parse:97 - Fetching data from endpoint: units/100026211
+2025-09-22 17:48:46.373 | DEBUG    | diavgeia_api.client:_request:77 - GET request to: https://diavgeia.gov.gr/opendata/units/100026211
+2025-09-22 17:48:46.438 | DEBUG    | diavgeia_api.client:_request:83 - Response status: 200
+2025-09-22 17:48:46.439 | DEBUG    | diavgeia_api.client:_request:92 - Successful response from https://diavgeia.gov.gr/opendata/units/100026211
+2025-09-22 17:48:46.439 | DEBUG    | diavgeia_api.client:_get_and_parse:102 - Response size: 241 characters
+2025-09-22 17:48:46.439 | DEBUG    | diavgeia_api.client:_get_and_parse:115 - Sample response data: {'uid': '100026211', 'label': 'ΔΙΕΥΘΥΝΣΗ ΟΙΚΟΝΟΜΙΚΟΥ ( ΠΚΜ )', 'abbreviation': None}
+2025-09-22 17:48:46.439 | DEBUG    | diavgeia_api.client:_get_and_parse:121 - Successfully parsed response into Unit
+2025-09-22 17:48:46.440 | WARNING  | core.importers.decisions:_fetch_missing_entities:253 - Unit 100026211 has no organization ID - attempting to resolve through parent chain
+2025-09-22 17:48:46.440 | DEBUG    | diavgeia_api.client:_get_and_parse:97 - Fetching data from endpoint: units/100026211
+2025-09-22 17:48:46.440 | DEBUG    | diavgeia_api.client:_request:77 - GET request to: https://diavgeia.gov.gr/opendata/units/100026211
+2025-09-22 17:48:46.505 | DEBUG    | diavgeia_api.client:_request:83 - Response status: 200
+2025-09-22 17:48:46.505 | DEBUG    | diavgeia_api.client:_request:92 - Successful response from https://diavgeia.gov.gr/opendata/units/100026211
+2025-09-22 17:48:46.505 | DEBUG    | diavgeia_api.client:_get_and_parse:102 - Response size: 241 characters
+2025-09-22 17:48:46.505 | DEBUG    | diavgeia_api.client:_get_and_parse:115 - Sample response data: {'uid': '100026211', 'label': 'ΔΙΕΥΘΥΝΣΗ ΟΙΚΟΝΟΜΙΚΟΥ ( ΠΚΜ )', 'abbreviation': None}
+2025-09-22 17:48:46.505 | DEBUG    | diavgeia_api.client:_get_and_parse:121 - Successfully parsed response into Unit
+2025-09-22 17:48:46.506 | INFO     | core.importers.decisions:_resolve_unit_organization_through_parents:829 - Unit 100026211 has no organization ID, checking parent 100026195
+2025-09-22 17:48:46.506 | DEBUG    | diavgeia_api.client:_get_and_parse:97 - Fetching data from endpoint: units/100026195
+2025-09-22 17:48:46.506 | DEBUG    | diavgeia_api.client:_request:77 - GET request to: https://diavgeia.gov.gr/opendata/units/100026195
+2025-09-22 17:48:46.570 | DEBUG    | diavgeia_api.client:_request:83 - Response status: 200
+2025-09-22 17:48:46.570 | DEBUG    | diavgeia_api.client:_request:92 - Successful response from https://diavgeia.gov.gr/opendata/units/100026195

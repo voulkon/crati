@@ -7,3 +7,8 @@ python debug_command.py debug_organization 6174 --verbose
 
 
 docker exec -it diavgeia_backend_dev python debug_command.py import_decisions_daily --date 2025-08-01 --distributed
+
+docker exec -it diavgeia_backend /bin/bash
+
+python debug_command.py import_decisions_daily --date 2025-09-08
+--distributed

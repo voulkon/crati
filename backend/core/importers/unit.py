@@ -2,6 +2,7 @@ from core.importers.base import BaseImporter
 from core.models.organizations import Unit, UnitDomain
 from core.models.field_mapping import field_map as imported_field_map
 from django.db import transaction
+from loguru import logger
 
 class UnitImporter(BaseImporter):
     model = Unit
@@ -14,11 +15,24 @@ class UnitImporter(BaseImporter):
         if hasattr(dto, 'resolution_path'):
             defaults['resolution_path'] = dto.resolution_path
 
-        # Store parent_id for later processing but don't set it now
-        if 'parent' in defaults or 'parent_id' in defaults:
-            # Store it as metadata for the second pass
-            defaults['_deferred_parent_id'] = defaults.pop('parent', defaults.pop('parent_id', None))
-    
+        # **CRITICAL FIX: Handle both parent and parent_id fields**
+        parent_value = None
+        
+        # Check both possible field names and get the parent value
+        if 'parent_id' in defaults:
+            parent_value = defaults.pop('parent_id')  # Remove it
+        if 'parent' in defaults:
+            parent_value = defaults.pop('parent')  # Remove it and override if both exist
+            
+        # Only set parent_id if the parent actually exists as a Unit
+        if parent_value:
+            from core.models.organizations import Unit
+            if Unit.objects.filter(uid=parent_value).exists():
+                defaults['parent_id'] = parent_value
+                logger.debug(f"Set parent_id={parent_value} for unit {dto.uid}")
+            else:
+                logger.debug(f"Removed parent relationship for unit {dto.uid} - parent {parent_value} is not a Unit")
+        
         return defaults
 
 class UnitDomainImporter(BaseImporter):

@@ -1057,7 +1057,7 @@ class DecisionImporter(BaseImporter):
                                 path_step["parent_id"] = unit_dto.parentId
                                 resolution_path["path"].append(path_step)
                                 
-                                logger.info(f"Unit {current_id} in API has no organization ID, checking parent {unit_dto.parentId}")
+                                # logger.info(f"Unit {current_id} in API has no organization ID, checking parent {unit_dto.parentId}")
                                 current_id = unit_dto.parentId
                                 visited.add(current_id)
                                 depth += 1

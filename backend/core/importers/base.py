@@ -80,6 +80,15 @@ class BaseImporter:
             mapped = self._to_defaults(dto)
             # merge in extra defaults (e.g. dictionary instance):
             combined = {**mapped, **defaults}
+
+            # **ADD DEBUG LOGGING HERE**
+            if hasattr(dto, 'uid'):
+                logger.debug(f"Unit {dto.uid} combined fields: {list(combined.keys())}")
+                if 'parent_id' in combined:
+                    logger.debug(f"Unit {dto.uid} parent_id: {combined['parent_id']}")
+                if 'organization_id' in combined:
+                    logger.debug(f"Unit {dto.uid} organization_id: {combined['organization_id']}")
+
             lookup = {self.uid_field: getattr(dto, self.uid_field)}
             obj, created = self.model.objects.update_or_create(
                 **lookup, defaults=combined

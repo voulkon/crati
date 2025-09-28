@@ -190,14 +190,36 @@ def update_coverage_stats(start_date, end_date, organization_id=None, unit_id=No
         # Count decisions
         decision_count = Decision.objects.filter(**date_filter).count()
         
-        # Update or create coverage record
-        DateCoverage.objects.update_or_create(
-            date=current_date,
-            organization_id=organization_id if organization_id else None,
-            unit_id=unit_id if unit_id else None,
-            signer_id=signer_id if signer_id else None,
-            defaults={'decision_count': decision_count}
-        )
+        # Update or create coverage record with proper duplicate handling
+        try:
+            coverage, created = DateCoverage.objects.get_or_create(
+                date=current_date,
+                organization_id=organization_id if organization_id else None,
+                unit_id=unit_id if unit_id else None,
+                signer_id=signer_id if signer_id else None,
+                defaults={'decision_count': decision_count}
+            )
+            if not created:
+                # Update the existing record
+                coverage.decision_count = decision_count
+                coverage.save()
+        except DateCoverage.MultipleObjectsReturned:
+            # Handle race condition - multiple processes created duplicates
+            logger.warning(f"Found duplicate DateCoverage for date {current_date}, cleaning up")
+            # Delete all duplicates and create a fresh record
+            DateCoverage.objects.filter(
+                date=current_date,
+                organization_id=organization_id if organization_id else None,
+                unit_id=unit_id if unit_id else None,
+                signer_id=signer_id if signer_id else None,
+            ).delete()
+            DateCoverage.objects.create(
+                date=current_date,
+                organization_id=organization_id if organization_id else None,
+                unit_id=unit_id if unit_id else None,
+                signer_id=signer_id if signer_id else None,
+                decision_count=decision_count
+            )
         
         current_date += timedelta(days=1)
 

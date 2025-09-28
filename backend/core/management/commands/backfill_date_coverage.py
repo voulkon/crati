@@ -33,13 +33,43 @@ class Command(BaseCommand):
             for item in org_counts:
                 if not item['issue_date__date'] or not item['organization']:
                     continue
+                
+                # Handle potential duplicates by using get_or_create with exception handling
+                try:
+                    coverage, created = DateCoverage.objects.get_or_create(
+                        date=item['issue_date__date'],
+                        organization_id=item['organization'],
+                        unit=None,
+                        signer=None,
+                        defaults={'decision_count': item['decision_count']}
+                    )
+                    if not created:
+                        # Update the existing record
+                        coverage.decision_count = item['decision_count']
+                        coverage.save()
+                except DateCoverage.MultipleObjectsReturned:
+                    # Handle duplicates by deleting all and creating a new one
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f'Found duplicates for date {item["issue_date__date"]} '
+                            f'and organization {item["organization"]}. Cleaning up...'
+                        )
+                    )
+                    DateCoverage.objects.filter(
+                        date=item['issue_date__date'],
+                        organization_id=item['organization'],
+                        unit=None,
+                        signer=None
+                    ).delete()
                     
-                DateCoverage.objects.update_or_create(
-                    date=item['issue_date__date'],
-                    organization_id=item['organization'],
-                    signer=None,
-                    defaults={'decision_count': item['decision_count']}
-                )
+                    # Create new record
+                    DateCoverage.objects.create(
+                        date=item['issue_date__date'],
+                        organization_id=item['organization'],
+                        unit=None,
+                        signer=None,
+                        decision_count=item['decision_count']
+                    )
         
         self.stdout.write(f'Created/updated {len(org_counts)} organization coverage records')
         
@@ -72,12 +102,42 @@ class Command(BaseCommand):
             
         with transaction.atomic():
             for signer_id, decision_date, decision_count in signer_rows:
-                DateCoverage.objects.update_or_create(
-                    date=decision_date,
-                    organization=None,
-                    signer_id=signer_id,
-                    defaults={'decision_count': decision_count}
-                )
+                # Handle potential duplicates by using get_or_create with exception handling
+                try:
+                    coverage, created = DateCoverage.objects.get_or_create(
+                        date=decision_date,
+                        organization=None,
+                        unit=None,
+                        signer_id=signer_id,
+                        defaults={'decision_count': decision_count}
+                    )
+                    if not created:
+                        # Update the existing record
+                        coverage.decision_count = decision_count
+                        coverage.save()
+                except DateCoverage.MultipleObjectsReturned:
+                    # Handle duplicates by deleting all and creating a new one
+                    self.stdout.write(
+                        self.style.WARNING(
+                            f'Found duplicates for date {decision_date} '
+                            f'and signer {signer_id}. Cleaning up...'
+                        )
+                    )
+                    DateCoverage.objects.filter(
+                        date=decision_date,
+                        organization=None,
+                        unit=None,
+                        signer_id=signer_id
+                    ).delete()
+                    
+                    # Create new record
+                    DateCoverage.objects.create(
+                        date=decision_date,
+                        organization=None,
+                        unit=None,
+                        signer_id=signer_id,
+                        decision_count=decision_count
+                    )
         
         self.stdout.write(f'Created/updated {len(signer_rows)} signer coverage records')
         

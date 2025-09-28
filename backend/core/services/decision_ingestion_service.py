@@ -348,13 +348,37 @@ class DecisionIngestionService:
                 date_filter["organization__uid"] = organization_id
                 decision_count = Decision.objects.filter(**date_filter).count()
 
-                DateCoverage.objects.update_or_create(
-                    date=current_date,
-                    organization_id=organization_id,
-                    unit=None,
-                    signer=None,
-                    defaults={"decision_count": decision_count},
-                )
+                # Use get_or_create with proper exception handling for race conditions
+                try:
+                    coverage, created = DateCoverage.objects.get_or_create(
+                        date=current_date,
+                        organization_id=organization_id,
+                        unit=None,
+                        signer=None,
+                        defaults={"decision_count": decision_count},
+                    )
+                    if not created:
+                        # Update the existing record
+                        coverage.decision_count = decision_count
+                        coverage.save()
+                except DateCoverage.MultipleObjectsReturned:
+                    # Handle race condition - multiple processes created duplicates
+                    logger.warning(f"Found duplicate DateCoverage for org {organization_id} on {current_date}, cleaning up")
+                    # Delete all duplicates and create a fresh record
+                    DateCoverage.objects.filter(
+                        date=current_date,
+                        organization_id=organization_id,
+                        unit=None,
+                        signer=None
+                    ).delete()
+                    DateCoverage.objects.create(
+                        date=current_date,
+                        organization_id=organization_id,
+                        unit=None,
+                        signer=None,
+                        decision_count=decision_count
+                    )
+                
                 logger.debug(
                     f"Updated organization coverage for {organization_id} on {current_date}: {decision_count}"
                 )
@@ -364,13 +388,33 @@ class DecisionIngestionService:
                 date_filter["units__uid"] = unit_id
                 decision_count = Decision.objects.filter(**date_filter).count()
 
-                DateCoverage.objects.update_or_create(
-                    date=current_date,
-                    organization=None,
-                    unit_id=unit_id,
-                    signer=None,
-                    defaults={"decision_count": decision_count},
-                )
+                try:
+                    coverage, created = DateCoverage.objects.get_or_create(
+                        date=current_date,
+                        organization=None,
+                        unit_id=unit_id,
+                        signer=None,
+                        defaults={"decision_count": decision_count},
+                    )
+                    if not created:
+                        coverage.decision_count = decision_count
+                        coverage.save()
+                except DateCoverage.MultipleObjectsReturned:
+                    logger.warning(f"Found duplicate DateCoverage for unit {unit_id} on {current_date}, cleaning up")
+                    DateCoverage.objects.filter(
+                        date=current_date,
+                        organization=None,
+                        unit_id=unit_id,
+                        signer=None
+                    ).delete()
+                    DateCoverage.objects.create(
+                        date=current_date,
+                        organization=None,
+                        unit_id=unit_id,
+                        signer=None,
+                        decision_count=decision_count
+                    )
+                
                 logger.debug(
                     f"Updated unit coverage for {unit_id} on {current_date}: {decision_count}"
                 )
@@ -382,13 +426,33 @@ class DecisionIngestionService:
                 date_filter["signers__uid"] = signer_id
                 decision_count = Decision.objects.filter(**date_filter).count()
 
-                DateCoverage.objects.update_or_create(
-                    date=current_date,
-                    organization=None,
-                    unit=None,
-                    signer_id=signer_id,
-                    defaults={"decision_count": decision_count},
-                )
+                try:
+                    coverage, created = DateCoverage.objects.get_or_create(
+                        date=current_date,
+                        organization=None,
+                        unit=None,
+                        signer_id=signer_id,
+                        defaults={"decision_count": decision_count},
+                    )
+                    if not created:
+                        coverage.decision_count = decision_count
+                        coverage.save()
+                except DateCoverage.MultipleObjectsReturned:
+                    logger.warning(f"Found duplicate DateCoverage for signer {signer_id} on {current_date}, cleaning up")
+                    DateCoverage.objects.filter(
+                        date=current_date,
+                        organization=None,
+                        unit=None,
+                        signer_id=signer_id
+                    ).delete()
+                    DateCoverage.objects.create(
+                        date=current_date,
+                        organization=None,
+                        unit=None,
+                        signer_id=signer_id,
+                        decision_count=decision_count
+                    )
+                
                 logger.debug(
                     f"Updated signer coverage for {signer_id} on {current_date}: {decision_count}"
                 )

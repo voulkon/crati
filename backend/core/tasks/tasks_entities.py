@@ -4,7 +4,7 @@ from loguru import logger
 from core.services.entity_extraction_service import EntityExtractionService
 from core.models.entities import AFMEntity
 from core.services.gemi_service import GemiService
-
+from gemi.exceptions import GemiNotFoundError
 
 @shared_task(bind=True, max_retries=3)
 def fetch_company_data_for_entities(self, afm_list: List[str]):
@@ -51,17 +51,21 @@ def fetch_company_data_for_single_afm(self, afm: str):
 
         # Try to get the entity
         try:
-            entity = AFMEntity.objects.get(afm=afm)
+            entity = AFMEntity.objects.get(afm=afm)        
         except AFMEntity.DoesNotExist:
             logger.warning(f"AFMEntity {afm} not found in database")
             return {"status": "entity_not_found", "afm": afm}
 
         # Use GemiService directly - no rate limiting needed here since Celery handles it
-        companies = GemiService.fetch_companies_by_afm(
-            afm,
-            update_entity=True,
-            max_requests_per_minute=60,  # Set high since Celery controls the rate
-        )
+        try: 
+            companies = GemiService.fetch_companies_by_afm(
+                afm,
+                update_entity=True,
+                max_requests_per_minute=60, 
+            )
+        except GemiNotFoundError:
+            logger.info(f"No company data found for AFM {afm}")
+            return {"status": "no_company_found", "afm": afm}
 
         result = {"status": "success", "afm": afm, "companies_found": len(companies)}
 

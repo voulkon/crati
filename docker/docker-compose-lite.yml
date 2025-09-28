@@ -84,6 +84,7 @@ services:
       - JAEGER_HOST=${JAEGER_HOST:-jaeger}
       - JAEGER_PORT=${JAEGER_PORT:-4317}
       - OPENSEARCH_URL=${OPENSEARCH_URL:-http://opensearch:9200}
+      - GEMI_API_KEY=${GEMI_API_KEY}
     networks:
       - diavgeia-net
     depends_on:
@@ -123,6 +124,7 @@ services:
       - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
       - JAEGER_HOST=${JAEGER_HOST:-jaeger}
       - JAEGER_PORT=${JAEGER_PORT:-4317}
+      - GEMI_API_KEY=${GEMI_API_KEY}
 
   beat:
     build:

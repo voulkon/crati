@@ -6,8 +6,11 @@ import pickle
 import os
 from core.fetchers.diavgeia_fetcher import DiavgeiaFetcher
 from core.importers.decisions import DecisionImporter
+from core.constants.decision_import_constants import PICKLE_DIR
+from django.db import transaction
+import time
+import random
 
-PICKLE_DIR = "/code/logs/pickles"
 
 @shared_task(bind=True, max_retries=3)
 def fetch_daily_decisions_to_pickle(self, target_date_str: str, 
@@ -94,8 +97,8 @@ def fetch_daily_decisions_to_pickle(self, target_date_str: str,
         
         logger.success(f"Task {self.request.id}: Saved {len(all_decisions)} decisions for {target_date} to {pickle_file}")
         
-        # Now split the storage work into smaller chunks
-        chunk_size = 50  # Process 50 decisions per storage task
+        # Now split the storage work into TINY chunks to prevent deadlocks
+        chunk_size = 10  # TODO: Make it a global constant or env var
         storage_tasks = []
         
         for i in range(0, len(all_decisions), chunk_size):
@@ -116,10 +119,15 @@ def fetch_daily_decisions_to_pickle(self, target_date_str: str,
             with open(chunk_pickle, 'wb') as f:
                 pickle.dump(chunk_data, f)
             
-            # Dispatch storage task for this chunk
-            storage_task = store_decisions_from_pickle.delay(chunk_pickle, batch_size=25)
+            # Dispatch storage task with significant delay and batch_size=1
+            delay_seconds = (i // chunk_size) * 3  # 3 second delay between each task
+            storage_task = store_decisions_from_pickle.apply_async(
+                args=[chunk_pickle],
+                kwargs={'batch_size': 1},  # Always start with sequential processing
+                countdown=delay_seconds
+            )
             storage_tasks.append(storage_task.id)
-            logger.info(f"Dispatched storage task {storage_task.id} for chunk {chunk_id}")
+            logger.info(f"Dispatched storage task {storage_task.id} for chunk {chunk_id} (delayed by {delay_seconds}s, sequential processing)")
         
         logger.success(f"Task {self.request.id}: Split into {len(storage_tasks)} storage tasks")
         
@@ -145,14 +153,7 @@ def fetch_daily_decisions_to_pickle(self, target_date_str: str,
 @shared_task(bind=True, max_retries=5)
 def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25):
     """
-    Phase 2: Load decisions from pickle and store to database
-    
-    Args:
-        pickle_file: Path to pickle file with decisions
-        batch_size: Number of decisions to process per batch
-        
-    Returns:
-        Dict with storage results
+    Phase 2: Load decisions from pickle and store to database with deadlock prevention
     """
     try:
         logger.info(f"Task {self.request.id}: Loading decisions from {pickle_file}")
@@ -167,14 +168,50 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25):
         decisions = pickle_data['decisions']
         logger.info(f"Task {self.request.id}: Loaded {len(decisions)} decisions from pickle")
         
-        # Create importer and store decisions
+        # ULTRA-SAFE: Process decisions ONE BY ONE with proper isolation
         decision_importer = DecisionImporter()
-        created_count = decision_importer.import_decisions_in_batches(decisions, batch_size)
+        created_count = 0
+        failed_decisions = []
         
-        # Check if we actually created any decisions
-        if len(decisions) > 0 and created_count == 0:
-            logger.warning(f"Task {self.request.id}: No decisions were created from {len(decisions)} decisions in pickle file")
-            # This might not be an error if all decisions already exist, but let's log it prominently
+        for i, decision in enumerate(decisions, 1):
+            try:
+                # Add small random delay to prevent timing-based deadlocks
+                if i > 1:  # Skip delay for first decision
+                    delay = random.uniform(0.1, 0.3)  # 100-300ms random delay
+                    time.sleep(delay)
+                
+                # Process single decision in isolated transaction
+                with transaction.atomic():
+                    single_result = decision_importer.import_many([decision])
+                    created_count += single_result
+                    
+                    if i % 10 == 0:  # Log progress every 10 decisions
+                        logger.info(f"Task {self.request.id}: Processed {i}/{len(decisions)} decisions, created {created_count} so far")
+                        
+            except Exception as decision_error:
+                error_msg = str(decision_error).lower()
+                decision_ada = getattr(decision, 'ada', 'unknown')
+                
+                # Check if it's a deadlock or database error
+                is_critical_db_error = any(keyword in error_msg for keyword in [
+                    "deadlock", "lock", "current transaction is aborted"
+                ])
+                
+                if is_critical_db_error:
+                    logger.error(f"Task {self.request.id}: Critical DB error on decision {decision_ada}: {decision_error}")
+                    # For critical errors, fail the whole task
+                    raise decision_error
+                else:
+                    # For non-critical errors, log and continue
+                    logger.warning(f"Task {self.request.id}: Failed decision {decision_ada}: {decision_error}")
+                    failed_decisions.append({
+                        'ada': decision_ada,
+                        'error': str(decision_error)
+                    })
+        
+        # Check results
+        if len(decisions) > 0 and created_count == 0 and not failed_decisions:
+            logger.warning(f"Task {self.request.id}: No decisions were created from {len(decisions)} decisions (likely duplicates)")
         
         # Move pickle to completed folder
         completed_dir = f"{PICKLE_DIR}/completed"
@@ -182,9 +219,12 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25):
         completed_file = os.path.join(completed_dir, os.path.basename(pickle_file))
         os.rename(pickle_file, completed_file)
         
-        # Log with appropriate level based on results
+        # Log results
+        if failed_decisions:
+            logger.warning(f"Task {self.request.id}: {len(failed_decisions)} decisions failed out of {len(decisions)}")
+        
         if created_count > 0:
-            logger.success(f"Task {self.request.id}: Stored {created_count} decisions, moved pickle to {completed_file}")
+            logger.success(f"Task {self.request.id}: Stored {created_count}/{len(decisions)} decisions, moved pickle to {completed_file}")
         else:
             logger.info(f"Task {self.request.id}: No new decisions created (possibly duplicates), moved pickle to {completed_file}")
         
@@ -194,26 +234,53 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25):
             'completed_file': completed_file,
             'decisions_loaded': len(decisions),
             'decisions_created': created_count,
+            'decisions_failed': len(failed_decisions),
+            'failed_decisions': failed_decisions[:10],  # Only first 10 failures for logging
             'task_id': self.request.id,
-            'note': 'No new decisions created' if created_count == 0 and len(decisions) > 0 else None
         }
         
     except Exception as e:
+        error_msg = str(e).lower()
         logger.error(f"Task {self.request.id}: Storage failed: {str(e)}")
         
-        # For storage failures, create a retry pickle with smaller batch size
-        if self.request.retries < self.max_retries:
-            # Reduce batch size on retry
-            new_batch_size = max(5, batch_size // 2)
-            logger.info(f"Task {self.request.id}: Retrying with smaller batch size: {new_batch_size}")
+        # Check for specific database errors
+        is_deadlock = "deadlock detected" in error_msg
+        is_aborted_transaction = "current transaction is aborted" in error_msg
+        is_db_error = any(keyword in error_msg for keyword in [
+            "deadlock", "lock", "transaction", "database", "connection"
+        ])
+        have_we_got_any_db_errors = is_deadlock or is_aborted_transaction or is_db_error
+        have_we_reached_max_retries = self.request.retries < self.max_retries
+
+        if have_we_got_any_db_errors and have_we_reached_max_retries:
+            # For database errors, implement aggressive backoff
+            base_delay = 20 * (3 ** self.request.retries)  # 20s, 60s, 180s, 540s, 1620s
+            jitter = random.uniform(0, base_delay * 0.5)  # Add up to 50% jitter
+            delay = int(base_delay + jitter)
+            
+            # On database errors, always go to batch_size=1 (one decision at a time)
+            new_batch_size = 1
+            
+            logger.warning(f"Task {self.request.id}: Database error detected, retrying in {delay}s with batch_size=1 (sequential processing)")
+            logger.warning(f"Task {self.request.id}: Error type - deadlock:{is_deadlock}, aborted:{is_aborted_transaction}")
             
             raise self.retry(
-                countdown=30 * (2 ** self.request.retries),  # 30s, 60s, 120s, 240s, 480s
+                countdown=delay,
+                kwargs={'pickle_file': pickle_file, 'batch_size': new_batch_size},
+                exc=e
+            )
+        elif self.request.retries < self.max_retries:
+            # For non-database errors, use smaller batch size
+            new_batch_size = max(1, batch_size // 2)
+            logger.info(f"Task {self.request.id}: Retrying with batch_size: {new_batch_size}")
+            
+            raise self.retry(
+                countdown=30 * (2 ** self.request.retries),
                 kwargs={'pickle_file': pickle_file, 'batch_size': new_batch_size},
                 exc=e
             )
         else:
-            # Max retries reached, move to failed folder for manual intervention
+            # Max retries reached
             failed_dir = f"{PICKLE_DIR}/failed"
             os.makedirs(failed_dir, exist_ok=True)
             failed_file = os.path.join(failed_dir, os.path.basename(pickle_file))

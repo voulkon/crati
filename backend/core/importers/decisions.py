@@ -16,6 +16,7 @@ from core.fetchers.diavgeia_fetcher import DiavgeiaFetcher
 from core.importers.signer import SignerImporter
 from django.utils import timezone
 from core.services.entity_extraction_service import EntityExtractionService
+from core.constants.decision_import_constants import PICKLE_DIR
 
 class DecisionImporter(BaseImporter):
     model = Decision
@@ -839,7 +840,7 @@ class DecisionImporter(BaseImporter):
         total_decisions = len(decisions)
         
         # Create recovery directory
-        recovery_dir = "/code/logs/recovery"
+        recovery_dir = f"{PICKLE_DIR}/recovery"
         os.makedirs(recovery_dir, exist_ok=True)
         
         # Generate recovery file name based on current time

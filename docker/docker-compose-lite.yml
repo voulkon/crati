@@ -11,7 +11,66 @@ services:
       - "4317:4317"                         # OTLP gRPC port
       - "4318:4318"                         # OTLP HTTP port
     networks: 
-      - diavgeia-net 
+      - diavgeia-net
+
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: diavgeia_loki
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+      - ./loki-config:/etc/loki/custom
+    networks:
+      - diavgeia-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: diavgeia_grafana
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana-provisioning:/etc/grafana/provisioning
+    networks:
+      - diavgeia-net
+    depends_on:
+      loki:
+        condition: service_healthy
+      jaeger:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Promtail for log collection
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: diavgeia_promtail
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./promtail-config:/etc/promtail
+    command: -config.file=/etc/promtail/promtail.yml
+    networks:
+      - diavgeia-net
+    depends_on:
+      loki:
+        condition: service_healthy
+    labels:
+      logging: "promtail"
 
   # ───────────────────────── Broker ──────────────────────────
   rabbitmq:
@@ -92,12 +151,18 @@ services:
         condition: service_healthy
       opensearch:
         condition: service_healthy
+      loki:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "manage.py", "check", "--database", "default"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
+    labels:
+      logging: "promtail"
+      service_name: "diavgeia-backend"
+      component: "django"
 
   worker:
     build:
@@ -116,6 +181,8 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+      loki:
+        condition: service_healthy
     env_file:
       - ../.env_files/.env.local.secrets
     environment:
@@ -125,6 +192,10 @@ services:
       - JAEGER_HOST=${JAEGER_HOST:-jaeger}
       - JAEGER_PORT=${JAEGER_PORT:-4317}
       - GEMI_API_KEY=${GEMI_API_KEY}
+    labels:
+      logging: "promtail"
+      service_name: "diavgeia-worker"
+      component: "celery"
 
   beat:
     build:
@@ -141,11 +212,17 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+      loki:
+        condition: service_healthy
     env_file:
       - ../.env_files/.env.local.secrets
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+    labels:
+      logging: "promtail"
+      service_name: "diavgeia-beat"
+      component: "celery-beat"
 
   flower:
     build:
@@ -164,10 +241,16 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+      loki:
+        condition: service_healthy
     env_file:
       - ../.env_files/.env.local.secrets
     environment:
       - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+    labels:
+      logging: "promtail"
+      service_name: "diavgeia-flower"
+      component: "celery-monitor"
 
   # ───────────────────────── Front end ───────────────────────
   frontend:
@@ -227,6 +310,10 @@ volumes:
   rabbitmq_data:
     driver: local
   redis_data:
+    driver: local
+  loki_data:
+    driver: local
+  grafana_data:
     driver: local
     
 networks:

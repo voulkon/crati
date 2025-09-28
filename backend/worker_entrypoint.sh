@@ -4,6 +4,10 @@
 echo "Waiting for database..."
 python manage.py wait_for_db
 
+# Wait for Loki
+echo "Waiting for Loki..."
+python manage.py wait_for_loki
+
 # Wait for Redis/RabbitMQ
 echo "Waiting for broker..."
 sleep 5

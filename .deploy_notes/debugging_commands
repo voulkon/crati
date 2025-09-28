@@ -11,7 +11,8 @@ docker exec -it diavgeia_backend_dev python debug_command.py import_decisions_da
 docker exec -it diavgeia_backend /bin/bash
 
 python debug_command.py import_decisions_daily --date 2025-09-08
---distributed
+python manage.py import_decisions_daily --date 2025-09-26 --distributed
 
 python manage.py import_single_ada "9ΜΤΝ7ΛΛ-ΠΩΓ"
 python debug_command.py import_single_ada "9ΜΤΝ7ΛΛ-ΠΩΓ"
+

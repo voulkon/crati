@@ -12,6 +12,10 @@ python manage.py wait_for_redis
 echo "Waiting for OpenSearch..."
 python manage.py wait_for_opensearch
 
+# Wait for Loki
+echo "Waiting for Loki..."
+python manage.py wait_for_loki
+
 echo "Setting up OpenSearch Greek language support..."
 python manage.py setup_opensearch_greek
 

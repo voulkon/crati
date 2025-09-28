@@ -39,6 +39,7 @@ drf-yasg="^1.21.10"
 django-csp="^4.0"
 bleach="^6.2.0"
 stamina="^25.1.0"
+python-json-logger="^2.0.7"
 
 [tool.poetry.group.worker.dependencies]
 # docling="^2.34.0"

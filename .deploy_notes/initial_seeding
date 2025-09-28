@@ -7,8 +7,7 @@ python manage.py seed_data --organizations --dictionaries --dictionary-items --t
   --organizations-batch-size 25 --dictionary-items-batch-size 50
 
 
-python manage.py import_decisions_daily \ 
-  --date 2025-09-18
+python manage.py import_decisions_daily --date 2025-09-20
 
 python debug_command.py import_decisions_daily --date 2025-09-18
 python manage.py import_decisions_daily --date 2025-09-18

@@ -209,3 +209,32 @@ class DocumentPage(models.Model):
 
     def __str__(self):
         return f"Page {self.page_number} of {self.extraction.decision.ada}"
+
+
+class ExtractorComparison(models.Model):
+    """Simple table to compare extraction results side by side"""
+    
+    decision = models.ForeignKey(
+        Decision, on_delete=models.CASCADE, related_name="extractor_comparisons"
+    )
+    
+    # The two texts to compare
+    text_before = models.TextField(null=True, blank=True, help_text="PYMUPDF extraction")
+    text_after = models.TextField(null=True, blank=True, help_text="DOCLING extraction") 
+    
+    # Metadata
+    chars_before = models.IntegerField(null=True, blank=True)
+    chars_after = models.IntegerField(null=True, blank=True)
+    chars_diff = models.IntegerField(null=True, blank=True)
+    
+    # Store the PDF locally for inspection
+    pdf_path = models.CharField(max_length=500, null=True, blank=True, help_text="Local path to downloaded PDF")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = _("Extractor Comparison")
+        verbose_name_plural = _("Extractor Comparisons")
+    
+    def __str__(self):
+        return f"Comparison for {self.decision.ada}"

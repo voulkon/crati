@@ -14,36 +14,6 @@ def process_document_task(self, ada, provider=None):
     from core.services.document_processor import DocumentAnalysisService
 
     try:
-        # TODO: Fix the
-        # ERROR: 
-        #   Traceback (most recent call last):
-        #   File "/code/core/tasks.py", line 186, in process_document_task
-        #     decision = Decision.objects.get(ada=ada)
-        #   File "/usr/local/lib/python3.13/site-packages/django/db/models/manager.py", line 87, in manager_method
-        #     return getattr(self.get_queryset(), name)(*args, **kwargs)
-        #            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
-        #   File "/usr/local/lib/python3.13/site-packages/django/db/models/query.py", line 633, in get
-        #     raise self.model.DoesNotExist(
-        #         "%s matching query does not exist." % self.model._meta.object_name
-        #     )
-        # core.models.decisions.Decision.DoesNotExist: Decision matching query does not exist.
-
-        # During handling of the above exception, another exception occurred:
-
-        # Traceback (most recent call last):
-        #   File "/usr/local/lib/python3.13/site-packages/celery/app/trace.py", line 453, in trace_task
-        #     R = retval = fun(*args, **kwargs)
-        #                  ~~~^^^^^^^^^^^^^^^^^
-        #   File "/usr/local/lib/python3.13/site-packages/celery/app/trace.py", line 736, in __protected_call__
-        #     return self.run(*args, **kwargs)
-        #            ~~~~~~~~^^^^^^^^^^^^^^^^^
-        #   File "/code/core/tasks.py", line 200, in process_document_task
-        #     raise self.retry(exc=e, countdown=60, max_retries=3)
-        #           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        #   File "/usr/local/lib/python3.13/site-packages/celery/app/task.py", line 764, in retry
-        #     raise ret
-        # celery.exceptions.Retry: Retry in 60s: DoesNotExist('Decision matching query does not exist.')
-
         # Get the decision
         decision = Decision.objects.get(ada=ada)
 
@@ -54,8 +24,6 @@ def process_document_task(self, ada, provider=None):
         return {"success": True, "ada": ada, "result": result}
     except Exception as e:
         # Log the error
-        from loguru import logger
-
         logger.error(f"Failed to process document {ada}: {str(e)}")
 
         # Retry a few times

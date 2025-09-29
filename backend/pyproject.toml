@@ -42,7 +42,7 @@ stamina="^25.1.0"
 python-json-logger="^2.0.7"
 
 [tool.poetry.group.worker.dependencies]
-# docling="^2.34.0"
+docling="^2.54.0"
 networkx="^3.5"
 matplotlib="^3.10.3"
 seaborn="^0.13.2"

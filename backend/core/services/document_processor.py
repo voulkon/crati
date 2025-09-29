@@ -120,8 +120,8 @@ class TextExtractionProcessor(BaseDocumentProcessor):
         # ProcessingProvider.PYPDF: PyPdfExtractor(),
         # ProcessingProvider.DOCLING: DoclingExtractor(),
     }
-    # default_extractor = ProcessingProvider.DOCLING
-    default_extractor = ProcessingProvider.PYMUPDF
+    default_extractor = ProcessingProvider.DOCLING
+    # default_extractor = ProcessingProvider.PYMUPDF
     
     def __init__(self):
         super().__init__()

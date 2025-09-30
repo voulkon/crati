@@ -4,7 +4,7 @@ from django.conf import settings
 import time
 from ..utils import get_client_ip
 from django_redis import get_redis_connection
-from ..redis_keys import (
+from api.redis_keys import (
     TOTAL_REQUESTS,
     UNIQUE_IPS,
     HOURLY_STATS,
@@ -12,8 +12,11 @@ from ..redis_keys import (
     USER_AGENTS,
     get_endpoint_key,
     get_method_key,
-    get_user_ratelimit_key,
     get_ip_ratelimit_key,
+    get_user_ratelimit_key,
+    get_ip_endpoints_key,
+    get_endpoint_ips_key,
+    STATS_EXPIRE
 )
 from ..redis_utils import safe_incr
 from diavgeia_project.security_tracing import security_tracer, get_client_ip
@@ -175,6 +178,44 @@ class RateLimitMiddleware:
         method_key = get_method_key(request.method)
         safe_incr(method_key, 1)
 
+        # Track which endpoints each IP visits (for user journey analysis)
+        ip_endpoints_key = get_ip_endpoints_key(ip)
+        self.redis.sadd(ip_endpoints_key, endpoint)
+        self.redis.expire(ip_endpoints_key, STATS_EXPIRE)
+
+        # Track which IPs visit each endpoint (reverse lookup)
+        endpoint_ips_key = get_endpoint_ips_key(endpoint)
+        self.redis.sadd(endpoint_ips_key, ip)
+        self.redis.expire(endpoint_ips_key, STATS_EXPIRE)
+
         # Optionally track user agent
         if "HTTP_USER_AGENT" in request.META:
             self.redis.zincrby(USER_AGENTS, 1, request.META["HTTP_USER_AGENT"])
+        
+        # Track query parameters for important endpoints (search, filters, etc.)
+        # Store in Redis as hash for easy retrieval
+        if request.GET or request.POST:
+            # Only track for specific endpoints to avoid noise
+            trackable_patterns = ['/api/search', '/api/decisions', '/api/organizations', '/api/filters']
+            should_track = any(pattern in endpoint for pattern in trackable_patterns)
+            
+            if should_track:
+                import json
+                from datetime import datetime as dt
+                
+                query_data = {
+                    'ip': ip,
+                    'endpoint': endpoint,
+                    'method': request.method,
+                    'get_params': dict(request.GET),
+                    'post_params': dict(request.POST) if request.method == 'POST' else {},
+                    'timestamp': dt.now().isoformat()
+                }
+                
+                # Store in Redis sorted set with timestamp as score
+                query_log_key = f"stats:query_logs:{endpoint}"
+                self.redis.zadd(query_log_key, {json.dumps(query_data): time.time()})
+                
+                # Keep only last 1000 entries per endpoint
+                self.redis.zremrangebyrank(query_log_key, 0, -1001)
+                self.redis.expire(query_log_key, STATS_EXPIRE)

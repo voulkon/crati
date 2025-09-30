@@ -25,6 +25,14 @@ def redis_analytics(request):
     """Admin view showing Redis analytics dashboard"""
     redis = get_redis_connection("default")
 
+    # Get pagination offsets from query parameters
+    daily_offset = int(request.GET.get('daily_offset', 0))  # Days back in time
+    hourly_offset = int(request.GET.get('hourly_offset', 0))  # Hours back in time
+    
+    # Ensure offsets are non-negative
+    daily_offset = max(0, daily_offset)
+    hourly_offset = max(0, hourly_offset)
+
     # Get basic stats
     total_requests = cache.get(TOTAL_REQUESTS, 0)
     unique_ips = redis.scard(UNIQUE_IPS)
@@ -50,19 +58,82 @@ def redis_analytics(request):
         if count:
             methods.append((method, int(count)))
 
-    # Get hourly traffic
+    # Get hourly traffic with pagination
     hourly_traffic = []
     hourly_data = redis.zrange(HOURLY_STATS, 0, -1, withscores=True)
     for hour_key, count in hourly_data:
-        hour = datetime.fromtimestamp(int(hour_key.decode("utf-8")) * 3600)
-        hourly_traffic.append((hour.strftime("%Y-%m-%d %H:00"), int(count)))
+        hour_timestamp = int(hour_key.decode("utf-8"))
+        hour = datetime.fromtimestamp(hour_timestamp * 3600)
+        hourly_traffic.append((hour_timestamp, hour.strftime("%Y-%m-%d %H:00"), int(count)))
+    
+    # Sort by timestamp (chronologically) instead of by score
+    hourly_traffic.sort(key=lambda x: x[0])
+    
+    # Apply pagination - show 24 hours
+    if hourly_traffic:
+        # Get the slice based on offset
+        end_idx = len(hourly_traffic) - hourly_offset
+        start_idx = max(0, end_idx - 24)
+        hourly_traffic_paginated = hourly_traffic[start_idx:end_idx]
+        
+        # Calculate range display
+        if hourly_traffic_paginated:
+            hourly_range = f"{hourly_traffic_paginated[0][1]} to {hourly_traffic_paginated[-1][1]}"
+        else:
+            hourly_range = "No data"
+    else:
+        hourly_traffic_paginated = []
+        hourly_range = "No data"
+    
+    # Remove timestamp from tuple for template
+    hourly_traffic = [(label, count) for _, label, count in hourly_traffic_paginated]
 
-    # Get daily traffic
+    # Get daily traffic with pagination
     daily_traffic = []
     daily_data = redis.zrange(DAILY_STATS, 0, -1, withscores=True)
     for day_key, count in daily_data:
-        day = datetime.fromtimestamp(int(day_key.decode("utf-8")) * 86400)
-        daily_traffic.append((day.strftime("%Y-%m-%d"), int(count)))
+        day_timestamp = int(day_key.decode("utf-8"))
+        day = datetime.fromtimestamp(day_timestamp * 86400)
+        daily_traffic.append((day_timestamp, day.strftime("%Y-%m-%d"), int(count)))
+    
+    # Sort by timestamp (chronologically)
+    daily_traffic.sort(key=lambda x: x[0])
+    
+    # Apply pagination - show 7 days
+    if daily_traffic:
+        # Get the slice based on offset
+        end_idx = len(daily_traffic) - daily_offset
+        start_idx = max(0, end_idx - 7)
+        daily_traffic_paginated = daily_traffic[start_idx:end_idx]
+        
+        # Calculate range display
+        if daily_traffic_paginated:
+            daily_range = f"{daily_traffic_paginated[0][1]} to {daily_traffic_paginated[-1][1]}"
+        else:
+            daily_range = "No data"
+    else:
+        daily_traffic_paginated = []
+        daily_range = "No data"
+    
+    # Remove timestamp from tuple for template
+    daily_traffic = [(label, count) for _, label, count in daily_traffic_paginated]
+
+    # Get IP journey data
+    from api.redis_keys import get_ip_endpoints_key
+    ip_journeys = []
+    unique_ips_list = redis.smembers(UNIQUE_IPS)
+    
+    for ip_bytes in unique_ips_list:
+        ip = ip_bytes.decode('utf-8')
+        ip_endpoints_key = get_ip_endpoints_key(ip)
+        ip_endpoints_set = redis.smembers(ip_endpoints_key)  # FIXED: renamed to avoid collision
+        
+        if ip_endpoints_set:
+            endpoint_list = sorted([e.decode('utf-8') for e in ip_endpoints_set])
+            ip_journeys.append((ip, endpoint_list, len(endpoint_list)))
+    
+    # Sort by journey length (most active IPs first)
+    ip_journeys.sort(key=lambda x: x[2], reverse=True)
 
     return render(
         request,
@@ -74,6 +145,11 @@ def redis_analytics(request):
             "methods": methods,
             "hourly_traffic": hourly_traffic,
             "daily_traffic": daily_traffic,
+            "ip_journeys": ip_journeys[:10],  # Top 10 most active IPs
+            "daily_offset": daily_offset,
+            "hourly_offset": hourly_offset,
+            "daily_range": daily_range,
+            "hourly_range": hourly_range,
         },
     )
 

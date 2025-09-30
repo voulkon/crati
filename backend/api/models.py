@@ -11,12 +11,17 @@ class APIRequest(models.Model):
     )
     timestamp = models.DateTimeField(auto_now_add=True)
     user_agent = models.TextField(blank=True, null=True)
+    query_params = models.JSONField(null=True, blank=True, help_text="GET/POST parameters for analysis")
 
     class Meta:
         indexes = [
             models.Index(fields=["ip_address"]),
             models.Index(fields=["timestamp"]),
         ]
+    
+    def __str__(self):
+        return f"{self.ip_address} - {self.method} {self.path}"
+
 
 
 class APIAnalytics(models.Model):
@@ -123,3 +128,57 @@ class DailyTraffic(models.Model):
 
     def __str__(self):
         return f"{self.date}: {self.count}"
+
+
+class IPJourney(models.Model):
+    """Tracks which endpoints each IP has visited (for user journey analysis)"""
+    analytics = models.ForeignKey(
+        APIAnalytics, on_delete=models.CASCADE, related_name="ip_journeys"
+    )
+    ip_address = models.GenericIPAddressField()
+    endpoints_visited = models.JSONField(help_text="List of endpoints visited by this IP")
+    journey_length = models.PositiveIntegerField(help_text="Number of unique endpoints visited")
+    first_seen = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "IP Journey"
+        verbose_name_plural = "IP Journeys"
+        indexes = [
+            models.Index(fields=["ip_address"]),
+            models.Index(fields=["last_seen"]),
+        ]
+
+    def __str__(self):
+        return f"{self.ip_address}: {self.journey_length} endpoints"
+
+
+class EndpointAccessLog(models.Model):
+    """Detailed log of endpoint access with query parameters"""
+    ip_address = models.GenericIPAddressField()
+    endpoint = models.CharField(max_length=255)
+    method = models.CharField(max_length=10)
+    query_params = models.JSONField(null=True, blank=True, help_text="GET/POST parameters")
+    timestamp = models.DateTimeField(auto_now_add=True)
+    user_agent = models.TextField(blank=True, null=True)
+
+    class Meta:
+        verbose_name = "Endpoint Access Log"
+        verbose_name_plural = "Endpoint Access Logs"
+        indexes = [
+            models.Index(fields=["ip_address", "timestamp"]),
+            models.Index(fields=["endpoint", "timestamp"]),
+        ]
+    
+    def __str__(self):
+        return f"{self.ip_address} → {self.method} {self.endpoint}"
+    
+    @property
+    def search_term(self):
+        """Extract search term if this is a search endpoint"""
+        if self.query_params and isinstance(self.query_params, dict):
+            # Common search parameter names
+            for key in ['q', 'query', 'search', 'term', 'keyword']:
+                if key in self.query_params:
+                    return self.query_params[key]
+        return None

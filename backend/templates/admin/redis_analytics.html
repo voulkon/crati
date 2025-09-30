@@ -109,7 +109,21 @@
     <div class="row">
         <div class="col-md-12">
             <div class="stat-card">
-                <h3>Daily Traffic</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">Daily Traffic</h3>
+                    <div class="time-navigation" style="display: flex; gap: 10px; align-items: center;">
+                        <a href="?daily_offset={{ daily_offset|add:7 }}{% if hourly_offset %}&hourly_offset={{ hourly_offset }}{% endif %}" 
+                           class="button" style="padding: 5px 15px; text-decoration: none;">
+                            ◀ Previous 7 Days
+                        </a>
+                        <span style="color: #666; font-size: 14px;">{{ daily_range }}</span>
+                        <a href="?daily_offset={{ daily_offset|add:-7 }}{% if hourly_offset %}&hourly_offset={{ hourly_offset }}{% endif %}" 
+                           class="button" style="padding: 5px 15px; text-decoration: none;" 
+                           {% if daily_offset <= 0 %}onclick="return false;" style="opacity: 0.5; cursor: not-allowed;"{% endif %}>
+                            Next 7 Days ▶
+                        </a>
+                    </div>
+                </div>
                 <div class="chart-container">
                     <canvas id="dailyChart"></canvas>
                 </div>
@@ -120,7 +134,21 @@
     <div class="row">
         <div class="col-md-12">
             <div class="stat-card">
-                <h3>Hourly Traffic</h3>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">Hourly Traffic</h3>
+                    <div class="time-navigation" style="display: flex; gap: 10px; align-items: center;">
+                        <a href="?hourly_offset={{ hourly_offset|add:24 }}{% if daily_offset %}&daily_offset={{ daily_offset }}{% endif %}" 
+                           class="button" style="padding: 5px 15px; text-decoration: none;">
+                            ◀ Previous 24 Hours
+                        </a>
+                        <span style="color: #666; font-size: 14px;">{{ hourly_range }}</span>
+                        <a href="?hourly_offset={{ hourly_offset|add:-24 }}{% if daily_offset %}&daily_offset={{ daily_offset }}{% endif %}" 
+                           class="button" style="padding: 5px 15px; text-decoration: none;"
+                           {% if hourly_offset <= 0 %}onclick="return false;" style="opacity: 0.5; cursor: not-allowed;"{% endif %}>
+                            Next 24 Hours ▶
+                        </a>
+                    </div>
+                </div>
                 <div class="chart-container">
                     <canvas id="hourlyChart"></canvas>
                 </div>
@@ -153,10 +181,41 @@
 
         <div class="col-md-6">
             <div class="stat-card">
-                <h3>HTTP Methods</h3>
-                <div class="chart-container" style="height: 200px;">
-                    <canvas id="methodsChart"></canvas>
-                </div>
+                <h3>🧭 IP Journey Tracking</h3>
+                <p style="font-size: 14px; color: #666; margin-bottom: 15px;">
+                    Shows which endpoints each IP address has visited
+                </p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>Endpoints Visited</th>
+                            <th>Journey Length</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ip, endpoints, count in ip_journeys %}
+                        <tr>
+                            <td><code>{{ ip }}</code></td>
+                            <td style="font-size: 12px;">
+                                {% for endpoint in endpoints|slice:":3" %}
+                                    <div>→ {{ endpoint }}</div>
+                                {% endfor %}
+                                {% if count > 3 %}
+                                    <div style="color: #999; font-style: italic;">+ {{ count|add:"-3" }} more...</div>
+                                {% endif %}
+                            </td>
+                            <td><strong>{{ count }}</strong></td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="3" style="text-align: center; color: #999;">
+                                No journey data yet. IP tracking starts with new requests.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -169,7 +228,7 @@
     document.addEventListener('DOMContentLoaded', function () {
         // Daily traffic chart
         var dailyLabels = [{% for day, count in daily_traffic %}'{{ day }}', {% endfor %}];
-    var dailyData = [{% for day, count in daily_traffic %}{ { count } }, {% endfor %}];
+        var dailyData = [{% for day, count in daily_traffic %}{{ count }}, {% endfor %}];
 
     var dailyChart = new Chart(document.getElementById('dailyChart'), {
         type: 'line',
@@ -192,7 +251,7 @@
 
     // Hourly traffic chart
     var hourlyLabels = [{% for hour, count in hourly_traffic %}'{{ hour }}', {% endfor %}];
-    var hourlyData = [{% for hour, count in hourly_traffic %}{ { count } }, {% endfor %}];
+    var hourlyData = [{% for hour, count in hourly_traffic %}{{ count }}, {% endfor %}];
 
     var hourlyChart = new Chart(document.getElementById('hourlyChart'), {
         type: 'bar',
@@ -210,26 +269,7 @@
         }
     });
 
-    // Methods chart
-    var methodLabels = [{% for method, count in methods %}'{{ method }}', {% endfor %}];
-    var methodData = [{% for method, count in methods %}{ { count } }, {% endfor %}];
-
-    var methodsChart = new Chart(document.getElementById('methodsChart'), {
-        type: 'doughnut',
-        data: {
-            labels: methodLabels,
-            datasets: [{
-                data: methodData,
-                backgroundColor: [
-                    '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b'
-                ]
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false
-        }
-    });
+    // Methods chart removed - now showing IP Journey tracking instead
   });
 </script>
 {% endif %} <!-- End of else block for analytics display -->

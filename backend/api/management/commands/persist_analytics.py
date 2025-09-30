@@ -10,7 +10,8 @@ class Command(BaseCommand):
     help = "Persist Redis analytics data to database"
 
     def handle(self, *args, **options):
-        from api.models import APIAnalytics, DailyTraffic, EndpointStats
+        from api.models import APIAnalytics, DailyTraffic, EndpointStats, IPJourney
+        from api.redis_keys import get_ip_endpoints_key
 
         redis = get_redis_connection("default")
 
@@ -38,8 +39,29 @@ class Command(BaseCommand):
                 analytics=analytics, date=day.date(), count=int(count)
             )
 
+        # Persist IP journey data
+        unique_ips = redis.smembers("stats:unique_ips")
+        ip_count = 0
+        for ip_bytes in unique_ips:
+            ip = ip_bytes.decode('utf-8')
+            ip_endpoints_key = get_ip_endpoints_key(ip)
+            endpoints = redis.smembers(ip_endpoints_key)
+            
+            if endpoints:
+                endpoint_list = sorted([e.decode('utf-8') for e in endpoints])
+                IPJourney.objects.create(
+                    analytics=analytics,
+                    ip_address=ip,
+                    endpoints_visited=endpoint_list,
+                    journey_length=len(endpoint_list)
+                )
+                ip_count += 1
+
         self.stdout.write(
             self.style.SUCCESS(
-                f"Successfully persisted analytics data (ID: {analytics.id})"
+                f"Successfully persisted analytics data (ID: {analytics.id})\n"
+                f"  - {len(endpoint_keys)} endpoints\n"
+                f"  - {len(daily_data)} days of traffic\n"
+                f"  - {ip_count} IP journeys"
             )
         )

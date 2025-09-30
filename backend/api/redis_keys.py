@@ -15,6 +15,10 @@ ENDPOINT_PREFIX = f"{STATS_NS}:endpoint:"
 METHOD_PREFIX = f"{STATS_NS}:method:"
 USER_AGENTS = f"{STATS_NS}:user_agents"
 
+# IP tracking keys (for user journey analysis)
+IP_ENDPOINTS_PREFIX = f"{STATS_NS}:ip:"  # stats:ip:<ip>:endpoints
+ENDPOINT_IPS_PREFIX = f"{STATS_NS}:endpoint_ips:"  # stats:endpoint_ips:<endpoint>
+
 # Rate limit keys
 USER_RATELIMIT_PREFIX = f"{RATELIMIT_NS}:user:"
 IP_RATELIMIT_PREFIX = f"{RATELIMIT_NS}:ip:"
@@ -42,3 +46,13 @@ def get_user_ratelimit_key(user_id):
 def get_ip_ratelimit_key(ip):
     """Get the Redis key for IP rate limiting"""
     return f"{IP_RATELIMIT_PREFIX}{ip}"
+
+
+def get_ip_endpoints_key(ip: str) -> str:
+    """Generate Redis key for tracking endpoints visited by an IP"""
+    return f"{IP_ENDPOINTS_PREFIX}{ip}:endpoints"
+
+
+def get_endpoint_ips_key(endpoint: str) -> str:
+    """Generate Redis key for tracking IPs that visited an endpoint"""
+    return f"{ENDPOINT_IPS_PREFIX}{endpoint}"

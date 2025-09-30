@@ -24,12 +24,12 @@ class CustomAdminSite(admin.AdminSite):
             path("decisions/fetch-daily/", self._wrap_view('decisions', 'fetch_daily_decisions'), name="fetch_daily_decisions"),
             
             # Organization URLs
-            path("organizations/network/", self._wrap_view('organization_views', 'organization_network'), name="organization_network"),
-            path("organizations/chart/", self._wrap_view('organization_views', 'organization_org_chart'), name="organization_chart"),
+            path("organizations/network/", self._wrap_view('organization', 'organization_network'), name="organization_network"),
+            path("organizations/chart/", self._wrap_view('organization', 'organization_org_chart'), name="organization_chart"),
             
             # Document URLs
-            path("documents/search/", self._wrap_view('document_views', 'document_search'), name="document_search"),
-            path("documents/dashboard/", self._wrap_view('document_views', 'document_processing_dashboard'), name="document_dashboard"),
+            path("documents/search/", self._wrap_view('documents', 'document_search'), name="document_search"),
+            path("documents/dashboard/", self._wrap_view('documents', 'document_processing_dashboard'), name="document_dashboard"),
         ]
         return custom_urls + urls
     

@@ -40,8 +40,8 @@ schema_view = get_schema_view(
 
 # Then define your urlpatterns (just once, not twice!)
 urlpatterns = [
-    path("api/admin-new/", new_admin_site.urls),  # Fixed typo: was "admi-new"
-    path("api/admin/", admin_site.urls),
+    path("api/admin/", new_admin_site.urls),  # Fixed typo: was "admi-new"
+    path("api/admin-old/", admin_site.urls),
     path("health/", health_check, name="health_check"),
     path("", health_check, name="root_health_check"),
     path("api/", include("api.urls")),

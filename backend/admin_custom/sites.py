@@ -11,10 +11,10 @@ class CustomAdminSite(admin.AdminSite):
         urls = super().get_urls()
         custom_urls = [
             # Analytics URLs
-            path("analytics/", self._wrap_view('analytics_views', 'redis_analytics'), name="redis_analytics"),
-            path("analytics/export/", self._wrap_view('analytics_views', 'export_redis_analytics'), name="export_analytics"),
-            path("analytics/patterns/", self._wrap_view('analytics_views', 'pattern_analysis'), name="pattern_analysis"),
-            path("analytics/endpoints/", self._wrap_view('analytics_views', 'endpoint_deep_dive'), name="endpoint_deep_dive"),
+            path("analytics/", self._wrap_view('analytics', 'redis_analytics'), name="redis_analytics"),
+            path("analytics/export/", self._wrap_view('analytics', 'export_redis_analytics'), name="export_analytics"),
+            path("analytics/patterns/", self._wrap_view('analytics', 'pattern_analysis'), name="pattern_analysis"),
+            path("analytics/endpoints/", self._wrap_view('analytics', 'endpoint_deep_dive'), name="endpoint_deep_dive"),
             
             # Decision URLs
             path("decisions/coverage/", self._wrap_view('decisions', 'coverage_explorer'), name="coverage_explorer"),

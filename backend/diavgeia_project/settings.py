@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     "core.apps.CoreConfig",
     "rest_framework",
     "rest_framework.authtoken",
+    "admin_custom",
     "users",
     "api",
     "drf_yasg",

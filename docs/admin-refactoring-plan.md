@@ -351,7 +351,7 @@ def endpoint_deep_dive(request):
 python manage.py check
 
 python manage.py shell
->>> from admin_custom.views.analytics_views import redis_analytics
+>>> from admin_custom.views.analytics.redis import redis_analytics
 >>> print(redis_analytics.__name__)
 redis_analytics
 >>> exit()

@@ -17,11 +17,11 @@ class CustomAdminSite(admin.AdminSite):
             path("analytics/endpoints/", self._wrap_view('analytics_views', 'endpoint_deep_dive'), name="endpoint_deep_dive"),
             
             # Decision URLs
-            path("decisions/coverage/", self._wrap_view('decision_views', 'coverage_explorer'), name="coverage_explorer"),
-            path("decisions/entity-search/", self._wrap_view('decision_views', 'entity_search'), name="entity_search"),
-            path("decisions/daily-analysis/", self._wrap_view('decision_views', 'daily_decision_analysis'), name="daily_decision_analysis"),
-            path("decisions/analysis-api/", self._wrap_view('decision_views', 'decision_analysis_api'), name="decision_analysis_api"),
-            path("decisions/fetch-daily/", self._wrap_view('decision_views', 'fetch_daily_decisions'), name="fetch_daily_decisions"),
+            path("decisions/coverage/", self._wrap_view('decisions', 'coverage_explorer'), name="coverage_explorer"),
+            path("decisions/entity-search/", self._wrap_view('decisions', 'entity_search'), name="entity_search"),
+            path("decisions/daily-analysis/", self._wrap_view('decisions', 'daily_decision_analysis'), name="daily_decision_analysis"),
+            path("decisions/analysis-api/", self._wrap_view('decisions', 'decision_analysis_api'), name="decision_analysis_api"),
+            path("decisions/fetch-daily/", self._wrap_view('decisions', 'fetch_daily_decisions'), name="fetch_daily_decisions"),
             
             # Organization URLs
             path("organizations/network/", self._wrap_view('organization_views', 'organization_network'), name="organization_network"),

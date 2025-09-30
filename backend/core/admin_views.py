@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.db.models import Count, Sum
+from core.models.document_analysis import DocumentExtraction
 from core.models.organizations import (
     Organization,
     Signer,

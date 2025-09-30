@@ -9,7 +9,16 @@ import time
 from api.models import APIAnalytics, EndpointStats
 from collections import Counter
 from django.db.models import Count, Avg
-
+from api.redis_keys import (
+    RATELIMIT_NS,
+    TOTAL_REQUESTS, 
+    UNIQUE_IPS,
+    ENDPOINT_PREFIX,
+    METHOD_PREFIX,
+    HOURLY_STATS,
+    DAILY_STATS,
+    IP_RATELIMIT_PREFIX
+    )
 
 @staff_member_required
 def redis_analytics(request):
@@ -17,38 +26,40 @@ def redis_analytics(request):
     redis = get_redis_connection("default")
 
     # Get basic stats
-    total_requests = cache.get("stats:total_requests", 0)
-    unique_ips = redis.scard("stats:unique_ips")
+    total_requests = cache.get(TOTAL_REQUESTS, 0)
+    unique_ips = redis.scard(UNIQUE_IPS)
 
     # Get popular endpoints
     endpoints = []
-    endpoint_keys = redis.keys("stats:endpoint:*")
+    endpoint_keys = redis.keys(f"{ENDPOINT_PREFIX}*")
     for key in endpoint_keys:
-        endpoint = key.decode("utf-8").replace("stats:endpoint:", "")
-        count = cache.get(f"stats:endpoint:{endpoint}")
-        endpoints.append((endpoint, int(count)))
+        endpoint = key.decode("utf-8").replace(ENDPOINT_PREFIX, "")
+        count = cache.get(key.decode("utf-8"))
+        if count:
+            endpoints.append((endpoint, int(count)))
 
     # Sort by popularity
     endpoints.sort(key=lambda x: x[1], reverse=True)
 
     # Get HTTP methods distribution
     methods = []
-    method_keys = redis.keys("stats:method:*")
+    method_keys = redis.keys(f"{METHOD_PREFIX}*")
     for key in method_keys:
-        method = key.decode("utf-8").replace("stats:method:", "")
-        count = cache.get(f"stats:method:{method}")
-        methods.append((method, int(count)))
+        method = key.decode("utf-8").replace(METHOD_PREFIX, "")
+        count = cache.get(key.decode("utf-8"))
+        if count:
+            methods.append((method, int(count)))
 
     # Get hourly traffic
     hourly_traffic = []
-    hourly_data = redis.zrange("stats:hourly", 0, -1, withscores=True)
+    hourly_data = redis.zrange(HOURLY_STATS, 0, -1, withscores=True)
     for hour_key, count in hourly_data:
         hour = datetime.fromtimestamp(int(hour_key.decode("utf-8")) * 3600)
         hourly_traffic.append((hour.strftime("%Y-%m-%d %H:00"), int(count)))
 
     # Get daily traffic
     daily_traffic = []
-    daily_data = redis.zrange("stats:daily", 0, -1, withscores=True)
+    daily_data = redis.zrange(DAILY_STATS, 0, -1, withscores=True)
     for day_key, count in daily_data:
         day = datetime.fromtimestamp(int(day_key.decode("utf-8")) * 86400)
         daily_traffic.append((day.strftime("%Y-%m-%d"), int(count)))
@@ -79,13 +90,13 @@ def export_redis_analytics(request):
     writer.writerow(["IP Address", "Request Count", "Last Access"])
 
     # Get all rate limit keys
-    keys = redis.keys("ratelimit:*")
+    keys = redis.keys(f"{IP_RATELIMIT_PREFIX}*")
     for key in keys:
-        ip = key.decode("utf-8").replace("ratelimit:", "")
+        ip = key.decode("utf-8").replace(IP_RATELIMIT_PREFIX, "")
         if ":user:" in ip:  # Skip user keys
             continue
 
-        data = cache.get(f"ratelimit:{ip}", {})
+        data = cache.get(key.decode("utf-8"), {})
         count = data.get("count", 0)
         reset_time = data.get("reset_time", time.time())
         last_access = datetime.fromtimestamp(reset_time - 86400)  # Assuming 24h window

@@ -393,3 +393,317 @@ class OpenSearchService:
         except Exception as e:
             logger.error(f"❌ Failed to restore snapshot: {e}")
             return False
+    
+    # Health Check and Verification Methods for Decision Pipeline
+    
+    def health_check(self) -> bool:
+        """
+        Comprehensive health check for OpenSearch connectivity and index status.
+        Used by the decision health service.
+        """
+        try:
+            # Test basic connectivity
+            response = requests.get(f"{self.opensearch_url}/_cluster/health", timeout=10)
+            if response.status_code != 200:
+                logger.error(f"OpenSearch cluster health check failed: {response.status_code}")
+                return False
+            
+            cluster_health = response.json()
+            cluster_status = cluster_health.get('status')
+            
+            if cluster_status == 'red':
+                logger.error(f"OpenSearch cluster is in RED state: {cluster_health}")
+                return False
+            elif cluster_status == 'yellow':
+                logger.warning(f"OpenSearch cluster is in YELLOW state: {cluster_health}")
+            
+            # Test index existence and health
+            index_response = requests.get(f"{self.opensearch_url}/{self.index_name}/_stats", timeout=10)
+            if index_response.status_code != 200:
+                logger.error(f"Index '{self.index_name}' not accessible: {index_response.status_code}")
+                return False
+            
+            # Test search functionality
+            test_search = self.search_documents("test", size=1)
+            if test_search is None:
+                logger.error("Search functionality test failed")
+                return False
+            
+            logger.debug("OpenSearch health check passed")
+            return True
+            
+        except Exception as e:
+            logger.error(f"OpenSearch health check failed with exception: {e}")
+            return False
+    
+    def document_exists(self, ada: str) -> bool:
+        """
+        Check if a document with the given ADA exists in OpenSearch.
+        Used by decision health checks to verify indexing.
+        """
+        try:
+            # Use exact term search for ADA
+            search_body = {
+                "query": {
+                    "term": {
+                        "ada.keyword": ada  # Use keyword field for exact match
+                    }
+                },
+                "size": 1,
+                "_source": ["ada"]  # Only return ADA to minimize data transfer
+            }
+            
+            response = requests.post(
+                f"{self.opensearch_url}/{self.index_name}/_search",
+                json=search_body,
+                headers={'Content-Type': 'application/json'},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                hits = result.get('hits', {}).get('hits', [])
+                exists = len(hits) > 0
+                
+                if exists:
+                    logger.debug(f"Document {ada} exists in OpenSearch")
+                else:
+                    logger.debug(f"Document {ada} not found in OpenSearch")
+                
+                return exists
+            else:
+                logger.error(f"Failed to check document existence for {ada}: {response.status_code}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error checking document existence for {ada}: {e}")
+            return False
+    
+    def verify_document_searchability(self, ada: str, test_queries: List[str] = None) -> Dict[str, Any]:
+        """
+        Verify that a document is properly indexed and searchable.
+        Tests both exact ADA search and content-based searches.
+        
+        Args:
+            ada: Decision ADA to test
+            test_queries: List of queries to test against the document content
+            
+        Returns:
+            Dictionary with verification results
+        """
+        verification_result = {
+            'ada': ada,
+            'exists': False,
+            'ada_searchable': False,
+            'content_searchable': False,
+            'test_results': [],
+            'issues': []
+        }
+        
+        try:
+            # First check if document exists at all
+            verification_result['exists'] = self.document_exists(ada)
+            
+            if not verification_result['exists']:
+                verification_result['issues'].append("Document not found in index")
+                return verification_result
+            
+            # Test ADA-based search
+            ada_search_results = self.search_documents(ada, size=5)
+            if ada_search_results and ada_search_results.get('hits'):
+                # Check if our document appears in ADA search results
+                ada_found = any(
+                    hit.get('ada') == ada 
+                    for hit in ada_search_results['hits']
+                )
+                verification_result['ada_searchable'] = ada_found
+                
+                if not ada_found:
+                    verification_result['issues'].append("Document exists but not found in ADA search")
+            else:
+                verification_result['issues'].append("ADA search returned no results")
+            
+            # Test content-based searches if test queries provided
+            if test_queries:
+                successful_content_searches = 0
+                
+                for query in test_queries:
+                    if not query or not query.strip():
+                        continue
+                        
+                    content_results = self.search_documents(query, size=10)
+                    if content_results and content_results.get('hits'):
+                        query_found = any(
+                            hit.get('ada') == ada 
+                            for hit in content_results['hits']
+                        )
+                        
+                        test_result = {
+                            'query': query,
+                            'found': query_found,
+                            'total_results': len(content_results['hits'])
+                        }
+                        verification_result['test_results'].append(test_result)
+                        
+                        if query_found:
+                            successful_content_searches += 1
+                    else:
+                        verification_result['test_results'].append({
+                            'query': query,
+                            'found': False,
+                            'error': 'No search results returned'
+                        })
+                
+                # Document is content searchable if it appears in at least some queries
+                verification_result['content_searchable'] = successful_content_searches > 0
+                
+                if successful_content_searches == 0 and test_queries:
+                    verification_result['issues'].append("Document not found in any content searches")
+            
+            # Overall assessment
+            if not verification_result['issues']:
+                logger.info(f"Document {ada} passes all searchability tests")
+            else:
+                logger.warning(f"Document {ada} has searchability issues: {verification_result['issues']}")
+                
+        except Exception as e:
+            logger.error(f"Error verifying searchability for {ada}: {e}")
+            verification_result['issues'].append(f"Verification failed: {str(e)}")
+        
+        return verification_result
+    
+    def get_document_by_ada(self, ada: str) -> Dict[str, Any]:
+        """
+        Retrieve a specific document by ADA for inspection.
+        Used for detailed investigation of indexing issues.
+        """
+        try:
+            search_body = {
+                "query": {
+                    "term": {
+                        "ada.keyword": ada
+                    }
+                },
+                "size": 1
+            }
+            
+            response = requests.post(
+                f"{self.opensearch_url}/{self.index_name}/_search",
+                json=search_body,
+                headers={'Content-Type': 'application/json'},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                hits = result.get('hits', {}).get('hits', [])
+                
+                if hits:
+                    document = hits[0]['_source']
+                    logger.debug(f"Retrieved document {ada} from OpenSearch")
+                    return document
+                else:
+                    logger.warning(f"Document {ada} not found in OpenSearch")
+                    return {}
+            else:
+                logger.error(f"Failed to retrieve document {ada}: {response.status_code}")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"Error retrieving document {ada}: {e}")
+            return {}
+    
+    def analyze_index_health(self) -> Dict[str, Any]:
+        """
+        Analyze overall index health and statistics.
+        Useful for understanding system-wide indexing issues.
+        """
+        health_analysis = {
+            'index_exists': False,
+            'document_count': 0,
+            'index_size': 0,
+            'mapping_issues': [],
+            'performance_metrics': {},
+            'recommendations': []
+        }
+        
+        try:
+            # Check index existence and basic stats
+            stats_response = requests.get(
+                f"{self.opensearch_url}/{self.index_name}/_stats",
+                timeout=10
+            )
+            
+            if stats_response.status_code == 200:
+                health_analysis['index_exists'] = True
+                stats = stats_response.json()
+                
+                index_stats = stats.get('indices', {}).get(self.index_name, {})
+                primaries = index_stats.get('primaries', {})
+                
+                # Document count
+                docs = primaries.get('docs', {})
+                health_analysis['document_count'] = docs.get('count', 0)
+                
+                # Index size
+                store = primaries.get('store', {})
+                health_analysis['index_size'] = store.get('size_in_bytes', 0)
+                
+                # Performance metrics
+                search_stats = primaries.get('search', {})
+                health_analysis['performance_metrics'] = {
+                    'total_searches': search_stats.get('query_total', 0),
+                    'search_time_ms': search_stats.get('query_time_in_millis', 0),
+                    'avg_search_time': (
+                        search_stats.get('query_time_in_millis', 0) / 
+                        max(search_stats.get('query_total', 1), 1)
+                    )
+                }
+            else:
+                health_analysis['recommendations'].append(
+                    f"Index '{self.index_name}' does not exist or is not accessible"
+                )
+                return health_analysis
+            
+            # Check mapping
+            mapping_response = requests.get(
+                f"{self.opensearch_url}/{self.index_name}/_mapping",
+                timeout=10
+            )
+            
+            if mapping_response.status_code == 200:
+                mapping = mapping_response.json()
+                index_mapping = mapping.get(self.index_name, {}).get('mappings', {})
+                properties = index_mapping.get('properties', {})
+                
+                # Check for expected fields
+                expected_fields = ['ada', 'title', 'content', 'organization', 'issue_date']
+                missing_fields = [
+                    field for field in expected_fields 
+                    if field not in properties
+                ]
+                
+                if missing_fields:
+                    health_analysis['mapping_issues'].extend([
+                        f"Missing field mapping: {field}" 
+                        for field in missing_fields
+                    ])
+            
+            # Generate recommendations
+            if health_analysis['document_count'] == 0:
+                health_analysis['recommendations'].append("Index is empty - check document indexing process")
+            
+            if health_analysis['index_size'] > 10 * 1024 * 1024 * 1024:  # 10GB
+                health_analysis['recommendations'].append("Index is very large - consider optimization")
+            
+            avg_search_time = health_analysis['performance_metrics'].get('avg_search_time', 0)
+            if avg_search_time > 1000:  # More than 1 second average
+                health_analysis['recommendations'].append("Search performance is slow - consider optimization")
+            
+            logger.info(f"Index health analysis completed for '{self.index_name}'")
+            
+        except Exception as e:
+            logger.error(f"Error analyzing index health: {e}")
+            health_analysis['recommendations'].append(f"Health analysis failed: {str(e)}")
+        
+        return health_analysis

@@ -30,3 +30,4 @@ from .companies import  (
     CompanyPerson, CompanyCapital,
     CompanyStock
     )
+from .decision_health import DecisionHealthCheck, DecisionHealthSummary, HealthStatus

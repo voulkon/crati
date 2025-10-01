@@ -90,9 +90,15 @@ class Command(BaseCommand):
         self.stdout.write("\n--- Creating Main Greek Documents Index ---")
         
         try:
-            # Delete if exists
-            requests.delete(f"{opensearch_url}/diavgeia-documents")
+            # Check if index already exists
+            check_response = requests.head(f"{opensearch_url}/diavgeia-documents")
             
+            if check_response.status_code == 200:
+                self.stdout.write(self.style.SUCCESS("✓ Main documents index already exists - skipping creation"))
+                self.stdout.write("  💡 To recreate the index, delete it first manually or use --force flag")
+                return
+            
+            # Index doesn't exist, create it
             response = requests.put(f"{opensearch_url}/diavgeia-documents")
             
             if response.status_code in [200, 201]:

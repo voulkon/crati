@@ -30,6 +30,12 @@ class CustomAdminSite(admin.AdminSite):
             # Document URLs
             path("documents/search/", self._wrap_view('documents', 'document_search'), name="document_search"),
             path("documents/dashboard/", self._wrap_view('documents', 'document_processing_dashboard'), name="document_dashboard"),
+            
+            # Health Check URLs
+            path("health/dashboard/", self._wrap_view('health', 'health_dashboard_view'), name="health_dashboard"),
+            path("health/quick-check/", self._wrap_view('health', 'quick_health_check_view'), name="quick_health_check"),
+            path("health/bulk-check/", self._wrap_view('health', 'bulk_check_view'), name="bulk_health_check"),
+            path("health/<int:pk>/refresh/", self._wrap_view('health', 'refresh_single_check'), name="health_refresh_single"),
         ]
         return custom_urls + urls
     
@@ -65,6 +71,7 @@ class CustomAdminSite(admin.AdminSite):
             "models": [
                 {"name": "Coverage Explorer", "object_name": "CoverageExplorer", "admin_url": "/api/admin/decisions/coverage/", "view_only": True},
                 {"name": "Daily Decision Analysis", "object_name": "DailyDecisionAnalysis", "admin_url": "/api/admin/decisions/daily-analysis/", "view_only": True},
+                {"name": "Entity Search", "object_name": "EntitySearch", "admin_url": "/api/admin/decisions/entity-search/", "view_only": True},
             ],
         }
         app_list.append(decision_mgmt_app)
@@ -91,8 +98,72 @@ class CustomAdminSite(admin.AdminSite):
         }
         app_list.append(doc_processing_app)
 
+        # Add custom Health Check section
+        health_app = {
+            "name": "Health & Diagnostics",
+            "app_label": "health",
+            "models": [
+                {"name": "🔍 Quick Health Check", "object_name": "QuickHealthCheck", "admin_url": "/api/admin/health/quick-check/", "view_only": True},
+                {"name": "📊 Health Dashboard", "object_name": "HealthDashboard", "admin_url": "/api/admin/health/dashboard/", "view_only": True},
+                {"name": "📦 Bulk Health Check", "object_name": "BulkHealthCheck", "admin_url": "/api/admin/health/bulk-check/", "view_only": True},
+            ],
+        }
+        app_list.append(health_app)
+
         return app_list
 
 
 # Create singleton instance
 admin_site = CustomAdminSite(name='custom_admin')
+
+
+# Register all models with the custom admin site
+def register_all_models():
+    """Register all models with the custom admin site"""
+    from admin_custom.admin_classes import (
+        DecisionAdmin, AttachmentAdmin, OrganizationAdmin, UnitAdmin, SignerAdmin,
+        DocumentExtractionAdmin, DocumentAnalysisAdmin, DocumentEmbeddingAdmin,
+        DecisionHealthCheckAdmin, DecisionHealthSummaryAdmin,
+        APIAnalyticsAdmin, EndpointStatsAdmin, DailyTrafficAdmin, ImportJobAdmin,
+        CustomUserAdmin, SubscriptionAdmin
+    )
+    
+    from core.models.decisions import Decision, Attachment
+    from core.models.organizations import Organization, Unit, Signer
+    from core.models.document_analysis import DocumentExtraction, DocumentAnalysis, DocumentEmbedding
+    from core.models.decision_health import DecisionHealthCheck, DecisionHealthSummary
+    from core.models.import_jobs import ImportJob, DateCoverage
+    from api.models import APIAnalytics, EndpointStats, DailyTraffic
+    from users.models import CustomUser, Subscription
+    
+    # Register Decision models
+    admin_site.register(Decision, DecisionAdmin)
+    admin_site.register(Attachment, AttachmentAdmin)
+    admin_site.register(Organization, OrganizationAdmin)
+    admin_site.register(Unit, UnitAdmin)
+    admin_site.register(Signer, SignerAdmin)
+    
+    # Register Document models
+    admin_site.register(DocumentExtraction, DocumentExtractionAdmin)
+    admin_site.register(DocumentAnalysis, DocumentAnalysisAdmin)
+    admin_site.register(DocumentEmbedding, DocumentEmbeddingAdmin)
+    
+    # Register Health models
+    admin_site.register(DecisionHealthCheck, DecisionHealthCheckAdmin)
+    admin_site.register(DecisionHealthSummary, DecisionHealthSummaryAdmin)
+    
+    # Register Analytics models
+    admin_site.register(APIAnalytics, APIAnalyticsAdmin)
+    admin_site.register(EndpointStats, EndpointStatsAdmin)
+    admin_site.register(DailyTraffic, DailyTrafficAdmin)
+    admin_site.register(ImportJob, ImportJobAdmin)
+    admin_site.register(DateCoverage)
+    
+    # Register User models
+    admin_site.register(CustomUser, CustomUserAdmin)
+    admin_site.register(Subscription, SubscriptionAdmin)
+
+
+# Auto-register models when module is imported
+register_all_models()
+

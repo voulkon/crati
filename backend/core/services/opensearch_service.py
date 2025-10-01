@@ -92,6 +92,9 @@ class OpenSearchService:
     
     def index_document(self, document_data: Dict[str, Any]) -> bool:
         """Index a single document with smart content handling"""
+        decision_id = document_data.get('decision_id', 'unknown')
+        ada = document_data.get('ada', 'unknown')
+        
         try:
             # Prepare content
             raw_text = document_data.get('content', '')
@@ -105,25 +108,50 @@ class OpenSearchService:
             document_data['content_length'] = len(content_data['content'])
             document_data['is_truncated'] = len(raw_text) > self.max_content_length
             
+            # Log the indexing attempt
+            url = f"{self.opensearch_url}/{self.index_name}/_doc/{decision_id}"
+            logger.debug(f"🔍 Attempting to index document {ada} (ID: {decision_id}) to {url}")
+            
             response = requests.post(
-                f"{self.opensearch_url}/{self.index_name}/_doc/{document_data['decision_id']}",
+                url,
                 json=document_data,
-                headers={'Content-Type': 'application/json'}
+                headers={'Content-Type': 'application/json'},
+                timeout=30  # Add explicit timeout
             )
             
+            # Log the raw response for debugging
+            logger.debug(f"📡 OpenSearch response status: {response.status_code}")
+            logger.debug(f"📡 OpenSearch response body: {response.text[:500]}")
+            
             if response.status_code in [200, 201]:
-                logger.info(f"Indexed document {document_data['decision_id']} ({len(content_data['content'])} chars)")
+                logger.info(f"✅ Indexed document {ada} (ID: {decision_id}, {len(content_data['content'])} chars)")
                 
                 # Force index refresh to make document immediately searchable
-                refresh_response = requests.post(f"{self.opensearch_url}/{self.index_name}/_refresh")
+                try:
+                    refresh_response = requests.post(
+                        f"{self.opensearch_url}/{self.index_name}/_refresh",
+                        timeout=10
+                    )
+                    logger.debug(f"🔄 Index refresh status: {refresh_response.status_code}")
+                except Exception as refresh_error:
+                    logger.warning(f"⚠️ Index refresh failed (non-critical): {refresh_error}")
                 
                 return True
             else:
-                logger.error(f"Failed to index document {document_data['decision_id']}: {response.status_code}")
+                logger.error(
+                    f"❌ Failed to index document {ada} (ID: {decision_id}): "
+                    f"HTTP {response.status_code} - {response.text[:200]}"
+                )
                 return False
                 
+        except requests.exceptions.Timeout as e:
+            logger.error(f"⏱️ Timeout indexing document {ada} (ID: {decision_id}): {e}")
+            return False
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"🔌 Connection error indexing document {ada} (ID: {decision_id}): {e}")
+            return False
         except Exception as e:
-            logger.error(f"Error indexing document {document_data['decision_id']}: {e}")
+            logger.error(f"💥 Error indexing document {ada} (ID: {decision_id}): {e}", exc_info=True)
             return False
     
     def search_documents(self, query: str, filters: Dict = None, size: int = 10) -> Dict[str, Any]:

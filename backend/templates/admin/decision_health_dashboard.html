@@ -119,7 +119,7 @@
 <div class="health-dashboard">
     <h1>Decision Health Dashboard</h1>
     
-    <a href="{% url 'admin:core_decisionhealthcheck_bulk_check' %}" class="refresh-button">
+    <a href="{% url 'admin:bulk_health_check' %}" class="refresh-button">
         🔄 Run Bulk Health Check
     </a>
     
@@ -210,8 +210,8 @@
                     <a href="{% url 'admin:core_decisionhealthcheck_change' health_check.id %}" class="button">
                         View Details
                     </a>
-                    <a href="{% url 'admin:core_decisionhealthcheck_refresh' health_check.id %}" class="button">
-                        Refresh
+                    <a href="{% url 'admin:health_refresh_single' health_check.id %}" class="button">
+                        🔄 Refresh
                     </a>
                 </td>
             </tr>

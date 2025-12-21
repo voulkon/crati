@@ -16,18 +16,28 @@ class DoclingExtractor:
             split_into_pages: Whether to split into pages/chunks (default: True)
         """
         self.split_into_pages = split_into_pages
+        self._converter = None
+        self._chunker = None
+
+    @property
+    def converter(self):
+        if self._converter is None:
+            from docling.document_converter import DocumentConverter
+            self._converter = DocumentConverter()
+        return self._converter
+
+    @property
+    def chunker(self):
+        if self._chunker is None:
+            from docling.chunking import HybridChunker
+            self._chunker = HybridChunker(tokenizer="BAAI/bge-small-en-v1.5")
+        return self._chunker
 
     def extract_text(self, file_path: str) -> ExtractionResult:
         """Extract text using Docling"""
         try:
-            from docling.document_converter import DocumentConverter
-            from docling.chunking import HybridChunker
-
-            # Initialize the Docling document converter
-            converter = DocumentConverter()
-
             # Process the document
-            result = converter.convert(file_path)
+            result = self.converter.convert(file_path)
             doc = result.document
 
             # Extract text
@@ -58,12 +68,11 @@ class DoclingExtractor:
                 )
 
             # Otherwise, use chunker to create "pages"
-            chunker = HybridChunker(tokenizer="BAAI/bge-small-en-v1.5")
-            chunk_iter = chunker.chunk(doc)
+            chunk_iter = self.chunker.chunk(doc)
 
             pages_data = []
             for i, chunk in enumerate(chunk_iter):
-                enriched_text = chunker.contextualize(chunk=chunk)
+                enriched_text = self.chunker.contextualize(chunk=chunk)
                 for_page_data = {
                     "page_number": i + 1,  # This is a chunk number, not a page number
                     "text": enriched_text,

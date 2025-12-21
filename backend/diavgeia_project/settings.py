@@ -237,6 +237,10 @@ CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_TASK_TRACK_STARTED = True
 CELERY_RESULT_EXPIRES = 86400  # 1 day in seconds
 
+# Worker Resource Limits
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 5  # Restart worker process after 5 tasks to release memory
+CELERY_WORKER_MAX_MEMORY_PER_CHILD = 1000000  # 1GB (in KB) - Restart if memory exceeds this
+
 # Django Celery Results
 INSTALLED_APPS += [
     "django_celery_results",

@@ -3,6 +3,7 @@ from core.models.decisions import Decision
 from core.protocols.extraction_protocol import ExtractionResult
 from core.models.document_analysis import DocumentExtraction, DocumentPage, ProcessingStatus
 from datetime import datetime
+from django.utils import timezone
 from django.db import transaction
 from loguru import logger
 
@@ -44,7 +45,7 @@ class DocumentExtractionImporter:
 
         # Common fields to update
         extraction.extraction_provider = provider_name
-        extraction.extraction_date = datetime.now()
+        extraction.extraction_date = timezone.now()
         extraction.processing_time_ms = processing_time_ms
         extraction.page_count = result.page_count
         
@@ -67,7 +68,7 @@ class DocumentExtractionImporter:
                     'corruption_indicators': preprocessing_result.corruption_indicators,
                     'confidence_score': preprocessing_result.confidence_score,
                     'performance_stats': preprocessing_result.performance_stats,
-                    'processed_at': datetime.now().isoformat(),
+                    'processed_at': timezone.now().isoformat(),
                     'strategy_used': preprocessing_result.corruption_indicators.get('strategy_used', 'unknown')
                 }
                 
@@ -86,7 +87,7 @@ class DocumentExtractionImporter:
                 extraction.preprocessing_metadata = {
                     'confidence_score': preprocessing_result.confidence_score,
                     'performance_stats': preprocessing_result.performance_stats,
-                    'processed_at': datetime.now().isoformat(),
+                    'processed_at': timezone.now().isoformat(),
                     'strategy_used': preprocessing_result.corruption_indicators.get('strategy_used', 'unknown')
                 }
 

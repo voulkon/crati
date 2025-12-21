@@ -1,4 +1,5 @@
 name: diavgeia
+
 services:
 
   # ───────────────────── Observability ──────────────────────
@@ -23,12 +24,42 @@ services:
       - diavgeia-net
     volumes:
       - loki_data:/loki
+      - ./loki-config:/etc/loki
     command: -config.file=/etc/loki/local-config.yaml
     healthcheck:
       test: ["CMD-SHELL", "wget --spider http://localhost:3100/ready || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: diavgeia_promtail
+    volumes:
+      - ./promtail-config/promtail.yml:/etc/promtail/config.yml
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - diavgeia-net
+    depends_on:
+      - loki
+  
+  grafana:
+    image: grafana/grafana:latest
+    container_name: diavgeia_grafana
+    ports:
+      - "3000:3000"
+    networks:
+      - diavgeia-net
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana-provisioning:/etc/grafana/provisioning
+    depends_on:
+      - loki
   db:
     image: pgvector/pgvector:pg17
     container_name: diavgeia_db
@@ -269,6 +300,8 @@ volumes:
   redis_data:
     driver: local
   loki_data:
+    driver: local
+  grafana_data:
     driver: local
     
 networks:

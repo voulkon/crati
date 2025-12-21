@@ -51,6 +51,14 @@ from .tasks_misc import (
     test_tracing,
 )
 
+from .health_check_tasks import (
+    check_recent_decisions_health,
+    refresh_problematic_decisions,
+    cleanup_old_health_checks,
+    auto_fix_simple_issues,
+    check_single_decision_health,
+)
+
 # This ensures all tasks are available when importing from core.tasks
 __all__ = [
     # Documents
@@ -88,4 +96,10 @@ __all__ = [
     # Misc
     "ping",
     "test_tracing",
+    # Health Checks
+    "check_recent_decisions_health",
+    "refresh_problematic_decisions",
+    "cleanup_old_health_checks",
+    "auto_fix_simple_issues",
+    "check_single_decision_health",
 ]

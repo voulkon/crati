@@ -152,8 +152,8 @@ class TextExtractionProcessor(BaseDocumentProcessor):
             return False
 
         # Log which file we're starting to process
-        logger.info(f"🔄 Starting processing for decision {decision.ada}")
-        logger.info(f"📄 Document URL: {decision.document_url}")
+        logger.debug(f"🔄 Starting processing for decision {decision.ada}")
+        logger.debug(f"📄 Document URL: {decision.document_url}")
 
         # Use the specified provider or default
         provider = provider or self.default_extractor
@@ -167,7 +167,7 @@ class TextExtractionProcessor(BaseDocumentProcessor):
             else str(provider)
         )
 
-        logger.info(f"🔧 Using extraction provider: {provider_name}")
+        logger.debug(f"🔧 Using extraction provider: {provider_name}")
 
         # Check if we already have an extraction
         extraction, created = DocumentExtraction.objects.get_or_create(
@@ -194,19 +194,19 @@ class TextExtractionProcessor(BaseDocumentProcessor):
         importer = DocumentExtractionImporter()
 
         # Download the PDF
-        logger.info(f"⬇️ Downloading PDF for {decision.ada}")
+        logger.debug(f"⬇️ Downloading PDF for {decision.ada}")
         temp_path, success = self.download_pdf(decision.document_url)
         if not success:
             logger.error(f"❌ Failed to download PDF for {decision.ada}")
             importer.mark_extraction_failed(extraction, "Failed to download PDF")
             return False
 
-        logger.info(f"✅ Downloaded PDF to {temp_path}")
+        logger.debug(f"✅ Downloaded PDF to {temp_path}")
 
         try:
             # Start timing the extraction
             start_time = time.time()
-            logger.info(f"🔍 Starting text extraction for {decision.ada}")
+            logger.debug(f"🔍 Starting text extraction for {decision.ada}")
 
             # Get the appropriate extractor
             extractor = self.extractors[provider]

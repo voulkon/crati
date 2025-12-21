@@ -66,6 +66,7 @@ def process_document_task_enhanced(self, ada, provider=None):
     from core.services.document_processor import DocumentAnalysisService
 
     try:
+        logger.info(f"-"*100)
         logger.info(f"🔄 Starting document processing task for {ada}")
         
         # Get the decision
@@ -77,6 +78,7 @@ def process_document_task_enhanced(self, ada, provider=None):
 
         if result.get('success') and result.get('extraction_status') == 'COMPLETED':
             logger.info(f"✅ Document processing completed for {ada}")
+            logger.info(f"-"*100)
             
             # Force OpenSearch indexing if the signal didn't work
             try:

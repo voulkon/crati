@@ -238,8 +238,11 @@ CELERY_TASK_TRACK_STARTED = True
 CELERY_RESULT_EXPIRES = 86400  # 1 day in seconds
 
 # Worker Resource Limits
-CELERY_WORKER_MAX_TASKS_PER_CHILD = 5  # Restart worker process after 5 tasks to release memory
-CELERY_WORKER_MAX_MEMORY_PER_CHILD = 1000000  # 1GB (in KB) - Restart if memory exceeds this
+CELERY_WORKER_MAX_TASKS_PER_CHILD = int(os.environ.get("CELERY_WORKER_MAX_TASKS_PER_CHILD", 100))  # Restart worker process after 100 tasks to release memory
+# Increased from 5 to amortize the heavy Docling initialization cost (5.4s per worker)
+# This means the 5.4s overhead is spread across 100 documents instead of 5
+CELERY_WORKER_MAX_MEMORY_PER_CHILD = int(os.environ.get("CELERY_WORKER_MAX_MEMORY_PER_CHILD", 2500000))  # 2.5GB (in KB) - Restart if memory exceeds this
+# Increased from 1GB to accommodate Docling's memory requirements (~1.5-2GB peak with concurrency=2)
 
 # Django Celery Results
 INSTALLED_APPS += [

@@ -111,7 +111,7 @@ class BaseDocumentProcessor:
 class TextExtractionProcessor(BaseDocumentProcessor):
     """Handles text extraction from PDFs using various providers"""
 
-    # Define extractors as class variables
+    # Define extractors as class variables (shared across all instances)
     extractors = {
         ProcessingProvider.PYMUPDF: PyMuPDFExtractor(),
         ProcessingProvider.DOCLING: DoclingExtractor(),
@@ -123,9 +123,17 @@ class TextExtractionProcessor(BaseDocumentProcessor):
     default_extractor = ProcessingProvider.DOCLING
     # default_extractor = ProcessingProvider.PYMUPDF
     
+    # Track instance creation for performance monitoring
+    _instance_count = 0
+    
     def __init__(self):
         super().__init__()
         self.text_preprocessor = TextPreprocessor()
+        TextExtractionProcessor._instance_count += 1
+        logger.debug(
+            f"📊 TextExtractionProcessor instance #{TextExtractionProcessor._instance_count} created "
+            f"(PID: {os.getpid()})"
+        )
 
     def process_document(self, decision: Decision, provider: str = None) -> bool:
         """

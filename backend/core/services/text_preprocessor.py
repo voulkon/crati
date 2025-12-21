@@ -1,6 +1,7 @@
 import re
 import json
 import time
+import html
 from typing import Tuple, Set, List, Optional, Dict, Any
 from pathlib import Path
 from loguru import logger
@@ -528,6 +529,9 @@ class TextPreprocessor:
             )
         
         self.performance_stats = {}
+
+        # 0. Decode HTML entities (e.g., &lt; → <, &amp; → &)
+        text = html.unescape(text)
 
         # 1. Detect corruption on the original raw text
         is_corrupted = self.is_text_corrupted(text)

@@ -134,3 +134,178 @@ def index_recent_documents(limit=100):
         raise
 
 
+@shared_task
+def bulk_reindex_missing_documents():
+    """
+    Task to find and reindex all documents that are in PostgreSQL but missing from OpenSearch
+    """
+    logger.info("🔍 Starting bulk reindex of missing documents")
+    
+    try:
+        opensearch_service = OpenSearchService()
+        
+        # Get initial counts
+        initial_os_count = opensearch_service._test_match_all().get('hits', {}).get('total', {}).get('value', 0)
+        
+        # Get all completed extractions with ADAs
+        completed_adas = set(
+            DocumentExtraction.objects.filter(
+                extraction_status=ProcessingStatus.COMPLETED,
+                raw_text__isnull=False
+            ).exclude(raw_text='').values_list('decision__ada', flat=True)
+        )
+        
+        # Get all indexed ADAs from OpenSearch
+        try:
+            # Query all documents from OpenSearch
+            response = opensearch_service._test_match_all(size=10000)
+            indexed_adas = set(
+                hit['_source']['ada'] 
+                for hit in response.get('hits', {}).get('hits', [])
+            )
+        except Exception as e:
+            logger.error(f"Error fetching indexed ADAs: {e}")
+            indexed_adas = set()
+        
+        # Find missing ADAs
+        missing_adas = completed_adas - indexed_adas
+        
+        logger.info(f"📊 Found {len(missing_adas)} documents missing from OpenSearch")
+        
+        if not missing_adas:
+            logger.info("✅ No missing documents found, all synced!")
+            return {
+                "processed": 0,
+                "missing_count": 0,
+                "initial_opensearch_count": initial_os_count,
+                "final_opensearch_count": initial_os_count
+            }
+        
+        # Reindex missing documents
+        indexed_count = 0
+        failed_count = 0
+        
+        for ada in missing_adas:
+            try:
+                extraction = DocumentExtraction.objects.select_related(
+                    'decision', 
+                    'decision__organization', 
+                    'decision__decision_type'
+                ).get(
+                    decision__ada=ada,
+                    extraction_status=ProcessingStatus.COMPLETED
+                )
+                
+                document_data = {
+                    'decision_id': extraction.decision.id,
+                    'ada': extraction.decision.ada,
+                    'title': extraction.decision.subject or '',
+                    'content': extraction.raw_text,
+                    'organization': str(extraction.decision.organization) if extraction.decision.organization else '',
+                    'decision_type': str(extraction.decision.decision_type) if extraction.decision.decision_type else '',
+                    'issue_date': extraction.decision.issue_date.isoformat() if extraction.decision.issue_date else None,
+                    'extraction_date': extraction.extraction_date.isoformat() if extraction.extraction_date else None,
+                    'character_count': extraction.character_count,
+                    'page_count': extraction.page_count
+                }
+                
+                success = opensearch_service.index_document(document_data)
+                if success:
+                    indexed_count += 1
+                else:
+                    failed_count += 1
+                    
+            except DocumentExtraction.DoesNotExist:
+                logger.warning(f"Extraction not found for ADA {ada}")
+                failed_count += 1
+            except Exception as e:
+                logger.error(f"❌ Error indexing {ada}: {e}")
+                failed_count += 1
+        
+        final_os_count = opensearch_service._test_match_all().get('hits', {}).get('total', {}).get('value', 0)
+        
+        logger.info(
+            f"✅ Bulk reindex completed: {indexed_count} indexed, {failed_count} failed, "
+            f"OpenSearch: {initial_os_count} → {final_os_count}"
+        )
+        
+        return {
+            "processed": indexed_count,
+            "failed": failed_count,
+            "missing_count": len(missing_adas),
+            "initial_opensearch_count": initial_os_count,
+            "final_opensearch_count": final_os_count
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Bulk reindex failed: {e}")
+        raise
+
+
+@shared_task
+def reindex_specific_adas(adas_list):
+    """
+    Task to reindex specific documents by their ADAs
+    
+    Args:
+        adas_list: List of ADA strings to reindex
+    """
+    logger.info(f"🔍 Starting reindex of {len(adas_list)} specific documents")
+    
+    try:
+        opensearch_service = OpenSearchService()
+        indexed_count = 0
+        failed_count = 0
+        
+        for ada in adas_list:
+            try:
+                extraction = DocumentExtraction.objects.select_related(
+                    'decision', 
+                    'decision__organization', 
+                    'decision__decision_type'
+                ).get(
+                    decision__ada=ada,
+                    extraction_status=ProcessingStatus.COMPLETED
+                )
+                
+                document_data = {
+                    'decision_id': extraction.decision.id,
+                    'ada': extraction.decision.ada,
+                    'title': extraction.decision.subject or '',
+                    'content': extraction.raw_text,
+                    'organization': str(extraction.decision.organization) if extraction.decision.organization else '',
+                    'decision_type': str(extraction.decision.decision_type) if extraction.decision.decision_type else '',
+                    'issue_date': extraction.decision.issue_date.isoformat() if extraction.decision.issue_date else None,
+                    'extraction_date': extraction.extraction_date.isoformat() if extraction.extraction_date else None,
+                    'character_count': extraction.character_count,
+                    'page_count': extraction.page_count
+                }
+                
+                success = opensearch_service.index_document(document_data)
+                if success:
+                    indexed_count += 1
+                    logger.debug(f"✅ Indexed {ada}")
+                else:
+                    failed_count += 1
+                    logger.warning(f"❌ Failed to index {ada}")
+                    
+            except DocumentExtraction.DoesNotExist:
+                logger.warning(f"Extraction not found for ADA {ada}")
+                failed_count += 1
+            except Exception as e:
+                logger.error(f"❌ Error indexing {ada}: {e}")
+                failed_count += 1
+        
+        logger.info(f"✅ Specific reindex completed: {indexed_count} indexed, {failed_count} failed")
+        
+        return {
+            "processed": indexed_count,
+            "failed": failed_count,
+            "total": len(adas_list)
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Specific reindex failed: {e}")
+        raise
+
+

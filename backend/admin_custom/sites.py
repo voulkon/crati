@@ -30,6 +30,7 @@ class CustomAdminSite(admin.AdminSite):
             # Document URLs
             path("documents/search/", self._wrap_view('documents', 'document_search'), name="document_search"),
             path("documents/dashboard/", self._wrap_view('documents', 'document_processing_dashboard'), name="document_dashboard"),
+            path("documents/sync-status/", self._wrap_view('documents', 'sync_status_dashboard'), name="sync_status_dashboard"),
             
             # Health Check URLs
             path("health/dashboard/", self._wrap_view('health', 'health_dashboard_view'), name="health_dashboard"),
@@ -94,6 +95,7 @@ class CustomAdminSite(admin.AdminSite):
             "models": [
                 {"name": "Document Search", "object_name": "DocumentSearch", "admin_url": "/api/admin/documents/search/", "view_only": True},
                 {"name": "Processing Dashboard", "object_name": "DocumentDashboard", "admin_url": "/api/admin/documents/dashboard/", "view_only": True},
+                {"name": "📊 Sync Status Dashboard", "object_name": "SyncStatusDashboard", "admin_url": "/api/admin/documents/sync-status/", "view_only": True},
             ],
         }
         app_list.append(doc_processing_app)

@@ -1,0 +1,387 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .sync-dashboard {
+        padding: 20px;
+    }
+    
+    .stats-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    
+    .stat-card {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-left: 4px solid #4CAF50;
+    }
+    
+    .stat-card.warning {
+        border-left-color: #ff9800;
+    }
+    
+    .stat-card.danger {
+        border-left-color: #f44336;
+    }
+    
+    .stat-label {
+        font-size: 0.9em;
+        color: #666;
+        margin-bottom: 5px;
+    }
+    
+    .stat-value {
+        font-size: 2em;
+        font-weight: bold;
+        color: #333;
+    }
+    
+    .sync-progress {
+        margin: 30px 0;
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .progress-bar-container {
+        width: 100%;
+        height: 30px;
+        background: #f0f0f0;
+        border-radius: 15px;
+        overflow: hidden;
+        margin: 10px 0;
+    }
+    
+    .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #4CAF50, #45a049);
+        transition: width 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+    }
+    
+    .progress-bar.warning {
+        background: linear-gradient(90deg, #ff9800, #f57c00);
+    }
+    
+    .progress-bar.danger {
+        background: linear-gradient(90deg, #f44336, #d32f2f);
+    }
+    
+    .actions-panel {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 30px;
+    }
+    
+    .btn-primary {
+        background: #4CAF50;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1em;
+        margin-right: 10px;
+    }
+    
+    .btn-primary:hover {
+        background: #45a049;
+    }
+    
+    .btn-secondary {
+        background: #2196F3;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1em;
+    }
+    
+    .btn-secondary:hover {
+        background: #0b7dda;
+    }
+    
+    .missing-table {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        overflow: hidden;
+    }
+    
+    .missing-table table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .missing-table th {
+        background: #f5f5f5;
+        padding: 12px;
+        text-align: left;
+        font-weight: bold;
+        border-bottom: 2px solid #ddd;
+    }
+    
+    .missing-table td {
+        padding: 12px;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .missing-table tr:hover {
+        background: #f9f9f9;
+    }
+    
+    .checkbox-col {
+        width: 40px;
+        text-align: center;
+    }
+    
+    .ada-link {
+        color: #2196F3;
+        text-decoration: none;
+    }
+    
+    .ada-link:hover {
+        text-decoration: underline;
+    }
+    
+    .pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 20px 0;
+        gap: 10px;
+    }
+    
+    .pagination a, .pagination span {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        text-decoration: none;
+        color: #333;
+    }
+    
+    .pagination a:hover {
+        background: #f0f0f0;
+    }
+    
+    .pagination .current {
+        background: #4CAF50;
+        color: white;
+        border-color: #4CAF50;
+    }
+    
+    .select-all-container {
+        padding: 10px;
+        background: #f9f9f9;
+        border-bottom: 1px solid #ddd;
+    }
+    
+    .alert {
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+    }
+    
+    .alert-success {
+        background: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+    }
+    
+    .alert-warning {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        color: #856404;
+    }
+    
+    .alert-error {
+        background: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
+    }
+    
+    .info-box {
+        background: #e3f2fd;
+        border-left: 4px solid #2196F3;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sync-dashboard">
+    <h1>📊 PostgreSQL ↔ OpenSearch Sync Status</h1>
+    
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+    
+    <div class="info-box">
+        <strong>ℹ️ About this dashboard:</strong><br>
+        This dashboard helps you monitor and manage the synchronization between decisions stored in PostgreSQL 
+        and documents indexed in OpenSearch. Use it to identify missing documents and trigger reindexing.
+    </div>
+    
+    <!-- Stats Overview -->
+    <div class="stats-container">
+        <div class="stat-card">
+            <div class="stat-label">Total Decisions (PostgreSQL)</div>
+            <div class="stat-value">{{ total_decisions|default:0 }}</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-label">Completed Extractions</div>
+            <div class="stat-value">{{ completed_extractions|default:0 }}</div>
+        </div>
+        
+        <div class="stat-card {% if sync_diff > 100 %}danger{% elif sync_diff > 10 %}warning{% endif %}">
+            <div class="stat-label">Indexed in OpenSearch</div>
+            <div class="stat-value">{{ opensearch_count|default:0 }}</div>
+        </div>
+        
+        <div class="stat-card {% if sync_diff > 100 %}danger{% elif sync_diff > 10 %}warning{% endif %}">
+            <div class="stat-label">Missing from OpenSearch</div>
+            <div class="stat-value">{{ sync_diff|default:0 }}</div>
+        </div>
+    </div>
+    
+    <!-- Sync Progress Bar -->
+    <div class="sync-progress">
+        <h3>Sync Progress</h3>
+        <div class="progress-bar-container">
+            <div class="progress-bar {% if sync_percentage < 80 %}danger{% elif sync_percentage < 95 %}warning{% endif %}" 
+                 style="width: {{ sync_percentage }}%">
+                {{ sync_percentage }}%
+            </div>
+        </div>
+        <p>
+            <strong>{{ opensearch_count }}</strong> of <strong>{{ completed_extractions }}</strong> documents indexed
+        </p>
+    </div>
+    
+    <!-- Actions Panel -->
+    <div class="actions-panel">
+        <h3>🔧 Actions</h3>
+        <form method="post" style="display: inline;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reindex_all">
+            <button type="submit" class="btn-primary" 
+                    onclick="return confirm('This will trigger reindexing of all {{ sync_diff }} missing documents. Continue?')">
+                🔄 Reindex All Missing Documents
+            </button>
+        </form>
+        
+        <button type="button" class="btn-secondary" onclick="document.getElementById('reindex-form').requestSubmit()">
+            ✅ Reindex Selected
+        </button>
+        
+        <button type="button" class="btn-secondary" onclick="window.location.reload()">
+            🔃 Refresh Stats
+        </button>
+    </div>
+    
+    <!-- Missing Documents Table -->
+    {% if missing_decisions %}
+    <div class="missing-table">
+        <h3 style="padding: 20px 20px 10px;">📋 Missing Documents (Page {{ page }} of {{ total_pages }})</h3>
+        
+        <form method="post" id="reindex-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="reindex_selected">
+            
+            <div class="select-all-container">
+                <label>
+                    <input type="checkbox" id="select-all" onclick="toggleSelectAll(this)">
+                    Select All on This Page
+                </label>
+            </div>
+            
+            <table>
+                <thead>
+                    <tr>
+                        <th class="checkbox-col">Select</th>
+                        <th>ADA</th>
+                        <th>Subject</th>
+                        <th>Organization</th>
+                        <th>Type</th>
+                        <th>Issue Date</th>
+                        <th>Pages</th>
+                        <th>Chars</th>
+                        <th>Extraction Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for decision in missing_decisions %}
+                    <tr>
+                        <td class="checkbox-col">
+                            <input type="checkbox" name="selected_decisions" value="{{ decision.ada }}" class="decision-checkbox">
+                        </td>
+                        <td>
+                            <a href="{% url 'admin:core_decision_change' decision.id %}" class="ada-link" target="_blank">
+                                {{ decision.ada }}
+                            </a>
+                        </td>
+                        <td>{{ decision.subject|truncatewords:10 }}</td>
+                        <td>{{ decision.organization|truncatewords:5 }}</td>
+                        <td>{{ decision.decision_type }}</td>
+                        <td>{{ decision.issue_date|date:"Y-m-d" }}</td>
+                        <td>{{ decision.page_count|default:"—" }}</td>
+                        <td>{{ decision.character_count|default:"—" }}</td>
+                        <td>{{ decision.extraction_date|date:"Y-m-d H:i"|default:"—" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </form>
+        
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="pagination">
+            {% if has_previous %}
+                <a href="?page={{ previous_page }}">← Previous</a>
+            {% endif %}
+            
+            <span class="current">Page {{ page }} of {{ total_pages }}</span>
+            
+            {% if has_next %}
+                <a href="?page={{ next_page }}">Next →</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="info-box" style="background: #d4edda; border-left-color: #4CAF50;">
+        <strong>✅ Perfect sync!</strong><br>
+        All completed document extractions are indexed in OpenSearch.
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleSelectAll(checkbox) {
+    const checkboxes = document.querySelectorAll('.decision-checkbox');
+    checkboxes.forEach(cb => cb.checked = checkbox.checked);
+}
+</script>
+{% endblock %}

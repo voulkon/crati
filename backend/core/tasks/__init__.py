@@ -36,6 +36,8 @@ from .tasks_opensearch import (
     check_opensearch_sync,
     create_opensearch_backup,
     daily_opensearch_backup,
+    bulk_reindex_missing_documents,
+    reindex_specific_adas,
 )
 
 from .tasks_entities import (
@@ -78,6 +80,8 @@ __all__ = [
     "check_opensearch_sync",
     "create_opensearch_backup",
     "daily_opensearch_backup",
+    "bulk_reindex_missing_documents",
+    "reindex_specific_adas",
     # Entities
     "fetch_company_data_for_entities",
     "process_entities_needing_company_data",

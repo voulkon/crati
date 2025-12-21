@@ -340,6 +340,37 @@ class OpenSearchService:
             logger.error(f"❌ Error refreshing index: {e}")
             return False
     
+    def _test_match_all(self, size=10000):
+        """
+        Execute a match_all query to get all documents or a count
+        Used for sync verification and getting all indexed ADAs
+        """
+        try:
+            search_body = {
+                "query": {"match_all": {}},
+                "size": size,
+                "_source": ["ada", "decision_id"]  # Only fetch minimal fields
+            }
+            
+            response = requests.post(
+                f"{self.opensearch_url}/{self.index_name}/_search",
+                json=search_body,
+                headers={'Content-Type': 'application/json'},
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                logger.debug(f"Match_all query returned {result.get('hits', {}).get('total', {}).get('value', 0)} documents")
+                return result
+            else:
+                logger.error(f"Match_all query failed: {response.status_code}")
+                return {"hits": {"hits": [], "total": {"value": 0}}}
+                
+        except Exception as e:
+            logger.error(f"Error in _test_match_all: {e}")
+            return {"hits": {"hits": [], "total": {"value": 0}}}
+    
     def register_s3_repository(self, repository_name="s3-backup-repo", bucket_name=None, base_path="opensearch/backups"):
         """Register S3 repository for snapshots"""
         from django.conf import settings

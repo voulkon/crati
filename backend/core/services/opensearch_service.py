@@ -210,7 +210,7 @@ class OpenSearchService:
             if filter_clauses:
                 search_body["query"]["bool"]["filter"] = filter_clauses
         
-        logger.debug(f"🔍 Search body: {json.dumps(search_body, indent=2, ensure_ascii=False)}")
+        # logger.debug(f"🔍 Search body: {json.dumps(search_body, indent=2, ensure_ascii=False)}")
         
         try:
             url = f"{self.opensearch_url}/{self.index_name}/_search"
@@ -501,11 +501,11 @@ class OpenSearchService:
         Used by decision health checks to verify indexing.
         """
         try:
-            # Use exact term search for ADA
+            # Use simple term search for ADA (matching the working dev tools query)
             search_body = {
                 "query": {
                     "term": {
-                        "ada.keyword": ada  # Use keyword field for exact match
+                        "ada": ada
                     }
                 },
                 "size": 1,

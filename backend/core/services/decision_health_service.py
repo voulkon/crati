@@ -202,9 +202,9 @@ class DecisionHealthService:
                 entities_needing_data = 0
                 
                 for rel in entity_relationships:
-                    if rel.afm_entity and rel.afm_entity.has_company_data:
+                    if rel.entity and rel.entity.gemi_lookup_success:
                         entities_with_company_data += 1
-                    elif rel.afm_entity and rel.afm_entity.needs_company_data_fetch:
+                    elif rel.entity and not rel.entity.gemi_lookup_attempted:
                         entities_needing_data += 1
                 
                 # Determine status based on data completeness
@@ -329,9 +329,10 @@ class DecisionHealthService:
                         if test_query.strip():
                             search_results = self.opensearch_service.search_documents(test_query, size=10)
                             # Check if our decision appears in results
+                            hits = search_results.get('hits', {}).get('hits', [])
                             search_test_passed = any(
-                                result.get('ada') == decision.ada 
-                                for result in search_results.get('hits', [])
+                                result.get('_source', {}).get('ada') == decision.ada 
+                                for result in hits
                             )
                     
                     if search_test_passed:

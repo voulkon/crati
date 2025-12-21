@@ -87,38 +87,77 @@ def sync_status_dashboard(request):
     
     # Get counts and stats
     try:
-        # PostgreSQL counts
+        # PostgreSQL counts - Step 1: Decisions
         total_decisions = Decision.objects.count()
+        
+        # Step 2: DocumentExtraction status breakdown
+        decisions_with_extraction = Decision.objects.filter(
+            text_extraction__isnull=False
+        ).count()
+        decisions_without_extraction = total_decisions - decisions_with_extraction
+        
+        pending_extractions = DocumentExtraction.objects.filter(
+            extraction_status__in=[ProcessingStatus.PENDING, ProcessingStatus.PROCESSING]
+        ).count()
+        
+        failed_extractions = DocumentExtraction.objects.filter(
+            extraction_status=ProcessingStatus.FAILED
+        ).count()
+        
         completed_extractions = DocumentExtraction.objects.filter(
             extraction_status=ProcessingStatus.COMPLETED,
             raw_text__isnull=False
         ).exclude(raw_text='').count()
         
-        # OpenSearch count
+        # Step 3: OpenSearch count
         os_results = opensearch_service._test_match_all()
         opensearch_count = os_results.get('hits', {}).get('total', {}).get('value', 0)
         
-        # Calculate difference
-        sync_diff = completed_extractions - opensearch_count
-        sync_percentage = (opensearch_count / completed_extractions * 100) if completed_extractions > 0 else 0
+        # Calculate gaps
+        extraction_gap = decisions_without_extraction + failed_extractions
+        indexing_gap = completed_extractions - opensearch_count
+        
+        # Calculate percentages for each stage
+        extraction_percentage = (decisions_with_extraction / total_decisions * 100) if total_decisions > 0 else 0
+        completion_percentage = (completed_extractions / total_decisions * 100) if total_decisions > 0 else 0
+        indexing_percentage = (opensearch_count / total_decisions * 100) if total_decisions > 0 else 0
         
         # Get sample of missing documents (paginated)
         page = int(request.GET.get('page', 1))
+        view_type = request.GET.get('view', 'indexing')  # 'indexing' or 'extraction'
         page_size = 50
         offset = (page - 1) * page_size
         
-        missing_decisions = _get_missing_decisions(opensearch_service, offset, page_size)
+        if view_type == 'extraction':
+            # Show decisions without extraction or failed
+            missing_decisions = _get_decisions_needing_extraction(offset, page_size)
+            total_missing = extraction_gap
+        else:
+            # Show decisions with extraction but not indexed
+            missing_decisions = _get_missing_decisions(opensearch_service, offset, page_size)
+            total_missing = len(_get_all_missing_adas(opensearch_service))
         
-        # Calculate pagination
-        total_missing = len(_get_all_missing_adas(opensearch_service))
-        total_pages = (total_missing + page_size - 1) // page_size
+        total_pages = (total_missing + page_size - 1) // page_size if total_missing > 0 else 1
         
         context = {
+            # Pipeline stats
             'total_decisions': total_decisions,
+            'decisions_without_extraction': decisions_without_extraction,
+            'pending_extractions': pending_extractions,
+            'failed_extractions': failed_extractions,
             'completed_extractions': completed_extractions,
             'opensearch_count': opensearch_count,
-            'sync_diff': sync_diff,
-            'sync_percentage': round(sync_percentage, 2),
+            
+            # Gaps
+            'extraction_gap': extraction_gap,
+            'indexing_gap': indexing_gap,
+            
+            # Percentages
+            'extraction_percentage': round(extraction_percentage, 2),
+            'completion_percentage': round(completion_percentage, 2),
+            'indexing_percentage': round(indexing_percentage, 2),
+            
+            # Pagination
             'missing_decisions': missing_decisions,
             'page': page,
             'total_pages': total_pages,
@@ -127,6 +166,7 @@ def sync_status_dashboard(request):
             'has_next': page < total_pages,
             'previous_page': page - 1,
             'next_page': page + 1,
+            'view_type': view_type,
         }
         
     except Exception as e:
@@ -134,11 +174,25 @@ def sync_status_dashboard(request):
         messages.error(request, f"Error loading dashboard: {str(e)}")
         context = {
             'total_decisions': 0,
+            'decisions_without_extraction': 0,
+            'pending_extractions': 0,
+            'failed_extractions': 0,
             'completed_extractions': 0,
             'opensearch_count': 0,
-            'sync_diff': 0,
-            'sync_percentage': 0,
+            'extraction_gap': 0,
+            'indexing_gap': 0,
+            'extraction_percentage': 0,
+            'completion_percentage': 0,
+            'indexing_percentage': 0,
             'missing_decisions': [],
+            'page': 1,
+            'total_pages': 1,
+            'total_missing': 0,
+            'has_previous': False,
+            'has_next': False,
+            'previous_page': 0,
+            'next_page': 2,
+            'view_type': 'indexing',
             'error': str(e)
         }
     
@@ -179,6 +233,61 @@ def _get_all_missing_adas(opensearch_service):
     return list(missing_adas)
 
 
+def _get_decisions_needing_extraction(offset=0, limit=50):
+    """Get decisions that need text extraction (no extraction or failed)"""
+    # Get decisions without extraction
+    without_extraction = Decision.objects.filter(
+        text_extraction__isnull=True
+    ).select_related(
+        'organization', 'decision_type'
+    ).order_by('-issue_date')[offset:offset + limit]
+    
+    # Get decisions with failed extraction
+    failed_extraction_ids = DocumentExtraction.objects.filter(
+        extraction_status=ProcessingStatus.FAILED
+    ).values_list('decision_id', flat=True)
+    
+    with_failed = Decision.objects.filter(
+        id__in=failed_extraction_ids
+    ).select_related(
+        'organization', 'decision_type'
+    ).prefetch_related(
+        'text_extraction'
+    ).order_by('-issue_date')[:limit]
+    
+    # Combine and format
+    result = []
+    
+    for decision in without_extraction:
+        result.append({
+            'id': decision.id,
+            'ada': decision.ada,
+            'subject': decision.subject,
+            'organization': str(decision.organization) if decision.organization else 'N/A',
+            'decision_type': str(decision.decision_type) if decision.decision_type else 'N/A',
+            'issue_date': decision.issue_date,
+            'extraction_status': 'NO_EXTRACTION',
+            'extraction_date': None,
+            'error_message': None,
+        })
+    
+    for decision in with_failed:
+        extraction = decision.text_extraction
+        result.append({
+            'id': decision.id,
+            'ada': decision.ada,
+            'subject': decision.subject,
+            'organization': str(decision.organization) if decision.organization else 'N/A',
+            'decision_type': str(decision.decision_type) if decision.decision_type else 'N/A',
+            'issue_date': decision.issue_date,
+            'extraction_status': 'FAILED',
+            'extraction_date': extraction.extraction_date if extraction else None,
+            'error_message': extraction.error_message[:100] if extraction and extraction.error_message else None,
+        })
+    
+    return result[:limit]
+
+
 def _get_missing_decisions(opensearch_service, offset=0, limit=50):
     """Get decisions that exist in PostgreSQL but not in OpenSearch (paginated)"""
     missing_adas = _get_all_missing_adas(opensearch_service)
@@ -201,24 +310,26 @@ def _get_missing_decisions(opensearch_service, offset=0, limit=50):
         try:
             extraction = decision.text_extraction
             result.append({
-                'id': decision.id,  # Add ID for admin URL
+                'id': decision.id,
                 'ada': decision.ada,
                 'subject': decision.subject,
                 'organization': str(decision.organization) if decision.organization else 'N/A',
                 'decision_type': str(decision.decision_type) if decision.decision_type else 'N/A',
                 'issue_date': decision.issue_date,
+                'extraction_status': 'COMPLETED',
                 'character_count': extraction.character_count if extraction else None,
                 'page_count': extraction.page_count if extraction else None,
                 'extraction_date': extraction.extraction_date if extraction else None,
             })
         except DocumentExtraction.DoesNotExist:
             result.append({
-                'id': decision.id,  # Add ID for admin URL
+                'id': decision.id,
                 'ada': decision.ada,
                 'subject': decision.subject,
                 'organization': str(decision.organization) if decision.organization else 'N/A',
                 'decision_type': str(decision.decision_type) if decision.decision_type else 'N/A',
                 'issue_date': decision.issue_date,
+                'extraction_status': 'NO_EXTRACTION',
                 'character_count': None,
                 'page_count': None,
                 'extraction_date': None,

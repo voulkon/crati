@@ -195,6 +195,22 @@
         font-weight: bold;
         white-space: nowrap;
     }
+
+    .header-badges {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    .amount-badge {
+        background: #28a745;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.9em;
+        font-weight: bold;
+        white-space: nowrap;
+    }
     
     .decision-meta {
         margin-bottom: 10px;
@@ -673,7 +689,12 @@
         <div class="decision-card">
             <div class="decision-header">
                 <h4>{{ decision.subject|truncatechars:100 }}</h4>
-                <span class="ada-badge">{{ decision.ada }}</span>
+                <div class="header-badges">
+                    {% if decision.amount %}
+                    <span class="amount-badge">€{{ decision.amount|floatformat:2 }}</span>
+                    {% endif %}
+                    <span class="ada-badge">{{ decision.ada }}</span>
+                </div>
             </div>
             
             <div class="decision-meta">

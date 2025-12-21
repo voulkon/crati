@@ -406,6 +406,8 @@ class DecisionAnalysisService:
         """
         from core.services.opensearch_service import OpenSearchService
         
+        from django.db.models import F
+        
         logger.info(f"Fetching detailed decisions for {target_date} (offset: {offset}, limit: {limit})")
         
         # Base queryset for the target date with related data
@@ -416,7 +418,7 @@ class DecisionAnalysisService:
         ).prefetch_related(
             'signers', 'units',
             'entity_relationships__entity'
-        ).order_by('-issue_date')
+        ).order_by(F('amount').desc(nulls_last=True), '-issue_date')
         
         total_count = decisions_qs.count()
         
@@ -424,7 +426,7 @@ class DecisionAnalysisService:
         decisions = decisions_qs[offset:offset + limit]
         
         # Initialize OpenSearch service
-        opensearch_service = OpenSearchService()
+        # opensearch_service = OpenSearchService()
         from core.models.companies import Company
         
         # Prepare decision details
@@ -483,16 +485,20 @@ class DecisionAnalysisService:
             
             # Get OpenSearch content preview if available
             content_preview = None
-            try:
-                # Search for this decision in OpenSearch
-                search_result = opensearch_service.search_documents(
-                    query=decision.ada,
-                    size=1
-                )
-                if search_result.get('results'):
-                    content_preview = search_result['results'][0].get('content_preview', '')[:200]
-            except Exception as e:
-                logger.warning(f"Could not fetch OpenSearch data for decision {decision.ada}: {e}")
+            # try:
+            #     # Search for this decision in OpenSearch
+            #     search_result = opensearch_service.search_documents(
+            #         query=decision.ada,
+            #         size=1
+            #     )
+            #     if search_result.get('results'):
+            #         content_preview = search_result['results'][0].get('content_preview', '')[:200]
+            # except Exception as e:
+            #     logger.warning(f"Could not fetch OpenSearch data for decision {decision.ada}: {e}")
+            
+            amount_val = float(decision.amount) if decision.amount else None
+            if amount_val:
+                logger.info(f"Decision {decision.ada} has amount: {amount_val}")
             
             decision_details.append({
                 'ada': decision.ada,
@@ -508,7 +514,7 @@ class DecisionAnalysisService:
                 'content_preview': content_preview,
                 'has_private_data': decision.has_private_data,
                 'financial_year': decision.financial_year,
-                'amount': float(decision.amount) if decision.amount else None,
+                'amount': amount_val,
             })
         
         return {

@@ -280,6 +280,7 @@ services:
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-eu-north-1}
     ports:
       - "9200:9200"
+      - "9600:9600"
     networks:
       - diavgeia-net
     volumes:
@@ -290,6 +291,22 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+
+  opensearch_dashboards:
+    image: opensearchproject/opensearch-dashboards:3
+    container_name: diavgeia_opensearch_dashboards
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    ports:
+      - "5601:5601"
+    expose:
+      - "5601"
+    networks:
+      - diavgeia-net
+    depends_on:
+      opensearch:
+        condition: service_healthy
 
 volumes:
   opensearch_data:

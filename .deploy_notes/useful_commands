@@ -3,6 +3,7 @@ git log --pretty=format:"%h %ad %s" --date=iso
 
 # SSH tunnel to DB on the same server
 ssh -L 65432:192.168.160.5:5432 -i ~/.ssh/id_ed25519 root@49.13.136.52
+ssh -i ~/.ssh/id_ed25519 root@49.13.136.52
 
 docker exec -it diavgeia_backend /bin/bash
 docker exec -it diavgeia_worker /bin/bash

@@ -172,7 +172,16 @@ def queue_document_processing(sender, instance, created, **kwargs):
 def index_document_in_opensearch(sender, instance, created, **kwargs):
     """Index document in OpenSearch when extraction completes"""
     
+    # Add comprehensive logging to understand signal behavior
+    logger.debug(
+        f"📡 Signal triggered for {instance.decision.ada}: "
+        f"status={instance.extraction_status}, created={created}, "
+        f"has_text={bool(instance.raw_text)}"
+    )
+    
     if instance.extraction_status == 'COMPLETED' and instance.raw_text:
+        logger.info(f"🔍 Starting OpenSearch indexing for {instance.decision.ada}")
+        
         try:
             opensearch_service = OpenSearchService()
             
@@ -190,11 +199,84 @@ def index_document_in_opensearch(sender, instance, created, **kwargs):
                 'page_count': instance.page_count
             }
             
+            logger.debug(f"📄 Document data prepared for {instance.decision.ada}: {len(document_data['content'])} chars")
+            
             success = opensearch_service.index_document(document_data)
             if success:
-                logger.info(f"Auto-indexed document for decision {instance.decision.ada} in OpenSearch")
+                logger.info(f"✅ Auto-indexed document for decision {instance.decision.ada} in OpenSearch")
             else:
-                logger.error(f"Failed to auto-index document for decision {instance.decision.ada}")
+                logger.error(f"❌ Failed to auto-index document for decision {instance.decision.ada}")
                 
         except Exception as e:
-            logger.error(f"Error auto-indexing document for decision {instance.decision.ada}: {e}")
+            logger.error(f"💥 Error auto-indexing document for decision {instance.decision.ada}: {e}", exc_info=True)
+    else:
+        # Log why signal didn't proceed
+        reasons = []
+        if instance.extraction_status != 'COMPLETED':
+            reasons.append(f"status={instance.extraction_status}")
+        if not instance.raw_text:
+            reasons.append("no raw_text")
+        
+        if reasons:
+            logger.debug(f"⏭️ Skipping indexing for {instance.decision.ada}: {', '.join(reasons)}")
+
+
+# Health Check Signals
+# These signals ensure health checks are automatically updated when decisions change
+
+@receiver(post_save, sender=Decision)
+def decision_saved_health_check_signal(sender, instance, created, **kwargs):
+    """
+    When a decision is saved, mark any existing health check for refresh.
+    Don't run immediately to avoid blocking the main request.
+    """
+    from django.utils import timezone
+    from datetime import timedelta
+    from core.models.decision_health import DecisionHealthCheck
+    
+    try:
+        health_check = instance.health_check
+        # Mark for refresh by setting old timestamp
+        old_time = timezone.now() - timedelta(hours=2) 
+        health_check.last_checked_at = old_time
+        health_check.save(update_fields=['last_checked_at'])
+        
+        if created:
+            logger.debug(f"New decision {instance.ada} - marked health check for refresh")
+        else:
+            logger.debug(f"Decision {instance.ada} updated - marked health check for refresh")
+            
+    except DecisionHealthCheck.DoesNotExist:
+        # No health check exists yet - will be created on next automated run
+        pass
+    except Exception as e:
+        logger.warning(f"Failed to update health check timestamp for {instance.ada}: {e}")
+
+
+@receiver(post_save, sender=DocumentExtraction)
+def document_extraction_health_check_signal(sender, instance, created, **kwargs):
+    """
+    When document extraction status changes significantly, schedule immediate health check.
+    This provides real-time visibility into extraction progress.
+    """
+    from core.models.document_analysis import ProcessingStatus
+    
+    if not instance.decision:
+        return
+        
+    # Only trigger for significant status changes
+    significant_statuses = [
+        ProcessingStatus.COMPLETED, 
+        ProcessingStatus.FAILED,
+        ProcessingStatus.NEEDS_VISION
+    ]
+    
+    if instance.extraction_status in significant_statuses:
+        logger.info(f"Document extraction {instance.extraction_status} for {instance.decision.ada} - scheduling health check")
+        
+        # Queue immediate health check
+        try:
+            from core.tasks.health_check_tasks import check_single_decision_health
+            check_single_decision_health.delay(instance.decision.ada)
+        except Exception as e:
+            logger.warning(f"Failed to queue health check for {instance.decision.ada}: {e}")

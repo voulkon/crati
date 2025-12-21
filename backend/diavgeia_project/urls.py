@@ -18,13 +18,12 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from core.views.health import health_check
-from api.admin import admin_site
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 from rest_framework import permissions
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.cache import never_cache
-from admin_custom.sites import admin_site as new_admin_site
+from admin_custom.sites import admin_site
 
 # Define schema_view FIRST before using it
 schema_view = get_schema_view(
@@ -40,8 +39,7 @@ schema_view = get_schema_view(
 
 # Then define your urlpatterns (just once, not twice!)
 urlpatterns = [
-    path("api/admin/", new_admin_site.urls),  # Fixed typo: was "admi-new"
-    path("api/admin-old/", admin_site.urls),
+    path("api/admin/", admin_site.urls),
     path("health/", health_check, name="health_check"),
     path("", health_check, name="root_health_check"),
     path("api/", include("api.urls")),

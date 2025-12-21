@@ -244,6 +244,15 @@ CELERY_WORKER_MAX_TASKS_PER_CHILD = int(os.environ.get("CELERY_WORKER_MAX_TASKS_
 CELERY_WORKER_MAX_MEMORY_PER_CHILD = int(os.environ.get("CELERY_WORKER_MAX_MEMORY_PER_CHILD", 2500000))  # 2.5GB (in KB) - Restart if memory exceeds this
 # Increased from 1GB to accommodate Docling's memory requirements (~1.5-2GB peak with concurrency=2)
 
+# Log the configuration on startup (only in worker processes)
+if 'celery' in os.environ.get('_', '').lower() or 'celery' in ' '.join(__import__('sys').argv).lower():
+    import sys
+    print("=" * 50, file=sys.stderr)
+    print("📊 Django Celery Settings Loaded:", file=sys.stderr)
+    print(f"  CELERY_WORKER_MAX_TASKS_PER_CHILD: {CELERY_WORKER_MAX_TASKS_PER_CHILD}", file=sys.stderr)
+    print(f"  CELERY_WORKER_MAX_MEMORY_PER_CHILD: {CELERY_WORKER_MAX_MEMORY_PER_CHILD} KB (~{CELERY_WORKER_MAX_MEMORY_PER_CHILD//1024//1024}GB)", file=sys.stderr)
+    print("=" * 50, file=sys.stderr)
+
 # Django Celery Results
 INSTALLED_APPS += [
     "django_celery_results",

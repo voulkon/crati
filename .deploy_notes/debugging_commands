@@ -16,3 +16,7 @@ python manage.py import_decisions_daily --date 2025-09-26 --distributed
 python manage.py import_single_ada "9ΜΤΝ7ΛΛ-ΠΩΓ"
 python debug_command.py import_single_ada "9ΜΤΝ7ΛΛ-ΠΩΓ"
 
+python manage.py import_single_ada "ΨΠ2ΥΩΕΟ-ΚΘ1"
+python manage.py debug_opensearch_signal "ΨΠ2ΥΩΕΟ-ΚΘ1" --check-only
+python manage.py debug_opensearch_signal "ΨΠ2ΥΩΕΟ-ΚΘ1" --trigger-signal
+

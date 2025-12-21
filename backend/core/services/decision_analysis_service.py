@@ -76,6 +76,9 @@ class DecisionAnalysisService:
             
             # Quality indicators
             'quality_indicators': self._get_quality_indicators(decisions_qs),
+            
+            # Financial summary
+            'financial_summary': self._get_financial_summary(decisions_qs),
         }
         
         return analysis
@@ -246,6 +249,49 @@ class DecisionAnalysisService:
             'missing_organization_count': missing_org,
             'no_signers_count': no_signers,
             'missing_type_count': missing_type,
+        }
+
+    def _get_financial_summary(self, decisions_qs) -> Dict[str, Any]:
+        """Calculate financial summaries by various entities"""
+        from django.db.models import Sum
+        from core.models.entities import DecisionEntityRelationship, EntityRole
+        
+        # Total amount for the day
+        total_amount = decisions_qs.aggregate(total=Sum('amount'))['total'] or 0
+        
+        # Amounts by organization
+        by_org = list(
+            decisions_qs.values('organization__label')
+            .annotate(total_amount=Sum('amount'))
+            .filter(total_amount__gt=0)
+            .order_by('-total_amount')[:5]
+        )
+        
+        # Amounts by signer
+        by_signer = list(
+            decisions_qs.values('signers__first_name', 'signers__last_name')
+            .annotate(total_amount=Sum('amount'))
+            .filter(total_amount__gt=0)
+            .order_by('-total_amount')[:5]
+        )
+        
+        # Amounts by sponsor (counterpart)
+        by_sponsor = list(
+            DecisionEntityRelationship.objects.filter(
+                decision__in=decisions_qs,
+                role=EntityRole.SPONSOR
+            )
+            .values('entity__name', 'entity__afm')
+            .annotate(total_amount=Sum('decision__amount'))
+            .filter(total_amount__gt=0)
+            .order_by('-total_amount')[:5]
+        )
+        
+        return {
+            'total_amount': float(total_amount),
+            'by_organization': by_org,
+            'by_signer': by_signer,
+            'by_sponsor': by_sponsor,
         }
 
     def get_date_range_analysis(

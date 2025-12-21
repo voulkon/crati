@@ -565,6 +565,51 @@
         {% endif %}
     </div>
 
+    <!-- Financial Summary -->
+    <div class="analysis-card">
+        <h3>💰 Financial Summary</h3>
+        <div class="stat-row" style="border-bottom: 2px solid #eee; margin-bottom: 10px;">
+            <span class="stat-label">Total Amount:</span>
+            <span class="amount" style="font-size: 1.2em;">€{{ analysis.financial_summary.total_amount|floatformat:2 }}</span>
+        </div>
+        
+        {% if analysis.financial_summary.by_sponsor %}
+            <h4 style="margin: 10px 0 5px 0; font-size: 0.9em; color: #666;">Top Sponsors</h4>
+            <ul class="top-list">
+                {% for item in analysis.financial_summary.by_sponsor %}
+                <li>
+                    <span title="{{ item.entity__afm }}">{{ item.entity__name|default:item.entity__afm|truncatechars:30 }}</span>
+                    <span class="amount">€{{ item.total_amount|floatformat:0 }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        
+        {% if analysis.financial_summary.by_organization %}
+            <h4 style="margin: 15px 0 5px 0; font-size: 0.9em; color: #666;">Top Organizations</h4>
+            <ul class="top-list">
+                {% for item in analysis.financial_summary.by_organization %}
+                <li>
+                    <span>{{ item.organization__label|truncatechars:30 }}</span>
+                    <span class="amount">€{{ item.total_amount|floatformat:0 }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        
+        {% if analysis.financial_summary.by_signer %}
+            <h4 style="margin: 15px 0 5px 0; font-size: 0.9em; color: #666;">Top Signers</h4>
+            <ul class="top-list">
+                {% for item in analysis.financial_summary.by_signer %}
+                <li>
+                    <span>{{ item.signers__first_name }} {{ item.signers__last_name }}</span>
+                    <span class="amount">€{{ item.total_amount|floatformat:0 }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </div>
+
     <!-- Document Analysis -->
     <div class="analysis-card">
         <h3>Document Processing</h3>

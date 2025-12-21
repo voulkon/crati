@@ -6,6 +6,7 @@ from core.models.decisions import Decision
 from core.models.document_analysis import DocumentExtraction, ProcessingStatus
 from core.services.opensearch_service import OpenSearchService
 from core.tasks.tasks_opensearch import index_recent_documents
+from core.tasks.tasks_documents import process_document_task_enhanced
 from loguru import logger
 
 
@@ -82,6 +83,71 @@ def sync_status_dashboard(request):
                     messages.error(request, f"Error during selective reindexing: {str(e)}")
             else:
                 messages.warning(request, "No decisions selected for reindexing.")
+        
+        elif action == "extract_all":
+            # Trigger bulk extraction for all missing decisions
+            try:
+                # Get decisions without extraction
+                decisions_without = Decision.objects.filter(
+                    text_extraction__isnull=True
+                ).count()
+                
+                # Get failed extractions
+                failed_count = DocumentExtraction.objects.filter(
+                    extraction_status=ProcessingStatus.FAILED
+                ).count()
+                
+                total_to_extract = decisions_without + failed_count
+                
+                # Trigger extraction tasks (batch of 100 at a time to avoid overwhelming)
+                batch_size = 100
+                queued = 0
+                
+                # Queue decisions without extraction
+                for decision in Decision.objects.filter(text_extraction__isnull=True)[:batch_size]:
+                    process_document_task_enhanced.delay(decision.ada)
+                    queued += 1
+                
+                # Queue failed extractions for retry
+                for extraction in DocumentExtraction.objects.filter(
+                    extraction_status=ProcessingStatus.FAILED
+                ).select_related('decision')[:batch_size]:
+                    process_document_task_enhanced.delay(extraction.decision.ada)
+                    queued += 1
+                
+                messages.success(
+                    request,
+                    f"Queued {queued} decisions for text extraction (of {total_to_extract} total). "
+                    f"More will be processed automatically. Check back in a few minutes!"
+                )
+                logger.info(f"Bulk extraction triggered by user: {queued} tasks queued")
+            except Exception as e:
+                messages.error(request, f"Failed to trigger extraction: {str(e)}")
+                logger.error(f"Failed to trigger bulk extraction: {e}")
+        
+        elif action == "extract_selected":
+            # Extract specific decisions
+            selected_adas = request.POST.getlist("selected_decisions")
+            if selected_adas:
+                try:
+                    queued_count = 0
+                    
+                    for ada in selected_adas:
+                        try:
+                            # Queue the extraction task
+                            process_document_task_enhanced.delay(ada)
+                            queued_count += 1
+                        except Exception as e:
+                            logger.error(f"Failed to queue extraction for {ada}: {e}")
+                    
+                    messages.success(
+                        request,
+                        f"Queued {queued_count} decisions for text extraction. Check back soon!"
+                    )
+                except Exception as e:
+                    messages.error(request, f"Error queueing extractions: {str(e)}")
+            else:
+                messages.warning(request, "No decisions selected for extraction.")
         
         return redirect('admin:sync_status_dashboard')
     

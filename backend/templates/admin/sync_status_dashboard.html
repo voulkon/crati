@@ -344,7 +344,23 @@
             </a>
         </div>
         
-        {% if view_type == 'indexing' %}
+        {% if view_type == 'extraction' %}
+        <!-- Extraction Actions -->
+        <form method="post" style="display: inline;">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="extract_all">
+            <button type="submit" class="btn-primary" 
+                    onclick="return confirm('This will queue extraction for up to 100 decisions at a time. The system will process them automatically. Continue?')">
+                📥 Start Batch Extraction (100 at a time)
+            </button>
+        </form>
+        
+        <button type="button" class="btn-secondary" onclick="document.getElementById('extract-form').requestSubmit()">
+            ✅ Extract Selected
+        </button>
+        
+        {% elif view_type == 'indexing' %}
+        <!-- Indexing Actions -->
         <form method="post" style="display: inline;">
             {% csrf_token %}
             <input type="hidden" name="action" value="reindex_all">
@@ -375,25 +391,21 @@
             {% endif %}
         </h3>
         
-        <form method="post" id="reindex-form">
+        <form method="post" id="{% if view_type == 'extraction' %}extract-form{% else %}reindex-form{% endif %}">
             {% csrf_token %}
-            <input type="hidden" name="action" value="reindex_selected">
+            <input type="hidden" name="action" value="{% if view_type == 'extraction' %}extract_selected{% else %}reindex_selected{% endif %}">
             
-            {% if view_type == 'indexing' %}
             <div class="select-all-container">
                 <label>
                     <input type="checkbox" id="select-all" onclick="toggleSelectAll(this)">
                     Select All on This Page
                 </label>
             </div>
-            {% endif %}
             
             <table>
                 <thead>
                     <tr>
-                        {% if view_type == 'indexing' %}
                         <th class="checkbox-col">Select</th>
-                        {% endif %}
                         <th>ADA</th>
                         <th>Subject</th>
                         <th>Organization</th>
@@ -413,11 +425,9 @@
                 <tbody>
                     {% for decision in missing_decisions %}
                     <tr>
-                        {% if view_type == 'indexing' %}
                         <td class="checkbox-col">
                             <input type="checkbox" name="selected_decisions" value="{{ decision.ada }}" class="decision-checkbox">
                         </td>
-                        {% endif %}
                         <td>
                             <a href="{% url 'admin:core_decision_change' decision.id %}" class="ada-link" target="_blank">
                                 {{ decision.ada }}

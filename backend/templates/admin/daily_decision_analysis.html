@@ -149,6 +149,276 @@
         padding: 20px;
         color: #666;
     }
+    
+    /* Decision Details Styles */
+    .decision-list {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        margin-top: 15px;
+    }
+    
+    .decision-card {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+        transition: box-shadow 0.2s ease;
+    }
+    
+    .decision-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .decision-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 10px;
+        border-bottom: 2px solid #007cba;
+        padding-bottom: 8px;
+    }
+    
+    .decision-header h4 {
+        margin: 0;
+        color: #333;
+        flex: 1;
+        margin-right: 10px;
+    }
+    
+    .ada-badge {
+        background: #007cba;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.85em;
+        font-weight: bold;
+        white-space: nowrap;
+    }
+    
+    .decision-meta {
+        margin-bottom: 10px;
+    }
+    
+    .meta-item {
+        margin: 8px 0;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .meta-item strong {
+        color: #495057;
+        min-width: 100px;
+    }
+    
+    .org-name {
+        font-weight: bold;
+        color: #0056b3;
+    }
+    
+    .afm {
+        color: #6c757d;
+        font-size: 0.9em;
+    }
+    
+    .signer {
+        background: #e9ecef;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.9em;
+    }
+    
+    .decision-type {
+        background: #d1ecf1;
+        color: #0c5460;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.9em;
+    }
+    
+    .status {
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.9em;
+        font-weight: bold;
+    }
+    
+    .status-published { background: #d4edda; color: #155724; }
+    .status-revoked { background: #f8d7da; color: #721c24; }
+    .status-pending_revocation { background: #fff3cd; color: #856404; }
+    
+    .financial-year {
+        background: #e2e3e5;
+        color: #383d41;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.9em;
+    }
+    
+    .amount {
+        font-weight: bold;
+        color: #28a745;
+    }
+    
+    .issue-date {
+        font-family: monospace;
+        color: #495057;
+    }
+    
+    .private-data-indicator {
+        color: #dc3545;
+        font-size: 0.9em;
+        margin-left: 10px;
+    }
+    
+    .content-preview {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 4px;
+        padding: 10px;
+        margin: 10px 0;
+    }
+    
+    .preview-text {
+        margin: 5px 0 0 0;
+        color: #495057;
+        font-size: 0.9em;
+        line-height: 1.4;
+    }
+    
+    .document-link {
+        margin-top: 10px;
+    }
+    
+    .doc-link {
+        display: inline-block;
+        padding: 6px 12px;
+        background: #28a745;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        font-size: 0.9em;
+    }
+    
+    .doc-link:hover {
+        background: #218838;
+    }
+    
+    /* Pagination Styles */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 15px;
+        margin: 20px 0;
+        padding: 15px;
+        background: white;
+        border-radius: 5px;
+    }
+    
+    .pagination-btn {
+        display: inline-block;
+        padding: 8px 16px;
+        background: #007cba;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        font-size: 0.9em;
+    }
+    
+    .pagination-btn:hover {
+        background: #005a87;
+    }
+    
+    .pagination-btn.disabled {
+        background: #6c757d;
+        cursor: not-allowed;
+        pointer-events: none;
+    }
+    
+    .pagination-info {
+        font-weight: bold;
+        color: #495057;
+    }
+    
+    .page-size-selector {
+        text-align: center;
+        margin-top: 15px;
+    }
+    
+    .page-size-selector label {
+        margin-right: 8px;
+        color: #495057;
+    }
+    
+    .page-size-selector select {
+        padding: 4px 8px;
+        border: 1px solid #ced4da;
+        border-radius: 3px;
+        background: white;
+    }
+
+    /* Counterparts Styles */
+    .counterparts-section {
+        border-top: 1px solid #eee;
+        padding-top: 10px;
+        margin-top: 10px;
+    }
+    .counterpart-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 5px;
+    }
+    .counterpart-item {
+        background: #f8f9fa;
+        padding: 8px;
+        border-radius: 4px;
+        border-left: 3px solid #007cba;
+    }
+    .cp-role {
+        font-weight: bold;
+        color: #007cba;
+        font-size: 0.85em;
+        text-transform: uppercase;
+    }
+    .cp-name {
+        font-weight: bold;
+        margin-left: 5px;
+    }
+    .cp-companies {
+        margin-top: 5px;
+        padding-left: 15px;
+    }
+    .cp-company {
+        margin-bottom: 5px;
+        font-size: 0.9em;
+    }
+    .company-name {
+        font-weight: bold;
+        color: #333;
+    }
+    .company-gemi {
+        color: #666;
+        font-size: 0.85em;
+        margin-left: 5px;
+    }
+    .company-persons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 3px;
+        padding-left: 10px;
+    }
+    .company-person {
+        background: #e9ecef;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.85em;
+        color: #495057;
+    }
 </style>
 {% endblock %}
 
@@ -182,7 +452,7 @@
     {% endif %}
     
     <!-- Fetch button -->
-    <button id="fetch-button" class="fetch-button" onclick="fetchDecisions('{{ target_date|date:'Y-m-d' }}')">
+    <button id="fetch-button" class="fetch-button" onclick='fetchDecisions("{{ target_date|date:"Y-m-d" }}")'>
         🔄 Fetch Day
     </button>
 </div>
@@ -348,6 +618,147 @@
 </div>
 {% endif %}
 
+<!-- Decision Details Section -->
+{% if decision_details.decisions %}
+<div class="analysis-card" style="grid-column: 1 / -1;">
+    <h3>📋 Decision Details ({{ decision_details.offset|add:1 }} - {{ decision_details.offset|add:decision_details.decisions|length }} of {{ decision_details.total_count }})</h3>
+    
+    <div class="decision-list">
+        {% for decision in decision_details.decisions %}
+        <div class="decision-card">
+            <div class="decision-header">
+                <h4>{{ decision.subject|truncatechars:100 }}</h4>
+                <span class="ada-badge">{{ decision.ada }}</span>
+            </div>
+            
+            <div class="decision-meta">
+                {% if decision.organization %}
+                <div class="meta-item">
+                    <strong>Organization:</strong> 
+                    <span class="org-name">{{ decision.organization.label }}</span>
+                    {% if decision.organization.vat_number %}
+                    <span class="afm">(VAT: {{ decision.organization.vat_number }})</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                {% if decision.signers %}
+                <div class="meta-item">
+                    <strong>Signers:</strong> 
+                    {% for signer in decision.signers %}
+                        <span class="signer">{{ signer.first_name }} {{ signer.last_name }}</span>
+                        {% if not forloop.last %}, {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if decision.counterparts %}
+                <div class="meta-item counterparts-section">
+                    <strong>Counterparts:</strong>
+                    <div class="counterpart-list">
+                        {% for cp in decision.counterparts %}
+                        <div class="counterpart-item">
+                            <span class="cp-role">[{{ cp.role }}]</span>
+                            <span class="cp-name">{{ cp.name|default:cp.afm }}</span>
+                            
+                            {% if cp.companies %}
+                            <div class="cp-companies">
+                                {% for company in cp.companies %}
+                                <div class="cp-company">
+                                    <span class="company-name">🏢 {{ company.name }}</span>
+                                    <span class="company-gemi">(GEMI: {{ company.gemi }})</span>
+                                    
+                                    {% if company.persons %}
+                                    <div class="company-persons">
+                                        {% for person in company.persons %}
+                                        <span class="company-person">👤 {{ person.name }} ({{ person.role }})</span>
+                                        {% endfor %}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="meta-item">
+                    <strong>Type:</strong> <span class="decision-type">{{ decision.decision_type|default:"Unknown" }}</span>
+                    <strong>Status:</strong> <span class="status status-{{ decision.status|lower }}">{{ decision.status }}</span>
+                </div>
+                
+                {% if decision.financial_year or decision.amount %}
+                <div class="meta-item">
+                    {% if decision.financial_year %}
+                    <strong>Financial Year:</strong> <span class="financial-year">{{ decision.financial_year }}</span>
+                    {% endif %}
+                    {% if decision.amount %}
+                    <strong>Amount:</strong> <span class="amount">€{{ decision.amount|floatformat:2 }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+                
+                <div class="meta-item">
+                    <strong>Issue Date:</strong> <span class="issue-date">{{ decision.issue_date|date:"Y-m-d H:i" }}</span>
+                    {% if decision.has_private_data %}
+                    <span class="private-data-indicator">🔒 Contains Private Data</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            {% if decision.content_preview %}
+            <div class="content-preview">
+                <strong>Content Preview:</strong>
+                <p class="preview-text">{{ decision.content_preview|truncatechars:300 }}</p>
+            </div>
+            {% endif %}
+            
+            {% if decision.document_url %}
+            <div class="document-link">
+                <a href="{{ decision.document_url }}" target="_blank" class="doc-link">📄 View Document</a>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Pagination -->
+    {% if decision_details.has_previous or decision_details.has_next %}
+    <div class="pagination">
+        {% if decision_details.has_previous %}
+        <a href="?date={{ target_date|date:'Y-m-d' }}&offset={{ decision_details.previous_offset }}&limit={{ current_limit }}" class="pagination-btn prev-btn">← Previous</a>
+        {% else %}
+        <span class="pagination-btn disabled">← Previous</span>
+        {% endif %}
+        
+        <span class="pagination-info">
+            Showing {{ decision_details.offset|add:1 }} - {{ decision_details.offset|add:decision_details.decisions|length }} of {{ decision_details.total_count }}
+        </span>
+        
+        {% if decision_details.has_next %}
+        <a href="?date={{ target_date|date:'Y-m-d' }}&offset={{ decision_details.next_offset }}&limit={{ current_limit }}" class="pagination-btn next-btn">Next →</a>
+        {% else %}
+        <span class="pagination-btn disabled">Next →</span>
+        {% endif %}
+    </div>
+    
+    <!-- Page size selector -->
+    <div class="page-size-selector">
+        <label for="page-size">Decisions per page:</label>
+        <select id="page-size" onchange="changePageSize(this.value)">
+            <option value="10" {% if current_limit == 10 %}selected{% endif %}>10</option>
+            <option value="25" {% if current_limit == 25 %}selected{% endif %}>25</option>
+            <option value="50" {% if current_limit == 50 %}selected{% endif %}>50</option>
+            <option value="100" {% if current_limit == 100 %}selected{% endif %}>100</option>
+        </select>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
 {% endif %}
 
 <script>
@@ -419,6 +830,12 @@ if (!document.querySelector('meta[name=csrf-token]')) {
     meta.name = 'csrf-token';
     meta.content = '{{ csrf_token }}';
     document.head.appendChild(meta);
+}
+
+// Function to change page size
+function changePageSize(newLimit) {
+    const currentDate = '{{ target_date|date:"Y-m-d" }}';
+    window.location.href = `?date=${currentDate}&offset=0&limit=${newLimit}`;
 }
 </script>
 

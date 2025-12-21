@@ -344,3 +344,134 @@ class DecisionAnalysisService:
             'weekend_avg': sum(c['total_count'] for c in comparisons if c['is_weekend']) / 
                           sum(1 for c in comparisons if c['is_weekend']) if any(c['is_weekend'] for c in comparisons) else 0,
         }
+
+    def get_daily_decisions_with_details(self, target_date: date, offset: int = 0, limit: int = 10) -> Dict[str, Any]:
+        """
+        Get paginated decisions for a specific day with detailed information including
+        title, signer, company, and OpenSearch content preview.
+        
+        Args:
+            target_date: Date to fetch decisions for
+            offset: Pagination offset
+            limit: Number of decisions to return
+            
+        Returns:
+            Dictionary with decisions and pagination info
+        """
+        from core.services.opensearch_service import OpenSearchService
+        
+        logger.info(f"Fetching detailed decisions for {target_date} (offset: {offset}, limit: {limit})")
+        
+        # Base queryset for the target date with related data
+        decisions_qs = Decision.objects.filter(
+            issue_date__date=target_date
+        ).select_related(
+            'organization', 'decision_type'
+        ).prefetch_related(
+            'signers', 'units',
+            'entity_relationships__entity'
+        ).order_by('-issue_date')
+        
+        total_count = decisions_qs.count()
+        
+        # Get paginated decisions
+        decisions = decisions_qs[offset:offset + limit]
+        
+        # Initialize OpenSearch service
+        opensearch_service = OpenSearchService()
+        from core.models.companies import Company
+        
+        # Prepare decision details
+        decision_details = []
+        for decision in decisions:
+            # Get organization details
+            org_info = None
+            if decision.organization:
+                org_info = {
+                    'label': decision.organization.label,
+                    'uid': decision.organization.uid,
+                    'vat_number': decision.organization.vat_number,
+                    'website': decision.organization.website,
+                }
+            
+            # Get signers details
+            signers_info = []
+            for signer in decision.signers.all():
+                signers_info.append({
+                    'first_name': signer.first_name,
+                    'last_name': signer.last_name,
+                    'uid': signer.uid,
+                })
+            
+            # Get counterparts (companies and people)
+            counterparts = []
+            
+            for rel in decision.entity_relationships.all():
+                entity = rel.entity
+                counterpart = {
+                    'afm': entity.afm,
+                    'name': entity.name,
+                    'type': entity.entity_type,
+                    'role': rel.get_role_display(),
+                    'companies': []
+                }
+                
+                # If it's a company or we have an AFM, try to find GEMI data
+                if entity.afm:
+                    companies = Company.objects.filter(afm=entity.afm).prefetch_related('persons')
+                    for company in companies:
+                        company_info = {
+                            'name': company.co_name_el,
+                            'gemi': company.ar_gemi,
+                            'status': company.status_name,
+                            'persons': [
+                                {
+                                    'name': p.person_name,
+                                    'role': p.role
+                                } for p in company.persons.all()
+                            ]
+                        }
+                        counterpart['companies'].append(company_info)
+                
+                counterparts.append(counterpart)
+            
+            # Get OpenSearch content preview if available
+            content_preview = None
+            try:
+                # Search for this decision in OpenSearch
+                search_result = opensearch_service.search_documents(
+                    query=decision.ada,
+                    size=1
+                )
+                if search_result.get('results'):
+                    content_preview = search_result['results'][0].get('content_preview', '')[:200]
+            except Exception as e:
+                logger.warning(f"Could not fetch OpenSearch data for decision {decision.ada}: {e}")
+            
+            decision_details.append({
+                'ada': decision.ada,
+                'subject': decision.subject,
+                'protocol_number': decision.protocol_number,
+                'issue_date': decision.issue_date,
+                'organization': org_info,
+                'signers': signers_info,
+                'counterparts': counterparts,
+                'decision_type': decision.decision_type.label if decision.decision_type else None,
+                'status': decision.status,
+                'document_url': decision.document_url,
+                'content_preview': content_preview,
+                'has_private_data': decision.has_private_data,
+                'financial_year': decision.financial_year,
+                'amount': float(decision.amount) if decision.amount else None,
+            })
+        
+        return {
+            'decisions': decision_details,
+            'total_count': total_count,
+            'offset': offset,
+            'limit': limit,
+            'has_next': offset + limit < total_count,
+            'has_previous': offset > 0,
+            'next_offset': offset + limit if offset + limit < total_count else None,
+            'previous_offset': offset - limit if offset > 0 else None,
+        }

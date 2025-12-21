@@ -20,11 +20,22 @@ def daily_decision_analysis(request):
     except ValueError:
         target_date = date.today() - timedelta(days=1)
 
+    # Get pagination parameters
+    try:
+        offset = int(request.GET.get("offset", 0))
+        limit = int(request.GET.get("limit", 10))
+    except ValueError:
+        offset = 0
+        limit = 10
+
     # Initialize analysis service
     analysis_service = DecisionAnalysisService()
 
     # Get comprehensive analysis
     analysis_data = analysis_service.get_daily_decision_analysis(target_date)
+    
+    # Get paginated decision details
+    decision_details = analysis_service.get_daily_decisions_with_details(target_date, offset, limit)
 
     # Calculate navigation dates
     prev_date = target_date - timedelta(days=1)
@@ -39,6 +50,9 @@ def daily_decision_analysis(request):
         "prev_date": prev_date,
         "next_date": next_date,
         "analysis": analysis_data,
+        "decision_details": decision_details,
+        "current_offset": offset,
+        "current_limit": limit,
     }
 
     return render(request, "admin/daily_decision_analysis.html", context)

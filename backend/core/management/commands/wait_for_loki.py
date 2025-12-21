@@ -40,8 +40,9 @@ class Command(BaseCommand):
                 self.stdout.write(
                     f"Loki connection error ({retry_count}/{max_retries}): {str(e)}"
                 )
-                self.stdout.write("Loki unavailable, waiting 2 seconds...")
-                time.sleep(2)
+                wait_time = 5
+                self.stdout.write(f"Loki unavailable, waiting {wait_time} seconds...")
+                time.sleep(wait_time)
             except Exception as e:
                 self.stdout.write(self.style.ERROR(f"Unexpected error: {str(e)}"))
                 break

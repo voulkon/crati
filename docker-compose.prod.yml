@@ -11,18 +11,6 @@ services:
       - "4318"  # OTLP HTTP
     networks: 
       - diavgeia-net
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.jaeger-${ENVIRONMENT}.rule=Host(`jaeger-${ENVIRONMENT}.${DOMAIN}`)
-      - traefik.http.routers.jaeger-${ENVIRONMENT}.entrypoints=https
-      - traefik.http.routers.jaeger-${ENVIRONMENT}.tls=true
-      - traefik.http.routers.jaeger-${ENVIRONMENT}.tls.certresolver=letsencrypt
-      - traefik.http.services.jaeger-${ENVIRONMENT}.loadbalancer.server.port=16686
-      - traefik.http.routers.jaeger-${ENVIRONMENT}-http.rule=Host(`jaeger-${ENVIRONMENT}.${DOMAIN}`)
-      - traefik.http.routers.jaeger-${ENVIRONMENT}-http.entrypoints=http
-      - traefik.http.routers.jaeger-${ENVIRONMENT}-http.middlewares=redirect-to-https
-      - traefik.http.middlewares.jaeger-${ENVIRONMENT}-auth.basicauth.users=$${BASIC_AUTH_HASH}
-      - traefik.http.routers.jaeger-${ENVIRONMENT}.middlewares=gzip,jaeger-${ENVIRONMENT}-auth
 
   loki:
     image: grafana/loki:latest
@@ -69,18 +57,6 @@ services:
       - ./grafana-provisioning:/etc/grafana/provisioning
     depends_on:
       - loki
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.grafana-${ENVIRONMENT}.rule=Host(`grafana-${ENVIRONMENT}.${DOMAIN}`)
-      - traefik.http.routers.grafana-${ENVIRONMENT}.entrypoints=https
-      - traefik.http.routers.grafana-${ENVIRONMENT}.tls=true
-      - traefik.http.routers.grafana-${ENVIRONMENT}.tls.certresolver=letsencrypt
-      - traefik.http.services.grafana-${ENVIRONMENT}.loadbalancer.server.port=3000
-      - traefik.http.routers.grafana-${ENVIRONMENT}-http.rule=Host(`grafana-${ENVIRONMENT}.${DOMAIN}`)
-      - traefik.http.routers.grafana-${ENVIRONMENT}-http.entrypoints=http
-      - traefik.http.routers.grafana-${ENVIRONMENT}-http.middlewares=redirect-to-https
-      - traefik.http.middlewares.grafana-${ENVIRONMENT}-auth.basicauth.users=$${BASIC_AUTH_HASH}
-      - traefik.http.routers.grafana-${ENVIRONMENT}.middlewares=gzip,grafana-${ENVIRONMENT}-auth
 
   db:
     image: pgvector/pgvector:0.8.0-pg17
@@ -121,18 +97,6 @@ services:
       interval: 5s
       timeout: 15s
       retries: 5
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.rabbitmq-${ENVIRONMENT}.rule=Host(`rabbitmq-${ENVIRONMENT}.${DOMAIN}`)
-      - traefik.http.routers.rabbitmq-${ENVIRONMENT}.entrypoints=https
-      - traefik.http.routers.rabbitmq-${ENVIRONMENT}.tls=true
-      - traefik.http.routers.rabbitmq-${ENVIRONMENT}.tls.certresolver=letsencrypt
-      - traefik.http.services.rabbitmq-${ENVIRONMENT}.loadbalancer.server.port=15672
-      - traefik.http.routers.rabbitmq-${ENVIRONMENT}-http.rule=Host(`rabbitmq-${ENVIRONMENT}.${DOMAIN}`)
-      - traefik.http.routers.rabbitmq-${ENVIRONMENT}-http.entrypoints=http
-      - traefik.http.routers.rabbitmq-${ENVIRONMENT}-http.middlewares=redirect-to-https
-      - traefik.http.middlewares.rabbitmq-${ENVIRONMENT}-auth.basicauth.users=$${BASIC_AUTH_HASH}
-      - traefik.http.routers.rabbitmq-${ENVIRONMENT}.middlewares=gzip,rabbitmq-${ENVIRONMENT}-auth
 
   # ──────────────────────── Cache ─────────────────────────
   redis:
@@ -159,18 +123,6 @@ services:
       - diavgeia-net
     depends_on:
       - redis
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.redis-commander-${ENVIRONMENT}.rule=Host(`redis-commander-${ENVIRONMENT}.${DOMAIN}`)
-      - traefik.http.routers.redis-commander-${ENVIRONMENT}.entrypoints=https
-      - traefik.http.routers.redis-commander-${ENVIRONMENT}.tls=true
-      - traefik.http.routers.redis-commander-${ENVIRONMENT}.tls.certresolver=letsencrypt
-      - traefik.http.services.redis-commander-${ENVIRONMENT}.loadbalancer.server.port=8081
-      - traefik.http.routers.redis-commander-${ENVIRONMENT}-http.rule=Host(`redis-commander-${ENVIRONMENT}.${DOMAIN}`)
-      - traefik.http.routers.redis-commander-${ENVIRONMENT}-http.entrypoints=http
-      - traefik.http.routers.redis-commander-${ENVIRONMENT}-http.middlewares=redirect-to-https
-      - traefik.http.middlewares.redis-commander-${ENVIRONMENT}-auth.basicauth.users=$${BASIC_AUTH_HASH}
-      - traefik.http.routers.redis-commander-${ENVIRONMENT}.middlewares=gzip,redis-commander-${ENVIRONMENT}-auth
 
   # ───────────────────────── Backend ─────────────────────────
   backend:
@@ -288,18 +240,6 @@ services:
         condition: service_started
     environment:
       - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.flower-${ENVIRONMENT}.rule=Host(`flower-${ENVIRONMENT}.${DOMAIN}`)
-      - traefik.http.routers.flower-${ENVIRONMENT}.entrypoints=https
-      - traefik.http.routers.flower-${ENVIRONMENT}.tls=true
-      - traefik.http.routers.flower-${ENVIRONMENT}.tls.certresolver=letsencrypt
-      - traefik.http.services.flower-${ENVIRONMENT}.loadbalancer.server.port=5555
-      - traefik.http.routers.flower-${ENVIRONMENT}-http.rule=Host(`flower-${ENVIRONMENT}.${DOMAIN}`)
-      - traefik.http.routers.flower-${ENVIRONMENT}-http.entrypoints=http
-      - traefik.http.routers.flower-${ENVIRONMENT}-http.middlewares=redirect-to-https
-      - traefik.http.middlewares.flower-${ENVIRONMENT}-auth.basicauth.users=$${BASIC_AUTH_HASH}
-      - traefik.http.routers.flower-${ENVIRONMENT}.middlewares=gzip,flower-${ENVIRONMENT}-auth
 
   # ───────────────────────── Front end ───────────────────────
   frontend:
@@ -365,18 +305,6 @@ services:
     depends_on:
       opensearch:
         condition: service_healthy
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.opensearch-dashboards-${ENVIRONMENT}.rule=Host(`opensearch-dashboards-${ENVIRONMENT}.${DOMAIN}`)
-      - traefik.http.routers.opensearch-dashboards-${ENVIRONMENT}.entrypoints=https
-      - traefik.http.routers.opensearch-dashboards-${ENVIRONMENT}.tls=true
-      - traefik.http.routers.opensearch-dashboards-${ENVIRONMENT}.tls.certresolver=letsencrypt
-      - traefik.http.services.opensearch-dashboards-${ENVIRONMENT}.loadbalancer.server.port=5601
-      - traefik.http.routers.opensearch-dashboards-${ENVIRONMENT}-http.rule=Host(`opensearch-dashboards-${ENVIRONMENT}.${DOMAIN}`)
-      - traefik.http.routers.opensearch-dashboards-${ENVIRONMENT}-http.entrypoints=http
-      - traefik.http.routers.opensearch-dashboards-${ENVIRONMENT}-http.middlewares=redirect-to-https
-      - traefik.http.middlewares.opensearch-dashboards-${ENVIRONMENT}-auth.basicauth.users=$${BASIC_AUTH_HASH}
-      - traefik.http.routers.opensearch-dashboards-${ENVIRONMENT}.middlewares=gzip,opensearch-dashboards-${ENVIRONMENT}-auth
 
 volumes:
   postgres_data:

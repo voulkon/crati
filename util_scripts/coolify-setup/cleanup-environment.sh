@@ -108,10 +108,10 @@ load_config() {
     info "✓ Configuration loaded"
 }
 
-# Cleanup DNS record${PROJECT_ROOT}/s
+# Cleanup DNS records
 cleanup_dns() {
     local env_name="$1"
-    local dns_file="coolify/dns-records.${env_name}.json"
+    local dns_file="${PROJECT_ROOT}/coolify/dns-records.${env_name}.json"
     
     echo -e "\n${BLUE}🌐 Cleaning up DNS records...${NC}\n"
     

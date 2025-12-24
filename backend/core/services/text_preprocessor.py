@@ -45,7 +45,16 @@ class TextPreprocessor:
         }
         
         # Pattern to identify Greek characters, numbers, basic punctuation, and whitespace
-        self.valid_greek_char_pattern = re.compile(r'^[Α-ΩΆΈΉΊΌΎΏΪΫα-ωάέήίόύώϊϋΐΰ\s\d\.,;:?!€()%/"\'«»-]+$')
+        # Includes: Greek letters, diacritics (΄ͺ), Latin letters (for acronyms/codes), 
+        # common punctuation, markdown symbols (#), and HTML/formatting chars (<>)
+        self.valid_greek_char_pattern = re.compile(
+            r'^[Α-ΩΆΈΉΊΌΎΏΪΫα-ωάέήίόύώϊϋΐΰ'
+            r'a-zA-Z'  # Latin letters for acronyms, codes
+            r'\s\d'    # Whitespace and digits
+            r'\.,;:?!€()%/\"\'\«\»\-'  # Punctuation
+            r'#<>@&*+=_~`\[\]\{\}\|\\΄ͺ'  # Additional symbols, tonos, dialytika
+            r']+$'
+        )
         
         # Most common Greek words (lowercase only for efficiency)
         self.common_greek_words = {
@@ -166,21 +175,16 @@ class TextPreprocessor:
         else:
             word_coverage_ratio = 0
         
-        # Enhanced corruption detection - text is corrupted if:
-        # 1. Low detection ratio (< 5% of our vocabulary found)
-        # 2. OR low coverage ratio (< 15% of text words are common) AND insufficient absolute count
-        # 3. OR very few total words but low coverage (short corrupted fragments)
+        # Corruption detection based purely on configurable thresholds:
+        # 1. Low detection ratio - too few of our known words found
+        # 2. Low coverage ratio - found words don't cover enough of the text
+        # Both thresholds must fail for corruption (AND logic)
         
         low_detection = detection_ratio < self.detection_ratio_threshold
         low_coverage = word_coverage_ratio < self.coverage_ratio_threshold
-        insufficient_absolute = found_count < 8  # Need at least 8 common words
-        very_short_text = text_word_count < 20 and low_coverage
         
-        is_corrupted = (
-            low_detection or 
-            (low_coverage and insufficient_absolute) or
-            very_short_text
-        )
+        # Text is corrupted only if BOTH thresholds fail
+        is_corrupted = low_detection and low_coverage
         
         processing_time = time.time() - start_time
         
@@ -193,22 +197,15 @@ class TextPreprocessor:
             'word_coverage_ratio': word_coverage_ratio,
             'corruption_reasons': {
                 'low_detection': low_detection,
-                'low_coverage': low_coverage,
-                'insufficient_absolute': insufficient_absolute,
-                'very_short_text': very_short_text
+                'low_coverage': low_coverage
             }
         }
         
         if is_corrupted:
-            reasons = []
-            if low_detection:
-                reasons.append(f"low detection ratio ({detection_ratio:.3f} < {self.detection_ratio_threshold})")
-            if low_coverage and insufficient_absolute:
-                reasons.append(f"low coverage ({word_coverage_ratio:.3f} < {self.coverage_ratio_threshold}) + insufficient words ({found_count} < 8)")
-            if very_short_text:
-                reasons.append(f"very short text ({text_word_count} words) with low coverage")
-            
-            logger.warning(f"Corruption heuristic: {', '.join(reasons)}")
+            logger.warning(
+                f"Corruption detected: low detection ratio ({detection_ratio:.3f} < {self.detection_ratio_threshold}) "
+                f"AND low coverage ({word_coverage_ratio:.3f} < {self.coverage_ratio_threshold})"
+            )
         else:
             logger.debug(f"Word detection passed. Found {found_count} detection words out of {total_detection_words} "
                         f"(detection ratio: {detection_ratio:.3f}, coverage: {word_coverage_ratio:.3f})")

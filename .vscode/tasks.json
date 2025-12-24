@@ -17,7 +17,7 @@
         {
             "label": "Add Package",
             "type": "shell",
-            "command": "cd backend; if ($?) { poetry add ${input:packageName} }; if ($?) { cd .. }; if ($?) { docker-compose -f docker/docker-compose.yml build backend }; if ($?) { docker-compose -f docker/docker-compose.yml up -d --no-deps backend }",
+            "command": "cd backend && poetry add ${input:packageName} && cd .. && docker-compose -f docker/docker-compose.yml build backend && docker-compose -f docker/docker-compose.yml up -d --no-deps backend",
             "problemMatcher": [],
             "windows": {
                 "command": "cd backend; if ($?) { py -m poetry add ${input:packageName} }; if ($?) { cd .. }; if ($?) { docker-compose -f docker/docker-compose.yml build backend }; if ($?) { docker-compose -f docker/docker-compose.yml up -d --no-deps backend }"
@@ -26,7 +26,7 @@
         {
             "label": "Add Dev Package",
             "type": "shell",
-            "command": "cd backend; if ($?) { poetry add ${input:packageName} --group dev }; if ($?) { cd .. }; if ($?) { docker-compose -f docker/docker-compose.yml build backend }; if ($?) { docker-compose -f docker/docker-compose.yml up -d --no-deps backend }",
+            "command": "cd backend && poetry add ${input:packageName} --group dev && cd .. && docker-compose -f docker/docker-compose.yml build backend && docker-compose -f docker/docker-compose.yml up -d --no-deps backend",
             "problemMatcher": [],
             "windows": {
                 "command": "cd backend; if ($?) { py -m poetry add ${input:packageName} --group dev }; if ($?) { cd .. }; if ($?) { docker-compose -f docker/docker-compose.yml build backend }; if ($?) { docker-compose -f docker/docker-compose.yml up -d --no-deps backend }"

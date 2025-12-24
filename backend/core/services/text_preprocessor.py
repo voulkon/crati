@@ -12,11 +12,11 @@ from core.pydantic_models.text_preprocessing import (
 
 class TextPreprocessor:
     def __init__(self, 
-                 strategy: CorruptionDetectionStrategy = CorruptionDetectionStrategy.COMMON_WORDS,
-                 dictionary_path: Optional[Path] = None,
-                 char_validity_threshold: float = 0.7,
-                 detection_ratio_threshold: float = 0.05,
-                 coverage_ratio_threshold: float = 0.15
+                strategy: CorruptionDetectionStrategy = CorruptionDetectionStrategy.COMMON_WORDS,
+                dictionary_path: Optional[Path] = None,
+                char_validity_threshold: float = 0.7,
+                detection_ratio_threshold: float = 0.05,
+                coverage_ratio_threshold: float = 0.15# Lowered from 8 to 3 for administrative docs
                  ):
         
         self.char_validity_threshold = char_validity_threshold
@@ -25,25 +25,72 @@ class TextPreprocessor:
         
         # Load Greek stopwords - domain-specific terms from Greek government decisions
         self.greek_stopwords: Set[str] = {
+            # Government/Institutional
             "ΕΛΛΗΝΙΚΗ ΔΗΜΟΚΡΑΤΙΑ",
-            "ΥΠΟΥΡΓΕΙΟ", 
-            "ΔΙΟΙΚΗΣΗ",
-            "ΑΠΟΦΑΣΗ",
-            "ΝΟΜΟΣ",
-            "ΑΡΘΡΟ",
-            "ΠΑΡΑΓΡΑΦΟΣ",
-            "ΚΥΒΕΡΝΗΣΗ",
-            "ΠΡΩΘΥΠΟΥΡΓΟΣ",
-            "ΥΠΟΥΡΓΟΣ",
-            "ΓΕΝΙΚΟΣ ΓΡΑΜΜΑΤΕΑΣ",
-            "ΔΙΕΥΘΥΝΤΗΣ",
-            "ΔΗΜΟΣΙΑ ΔΙΟΙΚΗΣΗ",
-            "ΔΗΜΟΣΙΟΣ ΤΟΜΕΑΣ",
-            "ΟΡΓΑΝΙΣΜΟΣ",
-            "ΥΠΗΡΕΣΙΑ",
-            "ΦΟΡΕΑΣ"
+            "ΥΠΟΥΡΓΕΙΟ", "ΔΙΟΙΚΗΣΗ", "ΚΥΒΕΡΝΗΣΗ",
+            "ΠΡΩΘΥΠΟΥΡΓΟΣ", "ΥΠΟΥΡΓΟΣ",
+            "ΓΕΝΙΚΟΣ ΓΡΑΜΜΑΤΕΑΣ", "ΔΙΕΥΘΥΝΤΗΣ", "ΠΡΟΪΣΤΑΜΕΝΟΣ",
+            "ΔΗΜΟΣΙΑ ΔΙΟΙΚΗΣΗ", "ΔΗΜΟΣΙΟΣ ΤΟΜΕΑΣ",
+            "ΟΡΓΑΝΙΣΜΟΣ", "ΥΠΗΡΕΣΙΑ", "ΦΟΡΕΑΣ",
+            "ΠΑΝΕΠΙΣΤΗΜΙΟ", "ΝΟΜΑΡΧΙΑ", "ΠΕΡΙΦΕΡΕΙΑ",
+            
+            # Legal/Regulatory
+            "ΑΠΟΦΑΣΗ", "ΝΟΜΟΣ", "ΑΡΘΡΟ", "ΠΑΡΑΓΡΑΦΟΣ",
+            "ΔΙΑΤΑΞΗ", "ΠΡΟΕΔΡΙΚΟ ΔΙΑΤΑΓΜΑ", "ΕΓΚΥΚΛΙΟΣ",
+            "ΚΑΝΟΝΙΣΜΟΣ", "ΟΔΗΓΙΑ", "ΣΥΜΒΑΣΗ",
+            
+            # Financial/Administrative
+            "ΧΡΗΜΑΤΙΚΟ", "ΕΝΤΑΛΜΑ", "ΠΛΗΡΩΜΗ", "ΠΡΟΠΛΗΡΩΜΗ",
+            "ΔΑΠΑΝΗ", "ΕΣΟΔΟ", "ΠΡΟΫΠΟΛΟΓΙΣΜΟΣ",
+            "ΛΟΓΙΣΤΗΡΙΟ", "ΟΙΚΟΝΟΜΙΚΗΣ", "ΔΙΑΧΕΙΡΙΣΗΣ",
+            "ΤΡΑΠΕΖΑ", "ΛΟΓΑΡΙΑΣΜΟΣ", "ΕΠΙΤΑΓΗ",
+            "ΔΙΚΑΙΟΥΧΟΣ", "ΚΡΑΤΗΣΕΙΣ", "ΒΕΒΑΙΩΣΗ",
+            
+            # Administrative Actions
+            "ΕΚΔΟΣΗ", "ΑΙΤΙΟΛΟΓΙΑ", "ΣΥΝΗΜΜΕΝΑ",
+            "ΘΕΣΣΑΛΟΝΙΚΗ", "ΑΘΗΝΑ", "ΗΜΕΡΟΜΗΝΙΑ",
+            "ΕΤΟΣ", "ΑΡΙΘΜΟΣ", "ΚΑΤΑΣΤΑΣΗ"
         }
-        
+                # Greek legal citation patterns (regex patterns for detection)
+        self.legal_citation_patterns = [
+            r'[νΝ]\.\s*\d{4}/\d{2,4}',  # ν.4270/14, Ν.4607/2019
+            r'[αΑ]ρθρ\.\s*\d+',         # αρθρ.31, Αρθρ.58
+            r'[πΠ]αρ\.\s*[αβγδεά]',    # παρ.α΄, Παρ.β
+            r'[πΠ]ερ\.\s*[αβγδεά]',    # περ.α΄
+            r'ΑΔΑ:\s*[Α-Ω0-9-]+',      # ΑΔΑ: 909Ο469Β7Ι-ΖΨ9
+            r'Α\.Φ\.Μ\.\s*\d+',        # Α.Φ.Μ. 038506796
+        ]
+
+        self.administrative_indicators = {
+            # Official codes/references
+            'ΑΔΑ', 'ΑΦΜ', 'ΔΟΥ', 'ΑΜΚΑ', 'ΑΜ', 'ΚΑΕ',
+            'ΦΕΚ', 'ΦΠΑ', 'ΙΚΑ', 'ΕΦΚΑ',
+            
+            # Organizational structure
+            'ΔΙΕΥΘΥΝΣΗ', 'ΤΜΗΜΑ', 'ΓΡΑΦΕΙΟ', 'ΥΠΗΡΕΣΙΑ',
+            'ΠΡΟΪΣΤΑΜΕΝΟΣ', 'ΥΠΕΥΘΥΝΟΣ', 'ΥΠΑΛΛΗΛΟΣ',
+            'ΣΥΜΒΟΥΛΙΟ', 'ΕΠΙΤΡΟΠΗ', 'ΟΜΑΔΑ',
+            
+            # Financial terms
+            'ΕΝΤΑΛΜΑ', 'ΕΠΙΤΑΓΗ', 'ΛΟΓΑΡΙΑΣΜΟΣ', 'ΤΡΑΠΕΖΑ',
+            'ΠΛΗΡΩΜΗ', 'ΠΡΟΠΛΗΡΩΜΗ', 'ΕΞΟΦΛΗΣΗ',
+            'ΔΑΠΑΝΗ', 'ΕΣΟΔΟ', 'ΚΡΑΤΗΣΗ', 'ΔΙΚΑΙΟΥΧΟΣ',
+            'ΟΙΚΟΝΟΜΙΚ', 'ΛΟΓΙΣΤΗΡΙ', 'ΧΡΗΜΑΤΙΚ',
+            
+            # Legal/regulatory markers
+            'ΑΠΟΦΑΣΗ', 'ΒΕΒΑΙΩΣΗ', 'ΠΡΩΤΟΚΟΛΛΟ',
+            'ΕΓΚΡΙΣΗ', 'ΕΓΚΥΚΛΙΟΣ', 'ΟΔΗΓΙΑ',
+            'ΣΥΜΒΑΣΗ', 'ΣΥΜΦΩΝΗΤΙΚΟ', 'ΠΡΑΚΤΙΚΑ',
+            
+            # Dates and identifiers
+            'ΗΜΕΡΟΜΗΝΙΑ', 'ΗΜΝΙΑ', 'ΕΤΟΣ', 'ΑΡΙΘΜΟΣ',
+            'ΠΡΩΤΟΚΟΛΛΟ', 'ΕΚΔΟΣΗ', 'ΛΗΞΗ',
+            
+            # Common abbreviations in legal citations
+            'ν.', 'Ν.', 'αρθρ.', 'Αρθρ.', 'παρ.', 'Παρ.',
+            'περ.', 'Περ.', 'εδ.', 'Εδ.', 'κεφ.', 'Κεφ.',
+        }
+
         # Pattern to identify Greek characters, numbers, basic punctuation, and whitespace
         # Includes: Greek letters, diacritics (΄ͺ), Latin letters (for acronyms/codes), 
         # common punctuation, markdown symbols (#), and HTML/formatting chars (<>)
@@ -89,6 +136,14 @@ class TextPreprocessor:
             logger.warning(f"Failed to initialize strategy {self.strategy}: {e}")
             logger.info("Falling back to common words strategy")
             self.strategy = CorruptionDetectionStrategy.COMMON_WORDS
+
+    def _detect_legal_citations(self, text: str) -> List[str]:
+        """Detect Greek legal citations like ν.4270/14, αρθρ.31, etc."""
+        citations = []
+        for pattern in self.legal_citation_patterns:
+            matches = re.findall(pattern, text)
+            citations.extend(matches)
+        return citations
 
     def _load_greek_dictionary(self, dictionary_path: Optional[Path]) -> Set[str]:
         """Load Greek dictionary from JSON file."""
@@ -149,7 +204,7 @@ class TextPreprocessor:
         # Convert text to lowercase for case-insensitive matching
         text_lower = text.lower()
         
-        # Use combined detection words (common + domain-specific)
+        # Use combined detection words (common + domain-specific + administrative)
         detection_words = self._get_all_detection_words()
         
         # Extract actual words from text for comparison
@@ -162,7 +217,6 @@ class TextPreprocessor:
         
         for word in detection_words:
             if word in text_words_set:
-                # logger.debug(f"Detection word '{word}' found as whole word in text")
                 found_count += 1
         
         # Calculate ratio of detection words found
@@ -175,15 +229,10 @@ class TextPreprocessor:
         else:
             word_coverage_ratio = 0
         
-        # Corruption detection based purely on configurable thresholds:
-        # 1. Low detection ratio - too few of our known words found
-        # 2. Low coverage ratio - found words don't cover enough of the text
-        # Both thresholds must fail for corruption (AND logic)
-        
+        # Corruption detection: Both thresholds must fail
         low_detection = detection_ratio < self.detection_ratio_threshold
         low_coverage = word_coverage_ratio < self.coverage_ratio_threshold
         
-        # Text is corrupted only if BOTH thresholds fail
         is_corrupted = low_detection and low_coverage
         
         processing_time = time.time() - start_time
@@ -213,15 +262,20 @@ class TextPreprocessor:
         return is_corrupted, processing_time
 
     def _get_all_detection_words(self) -> Set[str]:
-        """Get combined set of common words and domain stopwords for detection."""
-        # Combine common words with domain-specific stopwords (converted to lowercase)
+        """Get combined set of common words, domain stopwords, and administrative indicators for detection."""
         detection_words = self.common_greek_words.copy()
         
         # Add domain stopwords (converted to lowercase for consistency)
         for stopword in self.greek_stopwords:
-            # Split multi-word stopwords and add individual words
             words_in_stopword = stopword.lower().split()
             detection_words.update(words_in_stopword)
+        
+        # Add administrative indicators (normalized to lowercase)
+        for indicator in self.administrative_indicators:
+            # Strip dots and convert to lowercase for matching
+            clean_indicator = indicator.replace('.', '').lower()
+            if len(clean_indicator) >= 2:  # Only add if at least 2 chars
+                detection_words.add(clean_indicator)
         
         return detection_words
 

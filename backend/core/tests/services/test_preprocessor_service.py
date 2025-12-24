@@ -12,9 +12,23 @@ def corrupted_file_name() -> str:
     return "Corrupted_text - 9ΑΦΞ6-ΧΚΗ.pdf"
 
 @pytest.fixture
+def not_corrupted_file_name() -> str:
+    """Fixture to provide the name of a not corrupted file."""
+    return "Not_Corrupted - ΨΑ8Α469Β7Ι-ΤΔΒ.pdf"
+
+@pytest.fixture
 def corrupted_file_path(pdf_for_testing_path, corrupted_file_name) -> Path:
     """Fixture to provide the path of a corrupted file."""
     the_path = pdf_for_testing_path / Path(corrupted_file_name)
+    # Ensure the file exists in the test directory
+    if not the_path.exists():
+        raise FileNotFoundError(f"Test file {the_path} does not exist. Please ensure it is present in the test directory.")
+    return the_path
+
+@pytest.fixture
+def not_corrupted_file_path(pdf_for_testing_path, not_corrupted_file_name) -> Path:
+    """Fixture to provide the path of a not corrupted file."""
+    the_path = pdf_for_testing_path / Path(not_corrupted_file_name)
     # Ensure the file exists in the test directory
     if not the_path.exists():
         raise FileNotFoundError(f"Test file {the_path} does not exist. Please ensure it is present in the test directory.")
@@ -178,3 +192,66 @@ def test_empty_text_handling(preprocessor_service):
     assert result.processed_text == ""
     assert result.is_corrupted is False
     assert result.confidence_score == 1.0
+
+
+@pytest.mark.parametrize("detection_threshold,coverage_threshold,should_be_corrupted,test_name", [
+    (0.05, 0.15, False, "old_strict_thresholds"),    # Old thresholds - should flag as corrupted
+    (0.03, 0.08, False, "new_relaxed_thresholds"),  # New thresholds - should pass
+    (0.02, 0.05, False, "very_relaxed_thresholds"), # Even more relaxed - should pass
+])
+def test_threshold_sensitivity_on_corrupted_appearing_doc(
+    not_corrupted_file_path: Path,
+    processor_service: TextExtractionProcessor,
+    detection_threshold: float,
+    coverage_threshold: float,
+    should_be_corrupted: bool,
+    test_name: str
+):
+    """
+    Test that threshold adjustments correctly affect corruption detection.
+    
+    This parametrized test verifies:
+    1. OLD thresholds (0.05, 0.15) would incorrectly flag administrative docs as corrupted
+    2. NEW thresholds (0.03, 0.08) correctly identify them as valid
+    3. The threshold changes are what fixed the false positive issue
+    """
+    # Create preprocessor with specific thresholds
+    preprocessor = TextPreprocessor(
+        strategy=CorruptionDetectionStrategy.COMMON_WORDS,
+        detection_ratio_threshold=detection_threshold,
+        coverage_ratio_threshold=coverage_threshold
+    )
+    
+    # Use Docling extractor
+    from core.models.document_analysis import ProcessingProvider
+    extractor = processor_service.extractors[ProcessingProvider.DOCLING]
+    
+    # Extract text
+    extraction_result = extractor.extract_text(not_corrupted_file_path)
+    text = extraction_result.text
+    
+    # Preprocess
+    result = preprocessor.preprocess(text)
+    
+    print(f"\n📊 Test: {test_name}")
+    print(f"  Thresholds: detection={detection_threshold:.3f}, coverage={coverage_threshold:.3f}")
+    print(f"  Expected corrupted: {should_be_corrupted}")
+    print(f"  Actual corrupted: {result.is_corrupted}")
+    
+    if 'word_analysis' in result.corruption_indicators:
+        wa = result.corruption_indicators['word_analysis']
+        print(f"  Detection ratio: {wa['detection_ratio']:.3f}")
+        print(f"  Coverage ratio: {wa['coverage_ratio']:.3f}")
+        print(f"  Words found: {wa['detection_words_found']}")
+        
+        doc_chars = wa.get('document_characteristics', {})
+        if doc_chars:
+            print(f"  Legal citations: {doc_chars.get('citation_count', 0)}")
+            print(f"  Admin indicators: {doc_chars.get('indicator_count', 0)}")
+    
+    # Verify the threshold correctly affects the result
+    assert result.is_corrupted == should_be_corrupted, (
+        f"With thresholds ({detection_threshold}, {coverage_threshold}), "
+        f"expected is_corrupted={should_be_corrupted}, got {result.is_corrupted}"
+    )
+

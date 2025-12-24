@@ -1,5 +1,6 @@
 logs/
 .env.coolify-config
+coolify/archive/
 afm_exploration_*
 .DS_Store
 afm_analysis_results

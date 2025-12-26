@@ -31,3 +31,4 @@ from .companies import  (
     CompanyStock
     )
 from .decision_health import DecisionHealthCheck, DecisionHealthSummary, HealthStatus
+from .backups import Backup

@@ -1,6 +1,11 @@
 # ──────────── STAGE 1: Build dependencies ────────────
 FROM python:3.13.3-slim AS deps-builder
 
+# Build argument to control PyTorch installation
+# "default" = use standard PyPI (works for Mac/ARM64 and general use)
+# "cpu"     = force CPU-only wheels from PyTorch repo (optimized for Linux x86_64 servers without GPU)
+ARG PYTORCH_VERSION=default
+
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
@@ -22,6 +27,16 @@ COPY backend/gemi ./gemi/
 
 # Configure poetry
 RUN poetry config virtualenvs.create false
+
+# Conditionally install CPU-only PyTorch FIRST if PYTORCH_VERSION=cpu
+# This prevents downloading 4GB+ CUDA packages on servers without GPU
+RUN if [ "$PYTORCH_VERSION" = "cpu" ]; then \
+    pip install --no-cache-dir \
+        torch==2.5.1+cpu \
+        torchvision==0.20.1+cpu \
+        torchaudio==2.5.1+cpu \
+        --index-url https://download.pytorch.org/whl/cpu; \
+    fi
 
 # Install ALL dependencies (including worker group with docling)
 RUN poetry install --no-root --no-interaction --no-ansi --with worker

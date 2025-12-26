@@ -178,6 +178,8 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.worker
+      args:
+        PYTORCH_VERSION: cpu  # Server has no GPU, use CPU-only PyTorch
     container_name: diavgeia_worker
     command:  ["/bin/sh", "-c", "chmod +x /code/worker_entrypoint.sh && /code/worker_entrypoint.sh"]
     networks:

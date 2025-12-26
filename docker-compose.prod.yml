@@ -21,7 +21,7 @@ services:
       - diavgeia-net
     volumes:
       - loki_data:/loki
-      - ./loki-config:/etc/loki
+      - ./docker/loki-config:/etc/loki
     command: -config.file=/etc/loki/local-config.yaml
     healthcheck:
       test: ["CMD-SHELL", "wget --spider http://localhost:3100/ready || exit 1"]
@@ -33,7 +33,7 @@ services:
     image: grafana/promtail:latest
     container_name: diavgeia_promtail
     volumes:
-      - ./promtail-config/promtail.yml:/etc/promtail/config.yml
+      - ./docker/promtail-config/promtail.yml:/etc/promtail/config.yml
       - /var/run/docker.sock:/var/run/docker.sock
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
     command: -config.file=/etc/promtail/config.yml
@@ -54,7 +54,7 @@ services:
       - diavgeia-net
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./grafana-provisioning:/etc/grafana/provisioning
+      - ./docker/grafana-provisioning:/etc/grafana/provisioning
     depends_on:
       - loki
 
@@ -284,8 +284,8 @@ services:
     networks:
       - diavgeia-net
     volumes:
+      - ./docker/opensearch-config:/usr/share/opensearch/config/custom
       - opensearch_data:/usr/share/opensearch/data
-      - ./opensearch-config:/usr/share/opensearch/config/custom
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
       interval: 30s

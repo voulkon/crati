@@ -36,6 +36,7 @@ class CustomAdminSite(admin.AdminSite):
             path("health/dashboard/", self._wrap_view('health', 'health_dashboard_view'), name="health_dashboard"),
             path("health/quick-check/", self._wrap_view('health', 'quick_health_check_view'), name="quick_health_check"),
             path("health/bulk-check/", self._wrap_view('health', 'bulk_check_view'), name="bulk_health_check"),
+            path("health/<int:pk>/", self._wrap_view('health', 'health_check_detail_view'), name="health_check_detail"),
             path("health/<int:pk>/refresh/", self._wrap_view('health', 'refresh_single_check'), name="health_refresh_single"),
         ]
         return custom_urls + urls

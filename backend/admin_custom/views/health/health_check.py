@@ -13,6 +13,10 @@ from core.services.decision_health_service import DecisionHealthService
 @staff_member_required
 def health_dashboard_view(request):
     """Dashboard view showing health statistics"""
+    # Get filter parameters
+    status_filter = request.GET.get('status', '')  # 'ERROR', 'WARNING', or empty for all
+    component_filter = request.GET.get('component', '')  # specific component or empty for all
+    
     # Get recent health checks (convert to list to avoid slice/filter issue)
     recent_checks_queryset = DecisionHealthCheck.objects.select_related('decision').order_by('-last_checked_at')[:100]
     recent_checks = list(recent_checks_queryset)
@@ -37,15 +41,47 @@ def health_dashboard_view(request):
         }
     
     # Recent problematic decisions (get fresh data for problems)
-    recent_problems = DecisionHealthCheck.objects.filter(
+    recent_problems_query = DecisionHealthCheck.objects.filter(
         models.Q(has_errors=True) | models.Q(has_warnings=True)
-    ).select_related('decision').order_by('-last_checked_at')[:20]
+    ).select_related('decision')
+    
+    # Apply filters
+    if status_filter == 'ERROR':
+        recent_problems_query = recent_problems_query.filter(has_errors=True)
+    elif status_filter == 'WARNING':
+        recent_problems_query = recent_problems_query.filter(has_warnings=True, has_errors=False)
+    
+    if component_filter:
+        # Filter by specific component status
+        filter_dict = {f"{component_filter}_status__in": [HealthStatus.ERROR, HealthStatus.WARNING]}
+        recent_problems_query = recent_problems_query.filter(**filter_dict)
+    
+    recent_problems = recent_problems_query.order_by('-last_checked_at')[:50]
+    
+    # Issue type breakdown - analyze common issues
+    issue_breakdown = {}
+    for health_check in recent_problems:
+        if health_check.findings:
+            for component, finding in health_check.findings.items():
+                if finding.get('status') in ['ERROR', 'WARNING']:
+                    if component not in issue_breakdown:
+                        issue_breakdown[component] = {
+                            'count': 0,
+                            'messages': {},
+                        }
+                    issue_breakdown[component]['count'] += 1
+                    msg = finding.get('message', 'Unknown issue')
+                    issue_breakdown[component]['messages'][msg] = issue_breakdown[component]['messages'].get(msg, 0) + 1
     
     context = {
         'title': 'Decision Health Dashboard',
         'stats': stats,
         'component_stats': component_stats,
         'recent_problems': recent_problems,
+        'issue_breakdown': issue_breakdown,
+        'status_filter': status_filter,
+        'component_filter': component_filter,
+        'components': components,
     }
     
     return render(request, 'admin/decision_health_dashboard.html', context)
@@ -143,3 +179,19 @@ def quick_health_check_view(request):
         'title': 'Quick Health Check',
     }
     return render(request, 'admin/quick_health_check.html', context)
+
+
+@staff_member_required
+def health_check_detail_view(request, pk):
+    """Detailed view for a single health check with actionable insights"""
+    health_check = get_object_or_404(
+        DecisionHealthCheck.objects.select_related('decision'), 
+        pk=pk
+    )
+    
+    context = {
+        'title': f'Health Check Detail - {health_check.decision.ada}',
+        'health_check': health_check,
+    }
+    
+    return render(request, 'admin/health_check_detail.html', context)

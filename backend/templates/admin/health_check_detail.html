@@ -1,0 +1,357 @@
+{% extends "admin/base_site.html" %}
+{% load admin_urls static health_filters %}
+
+{% block title %}Health Check Detail - {{ health_check.decision.ada }}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+.health-detail {
+    padding: 20px;
+    max-width: 1200px;
+}
+
+.header-section {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid #ddd;
+}
+
+.status-badge {
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: bold;
+    color: white;
+    display: inline-block;
+}
+
+.status-badge.healthy { background-color: #28a745; }
+.status-badge.warning { background-color: #ffc107; }
+.status-badge.error { background-color: #dc3545; }
+.status-badge.unknown { background-color: #6c757d; }
+
+.component-section {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-left: 5px solid #ddd;
+}
+
+.component-section.error {
+    border-left-color: #dc3545;
+    background-color: #fff5f5;
+}
+
+.component-section.warning {
+    border-left-color: #ffc107;
+    background-color: #fffbf0;
+}
+
+.component-section.healthy {
+    border-left-color: #28a745;
+}
+
+.component-title {
+    font-size: 1.3em;
+    font-weight: 600;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.finding-message {
+    font-size: 1.1em;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+.issues-list {
+    list-style: none;
+    padding: 0;
+    margin: 15px 0;
+}
+
+.issues-list li {
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background-color: #fff;
+    border-left: 4px solid #dc3545;
+    border-radius: 4px;
+}
+
+.issues-list li.warning {
+    border-left-color: #ffc107;
+}
+
+.details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.detail-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.detail-label {
+    font-weight: 600;
+    font-size: 0.85em;
+    color: #666;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+}
+
+.detail-value {
+    font-size: 1.1em;
+    color: #333;
+}
+
+.action-box {
+    background: #e7f3ff;
+    border: 1px solid #b3d9ff;
+    border-radius: 4px;
+    padding: 15px;
+    margin-top: 15px;
+}
+
+.action-box h4 {
+    margin: 0 0 10px 0;
+    color: #0056b3;
+}
+
+.action-box ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.action-box li {
+    margin-bottom: 5px;
+}
+
+.button-group {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+.button {
+    padding: 10px 20px;
+    border-radius: 4px;
+    text-decoration: none;
+    display: inline-block;
+    font-weight: 500;
+}
+
+.button-primary {
+    background-color: #007cba;
+    color: white;
+}
+
+.button-primary:hover {
+    background-color: #005a87;
+    color: white;
+}
+
+.button-secondary {
+    background-color: #f0f0f0;
+    color: #333;
+    border: 1px solid #ddd;
+}
+
+.button-secondary:hover {
+    background-color: #e0e0e0;
+}
+
+.metadata {
+    font-size: 0.9em;
+    color: #666;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid #eee;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="health-detail">
+    <div class="header-section">
+        <h1>Health Check Details</h1>
+        <h2>
+            <a href="{% url 'admin:core_decision_change' health_check.decision.id %}">
+                {{ health_check.decision.ada }}
+            </a>
+        </h2>
+        <p><strong>Subject:</strong> {{ health_check.decision.subject }}</p>
+        <p>
+            <strong>Overall Status:</strong> 
+            <span class="status-badge {{ health_check.overall_status|lower }}">
+                {{ health_check.overall_status }}
+            </span>
+        </p>
+        <div class="metadata">
+            Last checked: {{ health_check.last_checked_at|date:"Y-m-d H:i:s" }}
+            {% if health_check.check_duration_ms %}
+                | Check duration: {{ health_check.check_duration_ms }}ms
+            {% endif %}
+        </div>
+    </div>
+
+    <h2>Component Status</h2>
+    
+    {% for component_name, component_status in health_check.component_statuses.items %}
+        {% with finding=health_check.findings|default:dict %}
+            {% with component_finding=finding|dictsort:0|last %}
+        <div class="component-section {{ component_status|lower }}">
+            <div class="component-title">
+                <span>{{ component_name|title|replace:"_, " }}</span>
+                <span class="status-badge {{ component_status|lower }}">
+                    {{ component_status }}
+                </span>
+            </div>
+            
+            {% if health_check.findings %}
+                {% with comp_data=health_check.findings|get_item:component_name %}
+                    {% if comp_data %}
+                        <div class="finding-message">
+                            {{ comp_data.message|default:"No message available" }}
+                        </div>
+                        
+                        {% if comp_data.details %}
+                            {% if comp_data.details.issues %}
+                                <h4>Issues Found:</h4>
+                                <ul class="issues-list">
+                                    {% for issue in comp_data.details.issues %}
+                                        <li>{{ issue }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                            
+                            {% if comp_data.details.warnings %}
+                                <h4>Warnings:</h4>
+                                <ul class="issues-list">
+                                    {% for warning in comp_data.details.warnings %}
+                                        <li class="warning">{{ warning }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                            
+                            {% if comp_data.details.error_message %}
+                                <div style="background: #ffebee; padding: 10px; border-radius: 4px; margin-top: 10px;">
+                                    <strong>Error Message:</strong> {{ comp_data.details.error_message }}
+                                </div>
+                            {% endif %}
+                            
+                            <div class="details-grid">
+                                {% if comp_data.details.entity_count is not None %}
+                                    <div class="detail-item">
+                                        <span class="detail-label">Entities</span>
+                                        <span class="detail-value">{{ comp_data.details.entity_count }}</span>
+                                    </div>
+                                {% endif %}
+                                {% if comp_data.details.signer_count is not None %}
+                                    <div class="detail-item">
+                                        <span class="detail-label">Signers</span>
+                                        <span class="detail-value">{{ comp_data.details.signer_count }}</span>
+                                    </div>
+                                {% endif %}
+                                {% if comp_data.details.unit_count is not None %}
+                                    <div class="detail-item">
+                                        <span class="detail-label">Units</span>
+                                        <span class="detail-value">{{ comp_data.details.unit_count }}</span>
+                                    </div>
+                                {% endif %}
+                                {% if comp_data.details.character_count is not None %}
+                                    <div class="detail-item">
+                                        <span class="detail-label">Characters</span>
+                                        <span class="detail-value">{{ comp_data.details.character_count|default:"0" }}</span>
+                                    </div>
+                                {% endif %}
+                                {% if comp_data.details.page_count is not None %}
+                                    <div class="detail-item">
+                                        <span class="detail-label">Pages</span>
+                                        <span class="detail-value">{{ comp_data.details.page_count|default:"0" }}</span>
+                                    </div>
+                                {% endif %}
+                                {% if comp_data.details.status %}
+                                    <div class="detail-item">
+                                        <span class="detail-label">Processing Status</span>
+                                        <span class="detail-value">{{ comp_data.details.status }}</span>
+                                    </div>
+                                {% endif %}
+                                {% if comp_data.details.retry_count is not None %}
+                                    <div class="detail-item">
+                                        <span class="detail-label">Retry Count</span>
+                                        <span class="detail-value">{{ comp_data.details.retry_count }}</span>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                        
+                        {% if component_status == 'ERROR' or component_status == 'WARNING' %}
+                            <div class="action-box">
+                                <h4>💡 Suggested Actions</h4>
+                                <ul>
+                                    {% if component_name == 'ingestion' %}
+                                        <li>Check if the decision data was properly fetched from the source API</li>
+                                        <li>Verify all required fields are present in the source data</li>
+                                        <li>Review the import logs for this decision's ADA</li>
+                                    {% elif component_name == 'relations' %}
+                                        <li>Check if the organization exists in the database</li>
+                                        <li>Verify signer and unit data is available in the source</li>
+                                        <li>Run relation linking tasks to reprocess connections</li>
+                                    {% elif component_name == 'entities' %}
+                                        <li>Check if AFM extraction ran successfully</li>
+                                        <li>Verify text was extracted from the document</li>
+                                        <li>Consider running GEMI lookup for missing company data</li>
+                                    {% elif component_name == 'document_extraction' %}
+                                        <li>Check if the document URL is accessible</li>
+                                        <li>Verify the document format is supported (PDF, DOCX, etc.)</li>
+                                        <li>Check extraction service logs for errors</li>
+                                        <li>Consider retrying extraction with a different provider</li>
+                                    {% elif component_name == 'opensearch' %}
+                                        <li>Verify OpenSearch cluster is running and accessible</li>
+                                        <li>Check if the document has extracted text to index</li>
+                                        <li>Review OpenSearch indexing logs</li>
+                                        <li>Try re-indexing this decision manually</li>
+                                    {% elif component_name == 'coverage' %}
+                                        <li>Check if DateCoverage records exist for this organization and date</li>
+                                        <li>Verify the decision's issue_date is correct</li>
+                                        <li>Run coverage update tasks to refresh statistics</li>
+                                    {% endif %}
+                                </ul>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <p style="color: #666;">No detailed findings available for this component.</p>
+                    {% endif %}
+                {% endwith %}
+            {% endif %}
+        </div>
+            {% endwith %}
+        {% endwith %}
+    {% endfor %}
+
+    <div class="button-group">
+        <a href="{% url 'admin:health_refresh_single' health_check.id %}" class="button button-primary">
+            🔄 Refresh Health Check
+        </a>
+        <a href="{% url 'admin:core_decision_change' health_check.decision.id %}" class="button button-secondary">
+            View Decision
+        </a>
+        <a href="{% url 'admin:health_dashboard' %}" class="button button-secondary">
+            Back to Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %}

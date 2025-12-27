@@ -12,6 +12,53 @@
 
 {% block content %}
 <style>
+    .backup-actions {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .backup-actions h3 {
+        margin-top: 0;
+        margin-bottom: 10px;
+        color: white;
+    }
+    .backup-actions p {
+        margin-bottom: 15px;
+        opacity: 0.9;
+    }
+    .backup-btn-group {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .backup-btn {
+        background: rgba(255,255,255,0.9);
+        color: #333;
+        padding: 10px 20px;
+        text-decoration: none;
+        border-radius: 4px;
+        display: inline-block;
+        font-weight: 600;
+        transition: all 0.3s;
+        border: none;
+        cursor: pointer;
+    }
+    .backup-btn:hover {
+        background: white;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    .backup-btn.postgres {
+        background: #4CAF50;
+        color: white;
+    }
+    .backup-btn.opensearch {
+        background: #2196F3;
+        color: white;
+    }
     .stats-container {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -81,6 +128,25 @@
 </style>
 
 <div id="content-main">
+    <div class="backup-actions">
+        <h3>💾 Quick Backup Actions</h3>
+        <p>Review the statistics below, then create a backup when ready:</p>
+        <div class="backup-btn-group">
+            <a href="{% url 'admin:trigger_postgres_backup' %}" class="backup-btn postgres">
+                🔄 Backup PostgreSQL
+            </a>
+            <a href="{% url 'admin:trigger_opensearch_backup' %}" class="backup-btn opensearch">
+                🔄 Backup OpenSearch
+            </a>
+            <a href="{% url 'admin:core_backup_changelist' %}" class="backup-btn">
+                📋 View All Backups
+            </a>
+            <a href="{% url 'admin:browse_s3' %}" class="backup-btn">
+                📁 Browse S3
+            </a>
+        </div>
+    </div>
+
     <div class="stats-container">
         <!-- PostgreSQL Section -->
         <div class="stats-card">

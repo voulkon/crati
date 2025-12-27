@@ -2,8 +2,23 @@
 
 {% block object-tools-items %}
     <li>
-        <a href="stats/" class="addlink">
-            View Database Stats
+        <a href="trigger-postgres/" class="addlink" style="background-color: #4CAF50;">
+            🔄 Create PostgreSQL Backup
+        </a>
+    </li>
+    <li>
+        <a href="trigger-opensearch/" class="addlink" style="background-color: #2196F3;">
+            🔄 Create OpenSearch Backup
+        </a>
+    </li>
+    <li>
+        <a href="browse-s3/" class="viewlink">
+            📁 Browse S3 Backups
+        </a>
+    </li>
+    <li>
+        <a href="stats/" class="viewlink">
+            📊 View Database Stats
         </a>
     </li>
     {{ block.super }}

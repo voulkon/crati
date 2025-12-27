@@ -1,6 +1,7 @@
 services:
 
   # ───────────────────── Observability ──────────────────────
+  # port: 16686
   jaeger:
     image: jaegertracing/all-in-one:latest
     environment:

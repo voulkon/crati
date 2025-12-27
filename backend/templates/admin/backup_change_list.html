@@ -1,0 +1,10 @@
+{% extends "admin/change_list.html" %}
+
+{% block object-tools-items %}
+    <li>
+        <a href="stats/" class="addlink">
+            View Database Stats
+        </a>
+    </li>
+    {{ block.super }}
+{% endblock %}

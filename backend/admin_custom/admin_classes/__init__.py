@@ -3,6 +3,7 @@ from .documents import DocumentExtractionAdmin, DocumentAnalysisAdmin, DocumentE
 from .health import DecisionHealthCheckAdmin, DecisionHealthSummaryAdmin
 from .analytics import APIAnalyticsAdmin, EndpointStatsAdmin, DailyTrafficAdmin, ImportJobAdmin
 from .users import CustomUserAdmin, SubscriptionAdmin
+from .backup import BackupAdmin
 
 __all__ = [
     # Decision admin classes
@@ -30,4 +31,7 @@ __all__ = [
     # User admin classes
     'CustomUserAdmin',
     'SubscriptionAdmin',
+
+    # Backup admin classes
+    'BackupAdmin',
 ]

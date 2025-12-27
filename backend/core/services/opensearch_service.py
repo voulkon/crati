@@ -376,7 +376,7 @@ class OpenSearchService:
         from django.conf import settings
         
         if not bucket_name:
-            bucket_name = getattr(settings, 'AWS_BACKUP_BUCKET', 'my-backups')
+            bucket_name = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', 'diavgeia-backups')
         
         body = {
             "type": "s3",
@@ -389,12 +389,17 @@ class OpenSearchService:
         }
         
         try:
-            response = self.client.snapshot.create_repository(
-                repository=repository_name,
-                body=body
+            response = requests.put(
+                f"{self.opensearch_url}/_snapshot/{repository_name}",
+                json=body,
+                timeout=10
             )
-            logger.info(f"✅ S3 repository '{repository_name}' registered successfully")
-            return True
+            if response.status_code == 200:
+                logger.info(f"✅ S3 repository '{repository_name}' registered successfully")
+                return True
+            else:
+                logger.error(f"❌ Failed to register S3 repository: {response.text}")
+                return False
         except Exception as e:
             logger.error(f"❌ Failed to register S3 repository: {e}")
             return False
@@ -413,13 +418,18 @@ class OpenSearchService:
         }
         
         try:
-            response = self.client.snapshot.create(
-                repository=repository_name,
-                snapshot=snapshot_name,
-                body=body
+            response = requests.put(
+                f"{self.opensearch_url}/_snapshot/{repository_name}/{snapshot_name}",
+                json=body,
+                timeout=30,
+                params={"wait_for_completion": "true"}
             )
-            logger.info(f"✅ Snapshot '{snapshot_name}' created successfully")
-            return {"success": True, "snapshot": snapshot_name}
+            if response.status_code == 200:
+                logger.info(f"✅ Snapshot '{snapshot_name}' created successfully")
+                return {"success": True, "snapshot": snapshot_name}
+            else:
+                logger.error(f"❌ Failed to create snapshot: {response.text}")
+                return {"success": False, "error": response.text}
         except Exception as e:
             logger.error(f"❌ Failed to create snapshot: {e}")
             return {"success": False, "error": str(e)}
@@ -427,11 +437,15 @@ class OpenSearchService:
     def list_snapshots(self, repository_name="s3-backup-repo"):
         """List all snapshots in repository"""
         try:
-            response = self.client.snapshot.get(
-                repository=repository_name,
-                snapshot="_all"
+            response = requests.get(
+                f"{self.opensearch_url}/_snapshot/{repository_name}/_all",
+                timeout=10
             )
-            return response["snapshots"]
+            if response.status_code == 200:
+                return response.json().get("snapshots", [])
+            else:
+                logger.error(f"❌ Failed to list snapshots: {response.text}")
+                return []
         except Exception as e:
             logger.error(f"❌ Failed to list snapshots: {e}")
             return []
@@ -443,12 +457,25 @@ class OpenSearchService:
             return False
         
         try:
-            response = self.client.snapshot.restore(
-                repository=repository_name,
-                snapshot=snapshot_name
+            # Close indices before restore if necessary
+            requests.post(f"{self.opensearch_url}/{self.index_name}/_close")
+            
+            response = requests.post(
+                f"{self.opensearch_url}/_snapshot/{repository_name}/{snapshot_name}/_restore",
+                json={
+                    "indices": self.index_name,
+                    "ignore_unavailable": True,
+                    "include_global_state": False
+                },
+                timeout=60
             )
-            logger.info(f"✅ Restore from '{snapshot_name}' initiated")
-            return True
+            
+            if response.status_code == 200:
+                logger.info(f"✅ Restore from '{snapshot_name}' initiated")
+                return True
+            else:
+                logger.error(f"❌ Failed to restore snapshot: {response.text}")
+                return False
         except Exception as e:
             logger.error(f"❌ Failed to restore snapshot: {e}")
             return False

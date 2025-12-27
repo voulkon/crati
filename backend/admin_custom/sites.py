@@ -127,7 +127,7 @@ def register_all_models():
         DocumentExtractionAdmin, DocumentAnalysisAdmin, DocumentEmbeddingAdmin,
         DecisionHealthCheckAdmin, DecisionHealthSummaryAdmin,
         APIAnalyticsAdmin, EndpointStatsAdmin, DailyTrafficAdmin, ImportJobAdmin,
-        CustomUserAdmin, SubscriptionAdmin
+        CustomUserAdmin, SubscriptionAdmin, BackupAdmin
     )
     
     from core.models.decisions import Decision, Attachment
@@ -135,6 +135,7 @@ def register_all_models():
     from core.models.document_analysis import DocumentExtraction, DocumentAnalysis, DocumentEmbedding
     from core.models.decision_health import DecisionHealthCheck, DecisionHealthSummary
     from core.models.import_jobs import ImportJob, DateCoverage
+    from core.models.backups import Backup
     from api.models import APIAnalytics, EndpointStats, DailyTraffic
     from users.models import CustomUser, Subscription
     
@@ -164,6 +165,9 @@ def register_all_models():
     # Register User models
     admin_site.register(CustomUser, CustomUserAdmin)
     admin_site.register(Subscription, SubscriptionAdmin)
+
+    # Register Backup models
+    admin_site.register(Backup, BackupAdmin)
 
 
 # Auto-register models when module is imported

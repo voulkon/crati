@@ -20,6 +20,12 @@ from .tasks_decisions_import import (
     fetch_daily_decisions_distributed,
 )
 
+from .tasks_backups import (
+    create_backup_task,
+    restore_backup_task,
+)
+
+
 from .tasks_decisions import (
     fetch_decisions_for_increment,
     process_fetch_period,

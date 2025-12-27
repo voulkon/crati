@@ -1,0 +1,65 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+<a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+&rsaquo; <a href="{% url 'admin:app_list' app_label='core' %}">Core</a>
+&rsaquo; <a href="{% url 'admin:core_backup_changelist' %}">Backups</a>
+&rsaquo; Database Stats
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <div class="module">
+        <h1>PostgreSQL Statistics</h1>
+        <p><strong>Total Size:</strong> {{ postgres_stats.size }}</p>
+        
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <thead>
+                <tr style="background-color: #f8f8f8; text-align: left;">
+                    <th style="padding: 8px; border-bottom: 1px solid #ddd;">Table Name</th>
+                    <th style="padding: 8px; border-bottom: 1px solid #ddd;">Row Count</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for table in postgres_stats.tables %}
+                <tr>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ table.name }}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ table.rows }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="module" style="margin-top: 30px;">
+        <h1>OpenSearch Statistics</h1>
+        {% if opensearch_stats.index_exists %}
+            <p><strong>Index Size:</strong> {{ opensearch_stats.index_size }}</p>
+            <p><strong>Document Count:</strong> {{ opensearch_stats.document_count }}</p>
+            
+            {% if opensearch_stats.performance_metrics %}
+            <h3>Performance Metrics</h3>
+            <ul>
+                {% for key, value in opensearch_stats.performance_metrics.items %}
+                <li><strong>{{ key }}:</strong> {{ value }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+
+            {% if opensearch_stats.recommendations %}
+            <h3>Recommendations</h3>
+            <ul>
+                {% for rec in opensearch_stats.recommendations %}
+                <li>{{ rec }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        {% else %}
+            <p class="errornote">OpenSearch Index does not exist or is not reachable.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

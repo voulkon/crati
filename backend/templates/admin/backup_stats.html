@@ -11,55 +11,165 @@
 {% endblock %}
 
 {% block content %}
+<style>
+    .stats-container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-top: 20px;
+    }
+    .stats-card {
+        background: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border: 1px solid #eee;
+    }
+    .stats-card h2 {
+        margin-top: 0;
+        border-bottom: 2px solid #79aec8;
+        padding-bottom: 10px;
+        color: #333;
+    }
+    .stats-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+    }
+    .stats-table th {
+        text-align: left;
+        padding: 10px;
+        background: #f8f8f8;
+        border-bottom: 2px solid #eee;
+    }
+    .stats-table td {
+        padding: 10px;
+        border-bottom: 1px solid #eee;
+    }
+    .metric-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+    .metric-item {
+        background: #f9f9f9;
+        padding: 15px;
+        border-radius: 4px;
+        text-align: center;
+    }
+    .metric-value {
+        display: block;
+        font-size: 1.5em;
+        font-weight: bold;
+        color: #79aec8;
+    }
+    .metric-label {
+        font-size: 0.9em;
+        color: #666;
+        text-transform: uppercase;
+    }
+    .tag {
+        display: inline-block;
+        background: #e1f5fe;
+        color: #0288d1;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.85em;
+        margin: 2px;
+    }
+</style>
+
 <div id="content-main">
-    <div class="module">
-        <h1>PostgreSQL Statistics</h1>
-        <p><strong>Total Size:</strong> {{ postgres_stats.size }}</p>
-        
-        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-            <thead>
-                <tr style="background-color: #f8f8f8; text-align: left;">
-                    <th style="padding: 8px; border-bottom: 1px solid #ddd;">Table Name</th>
-                    <th style="padding: 8px; border-bottom: 1px solid #ddd;">Row Count</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for table in postgres_stats.tables %}
-                <tr>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ table.name }}</td>
-                    <td style="padding: 8px; border-bottom: 1px solid #eee;">{{ table.rows }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <div class="module" style="margin-top: 30px;">
-        <h1>OpenSearch Statistics</h1>
-        {% if opensearch_stats.index_exists %}
-            <p><strong>Index Size:</strong> {{ opensearch_stats.index_size }}</p>
-            <p><strong>Document Count:</strong> {{ opensearch_stats.document_count }}</p>
+    <div class="stats-container">
+        <!-- PostgreSQL Section -->
+        <div class="stats-card">
+            <h2>PostgreSQL Statistics</h2>
+            <div class="metric-grid">
+                <div class="metric-item">
+                    <span class="metric-value">{{ postgres_stats.size }}</span>
+                    <span class="metric-label">Total DB Size</span>
+                </div>
+                <div class="metric-item">
+                    <span class="metric-value">{{ postgres_stats.tables|length }}</span>
+                    <span class="metric-label">Total Tables</span>
+                </div>
+            </div>
             
-            {% if opensearch_stats.performance_metrics %}
-            <h3>Performance Metrics</h3>
-            <ul>
-                {% for key, value in opensearch_stats.performance_metrics.items %}
-                <li><strong>{{ key }}:</strong> {{ value }}</li>
-                {% endfor %}
-            </ul>
-            {% endif %}
+            <table class="stats-table">
+                <thead>
+                    <tr>
+                        <th>Table Name</th>
+                        <th>Rows</th>
+                        <th>Size</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for table in postgres_stats.tables %}
+                    <tr>
+                        <td><strong>{{ table.name }}</strong></td>
+                        <td>{{ table.rows|default:"0" }}</td>
+                        <td>{{ table.size_pretty }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
 
-            {% if opensearch_stats.recommendations %}
-            <h3>Recommendations</h3>
-            <ul>
-                {% for rec in opensearch_stats.recommendations %}
-                <li>{{ rec }}</li>
-                {% endfor %}
-            </ul>
+        <!-- OpenSearch Section -->
+        <div class="stats-card">
+            <h2>OpenSearch Statistics</h2>
+            {% if opensearch_stats.index_exists %}
+                <div class="metric-grid">
+                    <div class="metric-item">
+                        <span class="metric-value">{{ opensearch_stats.index_size_pretty }}</span>
+                        <span class="metric-label">Index Size</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-value">{{ opensearch_stats.document_count }}</span>
+                        <span class="metric-label">Documents</span>
+                    </div>
+                </div>
+
+                <p><strong>Index Name:</strong> <code>{{ opensearch_stats.index_name }}</code></p>
+                
+                <h3>Fields / Metadata</h3>
+                <div style="margin-bottom: 20px;">
+                    {% for field in opensearch_stats.fields %}
+                        <span class="tag">{{ field }}</span>
+                    {% endfor %}
+                </div>
+
+                {% if opensearch_stats.performance_metrics %}
+                <h3>Performance Metrics</h3>
+                <div class="metric-grid">
+                    <div class="metric-item">
+                        <span class="metric-value">{{ opensearch_stats.performance_metrics.total_searches }}</span>
+                        <span class="metric-label">Total Searches</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-value">{{ opensearch_stats.performance_metrics.avg_search_time }}ms</span>
+                        <span class="metric-label">Avg Search Time</span>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if opensearch_stats.recommendations %}
+                <div style="margin-top: 20px; padding: 15px; background: #fff3e0; border-left: 4px solid #ff9800;">
+                    <h3 style="margin-top: 0; color: #e65100;">Recommendations</h3>
+                    <ul style="margin-bottom: 0;">
+                        {% for rec in opensearch_stats.recommendations %}
+                        <li>{{ rec }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            {% else %}
+                <div class="errornote">
+                    OpenSearch Index <code>{{ opensearch_stats.index_name }}</code> does not exist or is not reachable.
+                </div>
             {% endif %}
-        {% else %}
-            <p class="errornote">OpenSearch Index does not exist or is not reachable.</p>
-        {% endif %}
+        </div>
     </div>
 </div>
 {% endblock %}

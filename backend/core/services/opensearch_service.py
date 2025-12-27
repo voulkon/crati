@@ -1,6 +1,7 @@
 import requests
 import json
 import time
+import math
 from django.conf import settings
 from typing import Dict, Any, List
 from loguru import logger
@@ -706,8 +707,11 @@ class OpenSearchService:
         """
         health_analysis = {
             'index_exists': False,
+            'index_name': self.index_name,
             'document_count': 0,
             'index_size': 0,
+            'index_size_pretty': '0 B',
+            'fields': [],
             'mapping_issues': [],
             'performance_metrics': {},
             'recommendations': []
@@ -733,16 +737,26 @@ class OpenSearchService:
                 
                 # Index size
                 store = primaries.get('store', {})
-                health_analysis['index_size'] = store.get('size_in_bytes', 0)
+                size_bytes = store.get('size_in_bytes', 0)
+                health_analysis['index_size'] = size_bytes
+                
+                # Format size
+                if size_bytes > 0:
+                    i = int(math.floor(math.log(size_bytes, 1024)))
+                    p = math.pow(1024, i)
+                    s = round(size_bytes / p, 2)
+                    size_name = ("B", "KB", "MB", "GB", "TB")
+                    health_analysis['index_size_pretty'] = f"{s} {size_name[i]}"
                 
                 # Performance metrics
                 search_stats = primaries.get('search', {})
                 health_analysis['performance_metrics'] = {
                     'total_searches': search_stats.get('query_total', 0),
                     'search_time_ms': search_stats.get('query_time_in_millis', 0),
-                    'avg_search_time': (
+                    'avg_search_time': round(
                         search_stats.get('query_time_in_millis', 0) / 
-                        max(search_stats.get('query_total', 1), 1)
+                        max(search_stats.get('query_total', 1), 1),
+                        2
                     )
                 }
             else:
@@ -761,6 +775,7 @@ class OpenSearchService:
                 mapping = mapping_response.json()
                 index_mapping = mapping.get(self.index_name, {}).get('mappings', {})
                 properties = index_mapping.get('properties', {})
+                health_analysis['fields'] = list(properties.keys())
                 
                 # Check for expected fields
                 expected_fields = ['ada', 'title', 'content', 'organization', 'issue_date']

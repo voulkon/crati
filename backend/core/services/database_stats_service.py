@@ -8,13 +8,32 @@ class DatabaseStatsService:
             cursor.execute("SELECT pg_size_pretty(pg_database_size(current_database()));")
             db_size = cursor.fetchone()[0]
             
-            # Get Table Row Counts
+            # Get all user tables to iterate over for exact counts
             cursor.execute("""
-                SELECT relname, n_live_tup
-                FROM pg_stat_user_tables
-                ORDER BY n_live_tup DESC;
+                SELECT relname, relid 
+                FROM pg_stat_user_tables;
             """)
-            tables = [{'name': row[0], 'rows': row[1]} for row in cursor.fetchall()]
+            table_data = cursor.fetchall()
+            
+            tables = []
+            for relname, relid in table_data:
+                # Get exact count for accuracy (replaces estimated n_live_tup)
+                cursor.execute(f'SELECT count(*) FROM "{relname}"')
+                row_count = cursor.fetchone()[0]
+                
+                # Get size info
+                cursor.execute(f"SELECT pg_total_relation_size({relid}), pg_size_pretty(pg_total_relation_size({relid}))")
+                size_bytes, size_pretty = cursor.fetchone()
+                
+                tables.append({
+                    'name': relname, 
+                    'rows': row_count,
+                    'size_bytes': size_bytes,
+                    'size_pretty': size_pretty
+                })
+            
+            # Sort by size descending
+            tables.sort(key=lambda x: x['size_bytes'], reverse=True)
             
         return {
             'size': db_size,

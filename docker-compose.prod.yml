@@ -102,12 +102,15 @@ services:
   redis:
     image: redis:8.0.0-alpine
     container_name: diavgeia_redis
+    command: sh -c "redis-server $${REDIS_PASSWORD:+--requirepass \"$$REDIS_PASSWORD\"}"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
     networks:
       - diavgeia-net
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "sh", "-c", "redis-cli $${REDIS_PASSWORD:+-a \"$$REDIS_PASSWORD\"} ping"]
       interval: 5s
       timeout: 3s
       retries: 5

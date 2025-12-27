@@ -184,7 +184,7 @@ class DecisionHealthService:
         """Check if AFM entities are properly extracted and associated"""
         try:
             # Get entity relationships
-            entity_relationships = DecisionEntityRelationship.objects.filter(decision=decision)
+            entity_relationships = DecisionEntityRelationship.objects.filter(decision=decision).select_related('entity')
             entity_count = entity_relationships.count()
             
             if entity_count == 0:
@@ -194,31 +194,58 @@ class DecisionHealthService:
                 details = {
                     'entity_count': 0,
                     'entities_with_company_data': 0,
-                    'needs_company_data': 0
+                    'needs_company_data': 0,
+                    'entities_needing_data': [],
+                    'entities_with_errors': [],
                 }
             else:
                 # Check entity data quality
                 entities_with_company_data = 0
-                entities_needing_data = 0
+                entities_needing_data = []
+                entities_with_errors = []
                 
                 for rel in entity_relationships:
-                    if rel.entity and rel.entity.gemi_lookup_success:
-                        entities_with_company_data += 1
-                    elif rel.entity and not rel.entity.gemi_lookup_attempted:
-                        entities_needing_data += 1
+                    if rel.entity:
+                        if rel.entity.gemi_lookup_success:
+                            entities_with_company_data += 1
+                        elif not rel.entity.gemi_lookup_attempted:
+                            entities_needing_data.append({
+                                'afm': rel.entity.afm,
+                                'name': rel.entity.name or 'Unknown',
+                                'role': rel.role,
+                                'reason': 'Not attempted yet'
+                            })
+                        elif rel.entity.gemi_lookup_attempted and not rel.entity.gemi_lookup_success:
+                            entities_with_errors.append({
+                                'afm': rel.entity.afm,
+                                'name': rel.entity.name or 'Unknown',
+                                'role': rel.role,
+                                'error': rel.entity.last_error or 'Unknown error',
+                                'error_count': rel.entity.error_count,
+                                'last_attempt': rel.entity.gemi_lookup_attempted.isoformat() if rel.entity.gemi_lookup_attempted else None
+                            })
                 
                 # Determine status based on data completeness
-                if entities_needing_data > entity_count * 0.5:  # More than 50% need data
-                    status = HealthStatus.WARNING
-                    message = f"Many entities ({entities_needing_data}/{entity_count}) still need company data"
+                if entities_with_errors:
+                    status = HealthStatus.ERROR
+                    message = f"{len(entities_with_errors)} entities failed GEMI lookup, {len(entities_needing_data)} not attempted yet"
+                elif entities_needing_data:
+                    if len(entities_needing_data) > entity_count * 0.5:  # More than 50% need data
+                        status = HealthStatus.WARNING
+                        message = f"Many entities ({len(entities_needing_data)}/{entity_count}) still need company data"
+                    else:
+                        status = HealthStatus.WARNING
+                        message = f"Some entities ({len(entities_needing_data)}/{entity_count}) need company data"
                 else:
                     status = HealthStatus.HEALTHY
-                    message = f"Entities properly extracted ({entity_count} found)"
+                    message = f"Entities properly extracted ({entity_count} found, all have company data)"
                 
                 details = {
                     'entity_count': entity_count,
                     'entities_with_company_data': entities_with_company_data,
-                    'needs_company_data': entities_needing_data
+                    'needs_company_data': len(entities_needing_data),
+                    'entities_needing_data': entities_needing_data,
+                    'entities_with_errors': entities_with_errors,
                 }
             
             health_check.set_finding('entities', status, message, details)

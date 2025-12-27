@@ -38,6 +38,12 @@ class CustomAdminSite(admin.AdminSite):
             path("health/bulk-check/", self._wrap_view('health', 'bulk_check_view'), name="bulk_health_check"),
             path("health/<int:pk>/", self._wrap_view('health', 'health_check_detail_view'), name="health_check_detail"),
             path("health/<int:pk>/refresh/", self._wrap_view('health', 'refresh_single_check'), name="health_refresh_single"),
+            path("health/<int:pk>/fix-entities/", self._wrap_view('health', 'fix_entity_data'), name="health_fix_entities"),
+            path("health/<int:pk>/retry-extraction/", self._wrap_view('health', 'retry_document_extraction'), name="health_retry_extraction"),
+            path("health/<int:pk>/reindex/", self._wrap_view('health', 'reindex_opensearch'), name="health_reindex"),
+            path("health/<int:pk>/reextract-entities/", self._wrap_view('health', 'reextract_entities'), name="health_reextract_entities"),
+            path("health/<int:pk>/relink-relations/", self._wrap_view('health', 'relink_relations'), name="health_relink_relations"),
+            path("health/<int:pk>/update-coverage/", self._wrap_view('health', 'update_coverage'), name="health_update_coverage"),
         ]
         return custom_urls + urls
     

@@ -21,6 +21,7 @@ class BackupService:
     def create_postgres_backup(self, backup_id):
         backup = Backup.objects.get(id=backup_id)
         backup.status = Backup.Status.IN_PROGRESS
+        backup.logs += "Starting PostgreSQL backup...\n"
         backup.save()
 
         local_path = None
@@ -47,33 +48,54 @@ class BackupService:
             ]
             
             logger.info(f"Starting pg_dump to {local_path}")
-            backup.logs += f"Starting pg_dump to {local_path}\n"
+            backup.logs += f"Running pg_dump to {local_path}...\n"
             backup.save()
             
-            subprocess.run(cmd, env=env, check=True)
+            result = subprocess.run(cmd, env=env, check=True, capture_output=True, text=True)
+            
+            if result.stderr:
+                backup.logs += f"pg_dump warnings: {result.stderr}\n"
+                backup.save()
+
+            file_size = os.path.getsize(local_path)
+            backup.logs += f"✅ Dump completed. Size: {file_size} bytes\n"
+            backup.save()
 
             # Upload to S3
             logger.info(f"Uploading to S3: {s3_key}")
-            backup.logs += f"Uploading to S3: {s3_key}\n"
+            backup.logs += f"Uploading to S3: s3://{self.bucket_name}/{s3_key}...\n"
             backup.save()
             
             self.s3_client.upload_file(local_path, self.bucket_name, s3_key)
             
             # Update backup record
             backup.s3_key = s3_key
-            backup.size_bytes = os.path.getsize(local_path)
+            backup.size_bytes = file_size
             backup.status = Backup.Status.SUCCESS
-            backup.logs += f"Backup successful. Size: {backup.size_bytes} bytes.\n"
+            backup.logs += f"✅ Backup successful! Uploaded to S3.\n"
             backup.save()
+            
+            logger.info(f"✅ PostgreSQL backup {backup_id} completed successfully")
 
-        except Exception as e:
-            logger.error(f"Backup failed: {e}")
+        except subprocess.CalledProcessError as e:
+            error_msg = f"pg_dump failed with exit code {e.returncode}"
+            if e.stderr:
+                error_msg += f": {e.stderr}"
+            logger.error(f"❌ {error_msg}")
             backup.status = Backup.Status.FAILED
-            backup.logs += f"Error: {str(e)}\n"
+            backup.logs += f"❌ {error_msg}\n"
             backup.save()
+            raise
+        except Exception as e:
+            logger.error(f"❌ PostgreSQL backup failed for backup {backup_id}: {e}")
+            backup.status = Backup.Status.FAILED
+            backup.logs += f"❌ Error: {str(e)}\n"
+            backup.save()
+            raise
         finally:
             if local_path and os.path.exists(local_path):
                 os.remove(local_path)
+                logger.info(f"Cleaned up temporary file: {local_path}")
 
     def restore_postgres_backup(self, backup_id):
         backup = Backup.objects.get(id=backup_id)
@@ -126,36 +148,58 @@ class BackupService:
     def create_opensearch_snapshot(self, backup_id):
         backup = Backup.objects.get(id=backup_id)
         backup.status = Backup.Status.IN_PROGRESS
+        backup.logs += "Starting OpenSearch snapshot...\n"
         backup.save()
         
         try:
             timestamp = timezone.now().strftime('%Y%m%d-%H%M%S')
             snapshot_name = f"snapshot-{timestamp}"
-            
-            # Ensure repository is registered
-            # We assume 's3-backup-repo' is the name we want to use
             repo_name = "s3-backup-repo"
-            self.opensearch_service.register_s3_repository(
+            
+            # Step 1: Register repository
+            backup.logs += f"Registering S3 repository '{repo_name}'...\n"
+            backup.save()
+            
+            register_result = self.opensearch_service.register_s3_repository(
                 repository_name=repo_name,
                 bucket_name=self.bucket_name,
                 base_path="backups/opensearch"
             )
             
-            self.opensearch_service.create_snapshot(
+            if not register_result:
+                raise Exception("Failed to register S3 repository")
+            
+            backup.logs += "Repository registered successfully.\n"
+            backup.save()
+            
+            # Step 2: Create snapshot
+            backup.logs += f"Creating snapshot '{snapshot_name}'...\n"
+            backup.save()
+            
+            result = self.opensearch_service.create_snapshot(
                 repository_name=repo_name,
                 snapshot_name=snapshot_name
             )
             
-            backup.snapshot_name = snapshot_name
-            backup.status = Backup.Status.SUCCESS
-            backup.logs += f"Snapshot {snapshot_name} created successfully.\n"
-            backup.save()
+            # Check result - create_snapshot now raises exceptions on failure
+            if result.get('success'):
+                backup.snapshot_name = snapshot_name
+                backup.status = Backup.Status.SUCCESS
+                backup.logs += f"✅ Snapshot {snapshot_name} created successfully.\n"
+                backup.save()
+                logger.info(f"✅ OpenSearch backup {backup_id} completed successfully")
+            else:
+                # This shouldn't happen now since we raise exceptions, but keep as safeguard
+                error = result.get('error', 'Unknown error')
+                raise Exception(f"Snapshot creation returned failure: {error}")
             
         except Exception as e:
-            logger.error(f"OpenSearch snapshot failed: {e}")
+            logger.error(f"❌ OpenSearch snapshot failed for backup {backup_id}: {e}")
             backup.status = Backup.Status.FAILED
-            backup.logs += f"Error: {str(e)}\n"
+            backup.logs += f"❌ Error: {str(e)}\n"
             backup.save()
+            # Re-raise to let Celery know the task failed
+            raise
 
     def restore_opensearch_snapshot(self, backup_id):
         backup = Backup.objects.get(id=backup_id)

@@ -379,14 +379,26 @@ class OpenSearchService:
         if not bucket_name:
             bucket_name = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', 'diavgeia-backups')
         
+        # Build repository settings with required AWS configuration
+        repo_settings = {
+            "bucket": bucket_name,
+            "base_path": base_path,
+            "compress": True,
+            "server_side_encryption": True,
+            "region": getattr(settings, 'AWS_S3_REGION_NAME', 'eu-north-1')
+        }
+        
+        # Add access credentials if available
+        aws_access_key = getattr(settings, 'AWS_ACCESS_KEY_ID', None)
+        aws_secret_key = getattr(settings, 'AWS_SECRET_ACCESS_KEY', None)
+        
+        if aws_access_key and aws_secret_key:
+            repo_settings["access_key"] = aws_access_key
+            repo_settings["secret_key"] = aws_secret_key
+        
         body = {
             "type": "s3",
-            "settings": {
-                "bucket": bucket_name,
-                "base_path": base_path,
-                "compress": True,
-                "server_side_encryption": True
-            }
+            "settings": repo_settings
         }
         
         try:
@@ -399,11 +411,13 @@ class OpenSearchService:
                 logger.info(f"✅ S3 repository '{repository_name}' registered successfully")
                 return True
             else:
-                logger.error(f"❌ Failed to register S3 repository: {response.text}")
-                return False
-        except Exception as e:
-            logger.error(f"❌ Failed to register S3 repository: {e}")
-            return False
+                error_msg = f"Failed to register S3 repository: {response.text}"
+                logger.error(f"❌ {error_msg}")
+                raise Exception(error_msg)
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Request failed to register S3 repository: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            raise Exception(error_msg)
 
     def create_snapshot(self, repository_name="s3-backup-repo", snapshot_name=None):
         """Create a snapshot backup"""
@@ -429,11 +443,13 @@ class OpenSearchService:
                 logger.info(f"✅ Snapshot '{snapshot_name}' created successfully")
                 return {"success": True, "snapshot": snapshot_name}
             else:
-                logger.error(f"❌ Failed to create snapshot: {response.text}")
-                return {"success": False, "error": response.text}
-        except Exception as e:
-            logger.error(f"❌ Failed to create snapshot: {e}")
-            return {"success": False, "error": str(e)}
+                error_msg = f"Failed to create snapshot: {response.text}"
+                logger.error(f"❌ {error_msg}")
+                raise Exception(error_msg)
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Request failed to create snapshot: {str(e)}"
+            logger.error(f"❌ {error_msg}")
+            raise Exception(error_msg)
 
     def list_snapshots(self, repository_name="s3-backup-repo"):
         """List all snapshots in repository"""

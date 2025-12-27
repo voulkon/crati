@@ -4,6 +4,7 @@ from django.urls import path
 from django.template.response import TemplateResponse
 from django.shortcuts import redirect
 from django.utils.html import format_html
+from django.utils import timezone
 from core.models import Backup
 from core.tasks import create_backup_task, restore_backup_task
 from core.services.database_stats_service import DatabaseStatsService
@@ -81,6 +82,8 @@ class BackupAdmin(admin.ModelAdmin):
             path('trigger-postgres/', self.admin_site.admin_view(self.trigger_postgres_backup), name='trigger_postgres_backup'),
             path('trigger-opensearch/', self.admin_site.admin_view(self.trigger_opensearch_backup), name='trigger_opensearch_backup'),
             path('browse-s3/', self.admin_site.admin_view(self.browse_s3), name='browse_s3'),
+            path('restore-from-s3-postgres/<path:s3_key>/', self.admin_site.admin_view(self.restore_postgres_from_s3), name='restore_postgres_from_s3'),
+            path('restore-from-s3-opensearch/<str:snapshot_name>/', self.admin_site.admin_view(self.restore_opensearch_from_s3), name='restore_opensearch_from_s3'),
         ]
         return my_urls + urls
 
@@ -173,53 +176,38 @@ class BackupAdmin(admin.ModelAdmin):
             errors.append(f"Error listing PostgreSQL backups: {str(e)}")
         
         try:
-            # List OpenSearch snapshots by parsing S3 metadata files
-            # Each snapshot has a snap-{uuid}.dat file in backups/opensearch/
-            response = s3_client.list_objects_v2(
-                Bucket=bucket_name,
-                Prefix='backups/opensearch/'
-            )
+            # List OpenSearch snapshots using OpenSearch API
+            # This ensures we get the actual snapshot names that were created
+            from core.services.opensearch_service import OpenSearchService
+            opensearch_service = OpenSearchService()
             
-            if 'Contents' in response:
-                for obj in response['Contents']:
-                    # Look for snap-*.dat files which contain snapshot metadata
-                    if obj['Key'].startswith('backups/opensearch/snap-') and obj['Key'].endswith('.dat'):
-                        # Extract UUID from filename: snap-{uuid}.dat
-                        snapshot_uuid = obj['Key'].split('snap-')[1].replace('.dat', '')
-                        
-                        # Try to get more details by reading the metadata file
-                        try:
-                            meta_response = s3_client.get_object(Bucket=bucket_name, Key=obj['Key'])
-                            # The file is binary, but we can at least show it exists
-                            s3_files['opensearch'].append({
-                                'snapshot_uuid': snapshot_uuid,
-                                'snapshot_name': f'snapshot-{snapshot_uuid[:8]}',  # Shortened for display
-                                'state': 'AVAILABLE',
-                                'last_modified': obj['LastModified'],
-                                'size': obj['Size'],
-                                's3_key': obj['Key']
-                            })
-                        except Exception as detail_error:
-                            # Even if we can't read details, show the snapshot exists
-                            s3_files['opensearch'].append({
-                                'snapshot_uuid': snapshot_uuid,
-                                'snapshot_name': f'snapshot-{snapshot_uuid[:8]}',
-                                'state': 'AVAILABLE',
-                                'last_modified': obj['LastModified'],
-                                'size': obj['Size'],
-                                's3_key': obj['Key']
-                            })
-                
-                # Also try to read index.latest to get the current snapshot name
-                try:
-                    index_response = s3_client.get_object(Bucket=bucket_name, Key='backups/opensearch/index.latest')
-                    latest_index = index_response['Body'].read().decode('utf-8').strip()
-                    errors.append(f"Latest snapshot index: {latest_index}")
-                except Exception:
-                    pass
+            # First ensure repository is registered
+            try:
+                opensearch_service.register_s3_repository(
+                    repository_name="s3-backup-repo",
+                    bucket_name=bucket_name,
+                    base_path="backups/opensearch"
+                )
+            except Exception as reg_error:
+                errors.append(f"Warning: Could not register S3 repository: {str(reg_error)}")
+            
+            # List snapshots from OpenSearch
+            snapshots = opensearch_service.list_snapshots(repository_name="s3-backup-repo")
+            
+            for snapshot in snapshots:
+                # OpenSearch returns snapshot metadata including name, state, timestamp, etc.
+                s3_files['opensearch'].append({
+                    'snapshot_name': snapshot.get('snapshot', 'Unknown'),
+                    'state': snapshot.get('state', 'UNKNOWN'),
+                    'start_time': snapshot.get('start_time_in_millis', 0),
+                    'last_modified': timezone.datetime.fromtimestamp(snapshot.get('start_time_in_millis', 0) / 1000) if snapshot.get('start_time_in_millis') else None,
+                    'size': snapshot.get('shards', {}).get('total', 0),
+                    'indices': ', '.join(snapshot.get('indices', [])),
+                    'uuid': snapshot.get('uuid', 'N/A')
+                })
                     
-        except ClientError as e:
-            errors.append(f"Error listing OpenSearch backups: {str(e)}")
+        except Exception as e:
+            errors.append(f"Error listing OpenSearch snapshots: {str(e)}")
         
         context = dict(
             self.admin_site.each_context(request),
@@ -243,3 +231,55 @@ class BackupAdmin(admin.ModelAdmin):
 
         restore_backup_task.delay(backup.id)
         self.message_user(request, f"Restore process started for {backup}.", messages.SUCCESS)
+    
+    def restore_postgres_from_s3(self, request, s3_key):
+        """Restore a PostgreSQL backup directly from S3"""
+        try:
+            # Create a new Backup record to track the restore operation
+            backup = Backup.objects.create(
+                backup_type=Backup.BackupType.POSTGRES,
+                status=Backup.Status.SUCCESS,  # Mark as success since file exists in S3
+                s3_key=s3_key,
+                logs=f"Backup imported from S3: {s3_key}\n"
+            )
+            
+            # Trigger restore task
+            restore_backup_task.delay(backup.id)
+            self.message_user(
+                request, 
+                f"PostgreSQL restore started from S3: {s3_key.split('/')[-1]}. Monitor progress in the backup list.",
+                messages.SUCCESS
+            )
+        except Exception as e:
+            self.message_user(
+                request,
+                f"Failed to start restore: {str(e)}",
+                messages.ERROR
+            )
+        return redirect('admin:browse_s3')
+    
+    def restore_opensearch_from_s3(self, request, snapshot_name):
+        """Restore an OpenSearch snapshot directly from S3"""
+        try:
+            # Create a new Backup record to track the restore operation
+            backup = Backup.objects.create(
+                backup_type=Backup.BackupType.OPENSEARCH,
+                status=Backup.Status.SUCCESS,  # Mark as success since snapshot exists in S3
+                snapshot_name=snapshot_name,
+                logs=f"Snapshot imported from S3: {snapshot_name}\n"
+            )
+            
+            # Trigger restore task
+            restore_backup_task.delay(backup.id)
+            self.message_user(
+                request,
+                f"OpenSearch restore started from snapshot: {snapshot_name}. Monitor progress in the backup list.",
+                messages.SUCCESS
+            )
+        except Exception as e:
+            self.message_user(
+                request,
+                f"Failed to start restore: {str(e)}",
+                messages.ERROR
+            )
+        return redirect('admin:browse_s3')

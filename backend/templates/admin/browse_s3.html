@@ -37,6 +37,7 @@
                         <th style="padding: 8px; border-bottom: 2px solid #ddd;">Size</th>
                         <th style="padding: 8px; border-bottom: 2px solid #ddd;">Last Modified</th>
                         <th style="padding: 8px; border-bottom: 2px solid #ddd;">S3 Key</th>
+                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -62,6 +63,12 @@
                         <td style="padding: 8px; border-bottom: 1px solid #eee;">
                             <code style="font-size: 11px; color: #666;">{{ file.key }}</code>
                         </td>
+                        <td style="padding: 8px; border-bottom: 1px solid #eee;">
+                            <a href="{% url 'admin:restore_postgres_from_s3' file.key %}" 
+                               class="button" 
+                               style="background-color: #4CAF50; color: white; padding: 5px 12px; text-decoration: none; border-radius: 3px; font-size: 12px;"
+                               onclick="return confirm('Are you sure you want to restore this PostgreSQL backup? This will overwrite your current database!');">🔄 Restore</a>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -82,27 +89,42 @@
             <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
                 <thead>
                     <tr style="background-color: #f8f8f8; text-align: left;">
-                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">Snapshot UUID</th>
+                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">Snapshot Name</th>
                         <th style="padding: 8px; border-bottom: 2px solid #ddd;">State</th>
-                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">Last Modified</th>
-                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">Metadata Size</th>
+                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">Created</th>
+                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">Indices</th>
+                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for snapshot in s3_files.opensearch %}
                     <tr>
                         <td style="padding: 8px; border-bottom: 1px solid #eee;">
-                            <strong>{{ snapshot.snapshot_uuid }}</strong><br>
-                            <code style="font-size: 10px; color: #666;">{{ snapshot.s3_key }}</code>
+                            <strong>{{ snapshot.snapshot_name }}</strong><br>
+                            <code style="font-size: 10px; color: #666;">{{ snapshot.uuid }}</code>
                         </td>
                         <td style="padding: 8px; border-bottom: 1px solid #eee;">
-                            <span style="color: #4CAF50; font-weight: bold;">✓ {{ snapshot.state }}</span>
+                            {% if snapshot.state == "SUCCESS" %}
+                                <span style="color: #4CAF50; font-weight: bold;">✓ {{ snapshot.state }}</span>
+                            {% else %}
+                                <span style="color: #ff9800; font-weight: bold;">{{ snapshot.state }}</span>
+                            {% endif %}
                         </td>
                         <td style="padding: 8px; border-bottom: 1px solid #eee;">
-                            {{ snapshot.last_modified|date:"Y-m-d H:i:s" }}
+                            {% if snapshot.last_modified %}
+                                {{ snapshot.last_modified|date:"Y-m-d H:i:s" }}
+                            {% else %}
+                                N/A
+                            {% endif %}
                         </td>
                         <td style="padding: 8px; border-bottom: 1px solid #eee;">
-                            {{ snapshot.size }} bytes
+                            <span style="font-size: 11px;">{{ snapshot.indices|default:"N/A" }}</span>
+                        </td>
+                        <td style="padding: 8px; border-bottom: 1px solid #eee;">
+                            <a href="{% url 'admin:restore_opensearch_from_s3' snapshot.snapshot_name %}" 
+                               class="button" 
+                               style="background-color: #2196F3; color: white; padding: 5px 12px; text-decoration: none; border-radius: 3px; font-size: 12px;"
+                               onclick="return confirm('Are you sure you want to restore this OpenSearch snapshot? This will overwrite your current index!');">🔄 Restore</a>
                         </td>
                     </tr>
                     {% endfor %}
@@ -116,12 +138,13 @@
     </div>
 
     <div style="margin-top: 30px; padding: 15px; background: #e3f2fd; border-left: 4px solid #2196F3; border-radius: 4px;">
-        <h3 style="margin-top: 0;">💡 About S3 Storage</h3>
+        <h3 style="margin-top: 0;">💡 About S3 Storage & Restore</h3>
         <ul style="line-height: 1.6;">
             <li><strong>PostgreSQL backups</strong> are stored as <code>.dump</code> files in custom compressed format</li>
             <li><strong>OpenSearch snapshots</strong> are stored as directories with multiple files managed by OpenSearch</li>
             <li>Files shown here are directly accessible in the AWS Console or via AWS CLI</li>
-            <li>To restore: Select a backup from the main backup list and use the "Restore" action</li>
+            <li><strong>To restore:</strong> Click the 🔄 Restore button next to any backup - perfect for restoring data from another deployment!</li>
+            <li>⚠️ <strong>Warning:</strong> Restoring will overwrite your current database/index. Make sure you have a backup first if needed.</li>
         </ul>
     </div>
 

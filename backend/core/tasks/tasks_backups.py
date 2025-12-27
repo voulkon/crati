@@ -13,10 +13,21 @@ def create_backup_task(self, backup_id):
     Raises:
         Exception: If backup fails, to signal Celery task failure
     """
-    service = BackupService()
+    backup = None
     
     try:
         backup = Backup.objects.get(id=backup_id)
+        
+        # Initialize service - this validates credentials and bucket access
+        try:
+            service = BackupService()
+        except ValueError as e:
+            # Credential or configuration error - update backup status
+            logger.error(f"❌ Failed to initialize BackupService: {e}")
+            backup.status = Backup.Status.FAILED
+            backup.logs += f"❌ Configuration Error: {str(e)}\n"
+            backup.save()
+            raise
         
         if backup.backup_type == Backup.BackupType.POSTGRES:
             logger.info(f"Starting PostgreSQL backup {backup_id}")

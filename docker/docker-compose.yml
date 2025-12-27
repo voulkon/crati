@@ -280,7 +280,7 @@ services:
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-eu-north-1}
+      - AWS_DEFAULT_REGION=${AWS_S3_REGION_NAME:-eu-north-1}
     ports:
       - "9200:9200"
       - "9600:9600"

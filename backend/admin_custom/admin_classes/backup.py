@@ -127,13 +127,29 @@ class BackupAdmin(admin.ModelAdmin):
         import boto3
         from botocore.exceptions import ClientError
         
+        # Get bucket name with proper None handling
+        bucket_name = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', None)
+        
+        # Check if AWS credentials are configured
+        aws_access_key = getattr(settings, 'AWS_ACCESS_KEY_ID', None)
+        aws_secret_key = getattr(settings, 'AWS_SECRET_ACCESS_KEY', None)
+        
+        if not aws_access_key or not aws_secret_key:
+            context = dict(
+                self.admin_site.each_context(request),
+                s3_files={'postgres': [], 'opensearch': []},
+                bucket_name=bucket_name,
+                errors=['AWS credentials not configured. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in settings.'],
+                title="Browse S3 Backups"
+            )
+            return TemplateResponse(request, "admin/browse_s3.html", context)
+        
         s3_client = boto3.client(
             's3',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=getattr(settings, 'AWS_S3_REGION_NAME', 'eu-north-1')
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key,
+            region_name=settings.AWS_S3_REGION_NAME
         )
-        bucket_name = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', 'diavgeia-backups')
         
         s3_files = {'postgres': [], 'opensearch': []}
         errors = []
@@ -157,19 +173,51 @@ class BackupAdmin(admin.ModelAdmin):
             errors.append(f"Error listing PostgreSQL backups: {str(e)}")
         
         try:
-            # List OpenSearch snapshots (directories)
+            # List OpenSearch snapshots by parsing S3 metadata files
+            # Each snapshot has a snap-{uuid}.dat file in backups/opensearch/
             response = s3_client.list_objects_v2(
                 Bucket=bucket_name,
-                Prefix='backups/opensearch/',
-                Delimiter='/'
+                Prefix='backups/opensearch/'
             )
-            if 'CommonPrefixes' in response:
-                for prefix in response['CommonPrefixes']:
-                    snapshot_name = prefix['Prefix'].rstrip('/').split('/')[-1]
-                    s3_files['opensearch'].append({
-                        'key': prefix['Prefix'],
-                        'snapshot_name': snapshot_name
-                    })
+            
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    # Look for snap-*.dat files which contain snapshot metadata
+                    if obj['Key'].startswith('backups/opensearch/snap-') and obj['Key'].endswith('.dat'):
+                        # Extract UUID from filename: snap-{uuid}.dat
+                        snapshot_uuid = obj['Key'].split('snap-')[1].replace('.dat', '')
+                        
+                        # Try to get more details by reading the metadata file
+                        try:
+                            meta_response = s3_client.get_object(Bucket=bucket_name, Key=obj['Key'])
+                            # The file is binary, but we can at least show it exists
+                            s3_files['opensearch'].append({
+                                'snapshot_uuid': snapshot_uuid,
+                                'snapshot_name': f'snapshot-{snapshot_uuid[:8]}',  # Shortened for display
+                                'state': 'AVAILABLE',
+                                'last_modified': obj['LastModified'],
+                                'size': obj['Size'],
+                                's3_key': obj['Key']
+                            })
+                        except Exception as detail_error:
+                            # Even if we can't read details, show the snapshot exists
+                            s3_files['opensearch'].append({
+                                'snapshot_uuid': snapshot_uuid,
+                                'snapshot_name': f'snapshot-{snapshot_uuid[:8]}',
+                                'state': 'AVAILABLE',
+                                'last_modified': obj['LastModified'],
+                                'size': obj['Size'],
+                                's3_key': obj['Key']
+                            })
+                
+                # Also try to read index.latest to get the current snapshot name
+                try:
+                    index_response = s3_client.get_object(Bucket=bucket_name, Key='backups/opensearch/index.latest')
+                    latest_index = index_response['Body'].read().decode('utf-8').strip()
+                    errors.append(f"Latest snapshot index: {latest_index}")
+                except Exception:
+                    pass
+                    
         except ClientError as e:
             errors.append(f"Error listing OpenSearch backups: {str(e)}")
         

@@ -373,28 +373,31 @@ class OpenSearchService:
             return {"hits": {"hits": [], "total": {"value": 0}}}
     
     def register_s3_repository(self, repository_name="s3-backup-repo", bucket_name=None, base_path="opensearch/backups"):
-        """Register S3 repository for snapshots"""
+        """Register S3 repository for snapshots
+        
+        Note: AWS credentials should be set via environment variables in the OpenSearch container:
+        - AWS_ACCESS_KEY_ID
+        - AWS_SECRET_ACCESS_KEY  
+        - AWS_DEFAULT_REGION
+        
+        Do NOT pass credentials via the API as OpenSearch considers this insecure.
+        """
         from django.conf import settings
         
         if not bucket_name:
-            bucket_name = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', 'diavgeia-backups')
+            bucket_name = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', None) or 'diavgeia-backups'
         
-        # Build repository settings with required AWS configuration
+        # Build repository settings - OpenSearch will use container environment variables for credentials
         repo_settings = {
             "bucket": bucket_name,
             "base_path": base_path,
             "compress": True,
             "server_side_encryption": True,
-            "region": getattr(settings, 'AWS_S3_REGION_NAME', 'eu-north-1')
+            "region": settings.AWS_S3_REGION_NAME
         }
         
-        # Add access credentials if available
-        aws_access_key = getattr(settings, 'AWS_ACCESS_KEY_ID', None)
-        aws_secret_key = getattr(settings, 'AWS_SECRET_ACCESS_KEY', None)
-        
-        if aws_access_key and aws_secret_key:
-            repo_settings["access_key"] = aws_access_key
-            repo_settings["secret_key"] = aws_secret_key
+        # DO NOT add access_key/secret_key here - OpenSearch considers this insecure
+        # The OpenSearch container must have AWS credentials set via environment variables
         
         body = {
             "type": "s3",

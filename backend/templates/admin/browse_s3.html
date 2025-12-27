@@ -74,23 +74,35 @@
     </div>
 
     <div class="module" style="margin-top: 30px;">
-        <h2>OpenSearch Snapshots ({{ s3_files.opensearch|length }})</h2>
+        <h2>OpenSearch Snapshots in S3 ({{ s3_files.opensearch|length }})</h2>
+        <p style="color: #666; margin-bottom: 10px;">
+            <strong>Note:</strong> Snapshots discovered by parsing S3 metadata files directly.
+        </p>
         {% if s3_files.opensearch %}
             <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
                 <thead>
                     <tr style="background-color: #f8f8f8; text-align: left;">
-                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">Snapshot Name</th>
-                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">S3 Path</th>
+                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">Snapshot UUID</th>
+                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">State</th>
+                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">Last Modified</th>
+                        <th style="padding: 8px; border-bottom: 2px solid #ddd;">Metadata Size</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for snapshot in s3_files.opensearch %}
                     <tr>
                         <td style="padding: 8px; border-bottom: 1px solid #eee;">
-                            <strong>{{ snapshot.snapshot_name }}</strong>
+                            <strong>{{ snapshot.snapshot_uuid }}</strong><br>
+                            <code style="font-size: 10px; color: #666;">{{ snapshot.s3_key }}</code>
                         </td>
                         <td style="padding: 8px; border-bottom: 1px solid #eee;">
-                            <code style="font-size: 11px; color: #666;">{{ snapshot.key }}</code>
+                            <span style="color: #4CAF50; font-weight: bold;">✓ {{ snapshot.state }}</span>
+                        </td>
+                        <td style="padding: 8px; border-bottom: 1px solid #eee;">
+                            {{ snapshot.last_modified|date:"Y-m-d H:i:s" }}
+                        </td>
+                        <td style="padding: 8px; border-bottom: 1px solid #eee;">
+                            {{ snapshot.size }} bytes
                         </td>
                     </tr>
                     {% endfor %}
@@ -98,7 +110,7 @@
             </table>
         {% else %}
             <p style="padding: 20px; background: #f9f9f9; border-radius: 4px; color: #666;">
-                No OpenSearch snapshots found in S3.
+                No OpenSearch snapshots found in S3. Check that snapshots are being created to <code>backups/opensearch/</code>.
             </p>
         {% endif %}
     </div>

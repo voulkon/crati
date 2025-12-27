@@ -5,3 +5,6 @@ plugins.security.disabled: true
 
 # Enable dynamic index templates
 action.auto_create_index: true
+
+# S3 repository settings
+s3.client.default.region: eu-north-1

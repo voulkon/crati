@@ -8,15 +8,129 @@ from core.services.opensearch_service import OpenSearchService
 from loguru import logger
 
 class BackupService:
-    def __init__(self):
+    def __init__(self, aws_access_key=None, aws_secret_key=None, bucket_name=None, region_name=None):
+        """Initialize BackupService with AWS credentials.
+        
+        Args:
+            aws_access_key: AWS access key ID (defaults to settings.AWS_ACCESS_KEY_ID)
+            aws_secret_key: AWS secret access key (defaults to settings.AWS_SECRET_ACCESS_KEY)
+            bucket_name: S3 bucket name (defaults to settings.AWS_STORAGE_BUCKET_NAME)
+            region_name: AWS region (defaults to settings.AWS_S3_REGION_NAME)
+            
+        Raises:
+            ValueError: If required credentials are not provided
+        """
+        # Use provided values or fall back to settings
+        self.aws_access_key = aws_access_key or settings.AWS_ACCESS_KEY_ID
+        self.aws_secret_key = aws_secret_key or settings.AWS_SECRET_ACCESS_KEY
+        self.bucket_name = bucket_name or settings.AWS_STORAGE_BUCKET_NAME
+        self.region_name = region_name or settings.AWS_S3_REGION_NAME
+        
+        # Validate required parameters
+        if not self.aws_access_key:
+            raise ValueError("AWS_ACCESS_KEY_ID is required. Set it in Django settings or pass as parameter.")
+        if not self.aws_secret_key:
+            raise ValueError("AWS_SECRET_ACCESS_KEY is required. Set it in Django settings or pass as parameter.")
+        if not self.bucket_name:
+            raise ValueError("AWS_STORAGE_BUCKET_NAME is required. Set it in Django settings or pass as parameter.")
+        if not self.region_name:
+            raise ValueError("AWS_S3_REGION_NAME is required. Set it in Django settings or pass as parameter.")
+        
+        # Initialize S3 client
         self.s3_client = boto3.client(
             's3',
-            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-            region_name=getattr(settings, 'AWS_S3_REGION_NAME', 'eu-north-1')
+            aws_access_key_id=self.aws_access_key,
+            aws_secret_access_key=self.aws_secret_key,
+            region_name=self.region_name
         )
-        self.bucket_name = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', 'diavgeia-backups')
+        
+        # Validate credentials before proceeding
+        self._validate_credentials()
+        
+        # Initialize OpenSearch service
         self.opensearch_service = OpenSearchService()
+        
+        # Ensure bucket exists
+        self._ensure_bucket_exists()
+    
+    def _validate_credentials(self):
+        """Validate AWS credentials by checking access to the specific bucket.
+        
+        This is optional - if we lack GetBucketLocation permission, we skip validation
+        and trust that actual backup operations (PutObject) will work.
+        
+        Raises:
+            ValueError: If credentials are definitely invalid (wrong key/signature)
+        """
+        from botocore.exceptions import ClientError, NoCredentialsError
+        
+        try:
+            # Try to get bucket location - requires s3:GetBucketLocation on the specific bucket
+            # This validates credentials without requiring global ListAllMyBuckets permission
+            self.s3_client.get_bucket_location(Bucket=self.bucket_name)
+            logger.info(f"✅ AWS credentials validated - have access to bucket '{self.bucket_name}'")
+        except NoCredentialsError:
+            raise ValueError("AWS credentials not found. Check AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY.")
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == 'InvalidAccessKeyId':
+                raise ValueError(f"Invalid AWS Access Key ID")
+            elif error_code == 'SignatureDoesNotMatch':
+                raise ValueError("Invalid AWS Secret Access Key (signature mismatch)")
+            elif error_code == 'NoSuchBucket':
+                # Bucket doesn't exist yet - credentials are valid
+                logger.info(f"✅ AWS credentials valid (bucket '{self.bucket_name}' doesn't exist yet)")
+            elif error_code == 'AccessDenied' or error_code == 'Forbidden':
+                # Limited permissions - can't validate, but actual backup ops might work
+                logger.warning(f"⚠️ Cannot validate bucket access (need s3:GetBucketLocation). Will attempt backup anyway.")
+            else:
+                logger.warning(f"⚠️ Could not validate credentials: {e}. Will attempt backup anyway.")
+    
+    def _ensure_bucket_exists(self):
+        """Check if S3 bucket exists, create if possible.
+        
+        This is best-effort - if we lack permissions, we assume bucket exists
+        and let actual backup operations fail with clear errors if it doesn't.
+        """
+        from botocore.exceptions import ClientError
+        
+        try:
+            self.s3_client.head_bucket(Bucket=self.bucket_name)
+            logger.info(f"✅ S3 bucket '{self.bucket_name}' exists")
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            
+            if error_code == '404' or error_code == 'NoSuchBucket':
+                # Bucket doesn't exist, try to create it
+                logger.info(f"📦 Bucket '{self.bucket_name}' doesn't exist, attempting to create...")
+                try:
+                    # For us-east-1, don't specify LocationConstraint (AWS API quirk)
+                    # https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html
+                    if self.region_name == 'us-east-1': 
+                        self.s3_client.create_bucket(Bucket=self.bucket_name)
+                    else:
+                        self.s3_client.create_bucket(
+                            Bucket=self.bucket_name,
+                            CreateBucketConfiguration={'LocationConstraint': self.region_name}
+                        )
+                    logger.info(f"✅ Created S3 bucket '{self.bucket_name}' in {self.region_name}")
+                except ClientError as create_error:
+                    create_code = create_error.response['Error']['Code']
+                    if create_code == 'BucketAlreadyOwnedByYou':
+                        logger.info(f"✅ Bucket '{self.bucket_name}' already exists")
+                    elif create_code == 'BucketAlreadyExists':
+                        raise ValueError(f"Bucket '{self.bucket_name}' already exists and is owned by another account")
+                    elif create_code == 'AccessDenied':
+                        logger.warning(f"⚠️ Cannot create bucket (need s3:CreateBucket). Assuming it exists - backup will fail if it doesn't.")
+                    else:
+                        logger.warning(f"⚠️ Could not create bucket: {create_error}. Assuming it exists.")
+            
+            elif error_code == '403' or error_code == 'Forbidden':
+                # Can't check if bucket exists due to permissions
+                logger.warning(f"⚠️ Cannot check if bucket exists (limited permissions). Assuming '{self.bucket_name}' exists.")
+            
+            else:
+                logger.warning(f"⚠️ Could not verify bucket: {e}. Will attempt backup anyway.")
 
     def create_postgres_backup(self, backup_id):
         backup = Backup.objects.get(id=backup_id)

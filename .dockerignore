@@ -52,7 +52,8 @@
 # Documentation and notes that don't need to be in containers
 **/notes
 **/docs
-**/README.md
+# Don't exclude ALL READMEs - some packages need them (like gemi)
+# **/README.md
 **/TODO.md
 **/todo
 

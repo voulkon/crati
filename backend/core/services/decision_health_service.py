@@ -395,7 +395,9 @@ class DecisionHealthService:
                 }
             else:
                 # Check for organization coverage
-                issue_date = decision.issue_date.date()
+                # Use localdate() to match the timezone used in DateCoverage
+                from django.utils.timezone import localdate
+                issue_date = localdate(decision.issue_date)
                 org_coverage = DateCoverage.objects.filter(
                     date=issue_date,
                     organization=decision.organization,

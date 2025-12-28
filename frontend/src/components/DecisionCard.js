@@ -235,7 +235,7 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
       {/* Organization and Signers Metadata */}
       <div className="decision-metadata">
         {decision.organization && (
-          <div className="metadata-row" title={t('decisionCard.organization')}>
+          <div className="metadata-row metadata-org" title={t('decisionCard.organization')}>
             <OrganizationIcon />
             <button 
               className="metadata-value clickable"
@@ -250,28 +250,26 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
         )}
         
         {decision.signers && decision.signers.length > 0 && (
-          <div className="metadata-row" title={decision.signers.length > 1 ? t('decisionCard.signers') : t('decisionCard.signer')}>
+          <div className="metadata-row metadata-signer" title={decision.signers.length > 1 ? t('decisionCard.signers') : t('decisionCard.signer')}>
             <PenIcon />
-            <div className="signers-list-inline">
-              {decision.signers.map((signer, idx) => (
-                <React.Fragment key={signer.uid}>
-                  {idx > 0 && <span className="separator">, </span>}
-                  <button 
-                    className="metadata-value clickable"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSignerClick(signer.uid);
-                    }}
-                  >
-                    {signer.first_name} {signer.last_name}
-                  </button>
-                </React.Fragment>
-              ))}
-            </div>
+            {decision.signers.map((signer, idx) => (
+              <React.Fragment key={signer.uid}>
+                {idx > 0 && <span className="separator">, </span>}
+                <button 
+                  className="metadata-value clickable"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSignerClick(signer.uid);
+                  }}
+                >
+                  {signer.first_name} {signer.last_name}
+                </button>
+              </React.Fragment>
+            ))}
           </div>
         )}
 
-        <div className="metadata-row" title={t('decisionCard.issueDate')}>
+        <div className="metadata-row metadata-date" title={t('decisionCard.issueDate')}>
           <CalendarIcon />
           <span className="metadata-value">
             {new Date(decision.issue_date).toLocaleDateString('en-GB', {

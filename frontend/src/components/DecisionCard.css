@@ -1,14 +1,20 @@
 .decision-card {
   padding: var(--spacing-xl);
-  border-bottom: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  margin-bottom: var(--spacing-sm);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-lg);
   background-color: var(--card-bg);
-  transition: var(--transition-fast);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease-in-out;
+}
+
+.decision-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  border-color: var(--primary-blue);
 }
 
 .decision-card.last-item {
-  border-bottom: none;
   margin-bottom: 0;
 }
 
@@ -44,20 +50,52 @@
   margin-bottom: var(--spacing-md);
   font-size: var(--font-sm);
   color: var(--text-color);
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-  padding: 0 var(--spacing-xs);
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto;
+  gap: 0;
+  padding: 0;
+  width: 100%;
 }
 
 .metadata-row {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  flex-wrap: wrap;
-  flex: 0 1 auto; /* Allow shrinking, don't force grow equally */
+  min-width: 0;
+  padding: 0 var(--spacing-xs);
+}
+
+/* Left Column: Organization - align to START (left) */
+.metadata-org {
+  grid-column: 1;
+  grid-row: 1;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+/* Center Column: Signer - align to CENTER */
+.metadata-signer {
+  grid-column: 2;
+  grid-row: 1;
+  justify-content: center;
+  text-align: center;
+}
+
+.metadata-signer .metadata-value {
+  text-align: center;
+}
+
+/* Right Column: Date - align to END (right) */
+.metadata-date {
+  grid-column: 3;
+  grid-row: 1;
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.metadata-date .metadata-value {
+  text-align: right;
 }
 
 .metadata-icon {
@@ -68,6 +106,10 @@
 .metadata-value {
   color: var(--text-color);
   font-weight: 500;
+  white-space: nowrap; /* Prevent wrapping */
+  overflow: hidden; /* Hide overflow */
+  text-overflow: ellipsis; /* Show ellipsis for long text */
+  min-width: 0; /* Allow shrinking */
 }
 
 .metadata-value.clickable {
@@ -120,7 +162,7 @@
 }
 
 .amount-display {
-  font-size: 1.5rem;
+  font-size: 1.1rem;
   font-weight: var(--font-bold);
   color: var(--secondary-blue);
   margin: 0;

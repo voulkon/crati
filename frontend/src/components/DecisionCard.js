@@ -3,8 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../contexts/TranslationContext';
 import apiClient from '../api/client';
 import './DecisionCard.css';
+
 import {OrganizationIcon, PenIcon, CalendarIcon} from './Icons.js';
+
 import EntityDisplay from './EntityDisplay';
+import { getMainRecipient, getTotalAmount, groupEntityRelationships } from '../utils/decisionUtils';
 
 
 
@@ -59,26 +62,11 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
       const response = await apiClient.get(`/decisions/${decision.id}/entities/`);
       
       // Group relationships by role and entity AFM
-      const groupedRelationships = {};
-      
-      response.data.relationships.forEach(rel => {
-        const key = `${rel.role}-${rel.entity.afm}`;
-        
-        if (!groupedRelationships[key]) {
-          groupedRelationships[key] = {
-            ...rel,
-            occurrences: 1,
-            parent_key_paths: [rel.parent_key_path]
-          };
-        } else {
-          groupedRelationships[key].occurrences += 1;
-          groupedRelationships[key].parent_key_paths.push(rel.parent_key_path);
-        }
-      });
+      const groupedRelationships = groupEntityRelationships(response.data.relationships);
       
       const processedData = {
         ...response.data,
-        relationships: Object.values(groupedRelationships)
+        relationships: groupedRelationships
       };
       
       setEntityRelationships(processedData);
@@ -119,62 +107,9 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Get the main recipient/sponsor with amount
-  const getMainRecipient = () => {
-    // If we have preloaded data from optimized API, use it
-    if (hasPreloadedEntityData && decision.main_recipient) {
-      return {
-        entity: {
-          afm: decision.main_recipient.afm,
-          name: decision.main_recipient.name,
-        },
-        total_amount: decision.main_recipient.amount,
-      };
-    }
-    
-    // Otherwise use loaded entity relationships
-    if (!entityRelationships?.relationships) return null;
-    
-    // First try to find sponsor or creditor with amount
-    let recipient = entityRelationships.relationships.find(rel => 
-      (rel.role?.toLowerCase().includes('sponsor') || rel.role?.toLowerCase().includes('creditor')) 
-      && rel.total_amount
-    );
-    
-    // If no sponsor/creditor found, try to find ANY entity with an amount (excluding org which is usually 0)
-    if (!recipient) {
-      recipient = entityRelationships.relationships.find(rel => 
-        rel.total_amount && rel.role?.toLowerCase() !== 'org'
-      );
-    }
-    
-    return recipient;
-  };
-
-  const mainRecipient = getMainRecipient();
-  
-  // Calculate total amount from all entities if no main recipient
-  const getTotalAmount = () => {
-    // If we have preloaded entity amount, use it
-    if (hasPreloadedEntityData && decision.entity_amount) {
-      return decision.entity_amount;
-    }
-    
-    if (mainRecipient?.total_amount) return mainRecipient.total_amount;
-    
-    if (entityRelationships?.relationships) {
-      const total = entityRelationships.relationships
-        .filter(rel => rel.role?.toLowerCase() !== 'org') // Exclude org amounts
-        .reduce((sum, rel) => {
-          return sum + (rel.total_amount || 0);
-        }, 0);
-      if (total > 0) return total;
-    }
-    
-    return decision.amount || null;
-  };
-
-  const displayAmount = getTotalAmount();
+  // Use utility functions to calculate recipient and amount
+  const mainRecipient = getMainRecipient(decision, entityRelationships, hasPreloadedEntityData);
+  const displayAmount = getTotalAmount(decision, entityRelationships, hasPreloadedEntityData, mainRecipient);
 
   return (
     <div className={`decision-card ${isLastItem ? 'last-item' : ''}`}>

@@ -184,9 +184,11 @@ services:
   worker:
     build:
       context: .
-      dockerfile: docker/Dockerfile.worker
+      dockerfile: docker/Dockerfile.worker.prod
       args:
-        PYTORCH_VERSION: cpu  # Server has no GPU, use CPU-only PyTorch
+        # Use 'preview' for GPU support, 'preview-cpu' for CPU-only
+        # Change to 'latest'/'latest-cpu' when deploying from main branch
+        BASE_IMAGE_TAG: ${WORKER_BASE_IMAGE_TAG:-preview}
     container_name: diavgeia_worker
     command:  ["/bin/sh", "-c", "chmod +x /code/worker_entrypoint.sh && /code/worker_entrypoint.sh"]
     networks:

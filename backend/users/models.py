@@ -144,3 +144,51 @@ class VisitedEntity(models.Model):
     
     def __str__(self):
         return f"{self.user.username} visited {self.entity_name} ({self.visit_count}x)"
+
+
+class AllowedUser(models.Model):
+    """
+    Allowlist for stealth mode access control.
+    
+    When STEALTH_MODE is enabled with STEALTH_ALLOWLIST=true,
+    only users in this list can access the app after authenticating.
+    Users are identified by email and/or Clerk user ID.
+    """
+    email = models.EmailField(unique=True, help_text="User's email address")
+    clerk_user_id = models.CharField(
+        max_length=255, 
+        unique=True, 
+        null=True, 
+        blank=True,
+        help_text="Clerk user ID (optional, auto-filled on first login)"
+    )
+    name = models.CharField(max_length=255, blank=True, help_text="User's full name")
+    is_active = models.BooleanField(
+        default=True, 
+        help_text="Uncheck to temporarily revoke access without deleting"
+    )
+    notes = models.TextField(blank=True, help_text="Internal notes about this user")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_allowed_users',
+        help_text="Admin who added this user"
+    )
+    
+    class Meta:
+        verbose_name = "Allowed User"
+        verbose_name_plural = "Allowed Users"
+        ordering = ['email']
+        indexes = [
+            models.Index(fields=['email']),
+            models.Index(fields=['clerk_user_id']),
+            models.Index(fields=['is_active']),
+        ]
+    
+    def __str__(self):
+        status = "✓" if self.is_active else "✗"
+        return f"{status} {self.email}" + (f" ({self.name})" if self.name else "")

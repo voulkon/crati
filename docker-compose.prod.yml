@@ -169,6 +169,8 @@ services:
       - ALLOWED_HOSTS=${ALLOWED_HOSTS}
       - GEMI_API_KEY=${GEMI_API_KEY}
       - OPENSEARCH_URL=${OPENSEARCH_URL:-http://opensearch:9200}
+      - STEALTH_MODE=${STEALTH_MODE:-false}
+      - STEALTH_ALLOWLIST=${STEALTH_ALLOWLIST:-false}
     networks:
       - diavgeia-net
     depends_on:
@@ -255,6 +257,8 @@ services:
       dockerfile: docker/Dockerfile.frontend.prod
       args:
         REACT_APP_CLERK_PUBLISHABLE_KEY: ${REACT_APP_CLERK_PUBLISHABLE_KEY}
+        REACT_APP_STEALTH_MODE: ${REACT_APP_STEALTH_MODE:-false}
+        REACT_APP_STEALTH_ALLOWLIST: ${REACT_APP_STEALTH_ALLOWLIST:-false}
         REACT_APP_API_URL: ${REACT_APP_API_URL}
     networks:
       - diavgeia-net

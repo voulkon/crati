@@ -154,6 +154,8 @@ services:
       - JAEGER_PORT=${JAEGER_PORT:-4317}
       - OPENSEARCH_URL=${OPENSEARCH_URL:-http://opensearch:9200}
       - GEMI_API_KEY=${GEMI_API_KEY}
+      - STEALTH_MODE=${STEALTH_MODE:-false}
+      - STEALTH_ALLOWLIST=${STEALTH_ALLOWLIST:-false}
     networks:
       - diavgeia-net
     depends_on:
@@ -247,6 +249,8 @@ services:
     environment:
       - REACT_APP_CLERK_PUBLISHABLE_KEY=${REACT_APP_CLERK_PUBLISHABLE_KEY}
       - REACT_APP_API_URL=${REACT_APP_API_URL:-/api}
+      - REACT_APP_STEALTH_MODE=${REACT_APP_STEALTH_MODE:-false}
+      - REACT_APP_STEALTH_ALLOWLIST=${REACT_APP_STEALTH_ALLOWLIST:-false}
     networks:
       - diavgeia-net
 
@@ -262,9 +266,6 @@ services:
     depends_on: [backend, frontend, flower, jaeger]
     environment:
     - HOST=0.0.0.0
-    - STAGING_MODE=${STAGING_MODE:-false}
-    - STAGING_USERNAME=${STAGING_USERNAME:-}
-    - STAGING_PASSWORD=${STAGING_PASSWORD:-}
     networks:
       - diavgeia-net
   

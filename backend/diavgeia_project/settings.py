@@ -31,6 +31,12 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", default_unsafe_secret_key)
 DEBUG_ENV = os.getenv("DEBUG", "False")  # Get it as a string
 DEBUG = DEBUG_ENV.lower() in ("true", "1", "t")  # Convert to boolean
 
+# Stealth mode - requires authentication for all API endpoints
+STEALTH_MODE = os.getenv("STEALTH_MODE", "False").lower() in ("true", "1", "t")
+
+# Stealth allowlist - when enabled with STEALTH_MODE, only users in AllowedUser table can access
+STEALTH_ALLOWLIST = os.getenv("STEALTH_ALLOWLIST", "False").lower() in ("true", "1", "t")
+
 
 FRONTEND_DOMAINS:list[str] = os.getenv("FRONTEND_DOMAINS", "http://localhost:3000").split(",")
 FRONTEND_DOMAINS_clean:list[str] = [d.strip() for d in FRONTEND_DOMAINS]
@@ -81,7 +87,10 @@ REST_FRAMEWORK = {
         "api.authentication.ApiKeyAuthentication"
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        # In stealth mode, require authentication for ALL endpoints
+        # Otherwise use IsAuthenticated (individual views can override)
+        "rest_framework.permissions.IsAuthenticated" if os.getenv("STEALTH_MODE", "False").lower() in ("true", "1", "t")
+        else "rest_framework.permissions.IsAuthenticated",
     ],
     'DEFAULT_PARSER_CLASSES': [
         'api.parsers.SanitizedJSONParser',
@@ -96,6 +105,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "api.middleware.stealth.StealthModeMiddleware",  # Must be after AuthenticationMiddleware
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "api.middleware.rate_limit.RateLimitMiddleware",

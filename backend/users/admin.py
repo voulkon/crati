@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import CustomUser, Subscription
+from django.utils.html import format_html
+from .models import CustomUser, Subscription, AllowedUser
 
 @admin.register(CustomUser)
 class CustomUserAdmin(UserAdmin):
@@ -83,3 +84,59 @@ class DocumentExtractionAdmin(admin.ModelAdmin):
             return f"{obj.processing_time_ms / 1000:.2f} sec"
         return "-"
     processing_time.short_description = "Processing Time"
+
+
+@admin.register(AllowedUser)
+class AllowedUserAdmin(admin.ModelAdmin):
+    """Admin interface for managing allowed users in stealth mode"""
+    
+    list_display = ('status_icon', 'email', 'name', 'clerk_user_id', 'created_at', 'created_by')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('email', 'name', 'clerk_user_id', 'notes')
+    ordering = ('-created_at',)
+    date_hierarchy = 'created_at'
+    
+    fieldsets = (
+        ('User Information', {
+            'fields': ('email', 'name', 'clerk_user_id')
+        }),
+        ('Access Control', {
+            'fields': ('is_active',),
+            'description': 'Uncheck "Is active" to temporarily revoke access without deleting the user.'
+        }),
+        ('Notes', {
+            'fields': ('notes',),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('created_by', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    readonly_fields = ('created_at', 'updated_at', 'created_by')
+    
+    def status_icon(self, obj):
+        """Display a visual indicator of active/inactive status"""
+        if obj.is_active:
+            return format_html('<span style="color: green; font-size: 16px;">✓</span>')
+        return format_html('<span style="color: red; font-size: 16px;">✗</span>')
+    status_icon.short_description = 'Status'
+    
+    def save_model(self, request, obj, form, change):
+        """Automatically set created_by when creating a new allowed user"""
+        if not change:  # Only on creation
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+    
+    actions = ['activate_users', 'deactivate_users']
+    
+    @admin.action(description='Activate selected users')
+    def activate_users(self, request, queryset):
+        updated = queryset.update(is_active=True)
+        self.message_user(request, f'{updated} user(s) activated.')
+    
+    @admin.action(description='Deactivate selected users')
+    def deactivate_users(self, request, queryset):
+        updated = queryset.update(is_active=False)
+        self.message_user(request, f'{updated} user(s) deactivated.')

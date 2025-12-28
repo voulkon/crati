@@ -55,3 +55,4 @@ RUN apt-get purge -y gcc g++ make && \
 
 # Set working directory for the final application
 WORKDIR /code
+# Trigger build

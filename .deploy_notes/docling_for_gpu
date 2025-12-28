@@ -1,0 +1,7 @@
+When you get a GPU server:
+
+Go to Actions → "Build and Push Worker Base Image" → "Run workflow"
+Select branch: preview
+Select pytorch_version: default (for GPU)
+Run workflow
+Then in Coolify use WORKER_BASE_IMAGE_TAG=preview-gpu

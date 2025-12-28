@@ -31,13 +31,21 @@ class StealthModeMiddleware:
     def __call__(self, request):
         # Only enforce in stealth mode and for API endpoints
         if self.stealth_mode and request.path.startswith('/api/'):
-            # Exempt health check and similar endpoints if needed
+            # Exempt health check and admin endpoints
             exempt_paths = [
                 '/api/health/',
                 '/api/v1/health/',
+                '/api/admin/',  # Django admin uses traditional auth, not Clerk
             ]
             
-            if request.path not in exempt_paths:
+            # Check if path should be exempted (exact match or prefix match for admin)
+            is_exempt = any(
+                request.path == path or 
+                (path.endswith('/') and request.path.startswith(path))
+                for path in exempt_paths
+            )
+            
+            if not is_exempt:
                 # Check if user is authenticated
                 if not request.user or not request.user.is_authenticated:
                     return JsonResponse(

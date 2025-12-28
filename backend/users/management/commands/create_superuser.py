@@ -4,21 +4,95 @@ import os
 
 User = get_user_model()
 
+
 class Command(BaseCommand):
-    help = 'Creates a superuser if none exists'
+    help = 'Creates or updates a superuser and adds them to the allowlist if stealth mode is enabled'
+
+    def add_arguments(self, parser):
+        parser.add_argument('email', nargs='?', type=str, help='Email address for the superuser')
+        parser.add_argument('username', nargs='?', type=str, help='Username for the superuser')
+        parser.add_argument('password', nargs='?', type=str, help='Password for the superuser')
 
     def handle(self, *args, **options):
-        if not User.objects.filter(is_superuser=True).exists():
-            username = os.environ.get('DJANGO_SUPERUSER_USERNAME', 'admin')
-            email = os.environ.get('DJANGO_SUPERUSER_EMAIL', 'admin@example.com')
-            password = os.environ.get('DJANGO_SUPERUSER_PASSWORD', 'password')
+        # Use command-line arguments if provided, otherwise use environment variables
+        email = options.get('email') or os.environ.get('DJANGO_SUPERUSER_EMAIL', 'admin@example.com')
+        username = options.get('username') or os.environ.get('DJANGO_SUPERUSER_USERNAME', 'admin')
+        password = options.get('password') or os.environ.get('DJANGO_SUPERUSER_PASSWORD', 'password')
+        
+        # Check if stealth mode with allowlist is enabled
+        stealth_mode = os.getenv("STEALTH_MODE", "False").lower() in ("true", "1", "t")
+        stealth_allowlist = os.getenv("STEALTH_ALLOWLIST", "False").lower() in ("true", "1", "t")
+        
+        # Check if a superuser already exists
+        existing_superuser = User.objects.filter(is_superuser=True).first()
+        
+        if existing_superuser:
+            # Update existing superuser
+            existing_superuser.email = email
+            existing_superuser.username = username
+            existing_superuser.set_password(password)
+            existing_superuser.save()
             
-            User.objects.create_superuser(
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f'Superuser "{username}" updated successfully (email: {email})'
+                )
+            )
+            user = existing_superuser
+        else:
+            # Create new superuser
+            user = User.objects.create_superuser(
                 username=username,
                 email=email,
                 password=password
             )
             
-            self.stdout.write(self.style.SUCCESS(f'Superuser "{username}" created successfully'))
-        else:
-            self.stdout.write(self.style.WARNING('Superuser already exists'))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f'Superuser "{username}" created successfully (email: {email})'
+                )
+            )
+        
+        # If stealth mode with allowlist is enabled, add superuser to allowlist
+        if stealth_mode and stealth_allowlist:
+            self._add_to_allowlist(user, email, username)
+    
+    def _add_to_allowlist(self, user, email, username):
+        """Add user to the AllowedUser table if not already there"""
+        try:
+            from users.models import AllowedUser
+            
+            allowed_user, created = AllowedUser.objects.get_or_create(
+                email=email,
+                defaults={
+                    'name': username,
+                    'notes': 'Auto-added superuser for admin access',
+                    'is_active': True,
+                    'clerk_user_id': None,
+                }
+            )
+            
+            if created:
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f'Added "{email}" to allowlist (stealth mode with allowlist is enabled)'
+                    )
+                )
+            else:
+                # Ensure it's active
+                if not allowed_user.is_active:
+                    allowed_user.is_active = True
+                    allowed_user.save()
+                    self.stdout.write(
+                        self.style.SUCCESS(f'Reactivated "{email}" in allowlist')
+                    )
+                else:
+                    self.stdout.write(
+                        self.style.WARNING(f'"{email}" already in allowlist')
+                    )
+        except Exception as e:
+            self.stdout.write(
+                self.style.ERROR(
+                    f'Failed to add superuser to allowlist: {str(e)}'
+                )
+            )

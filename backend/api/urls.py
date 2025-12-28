@@ -58,6 +58,7 @@ urlpatterns = [
     path('explore/date-range/', search.explore_date_range_api_dev, name='explore_date_range_dev'),
     path('explore/statistics/', search.explore_statistics_api_dev, name='explore_statistics_dev'),
     path('explore/decisions/', search.explore_decisions_api_dev, name='explore_decisions_dev'),
+    path('explore/decisions-optimized/', search.explore_decisions_optimized_api, name='explore_decisions_optimized'),
     path('explore/decision-types/', search.explore_decision_types_api_dev, name='explore_decision_types_dev'),
     path('explore/organizations/', search.explore_organizations_api_dev, name='explore_organizations_dev'),
 

@@ -16,7 +16,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from .base import calculate_financial_summary, serialize_decision_with_content_info
+from .base import calculate_financial_summary, serialize_decision_with_content_info, serialize_decision_with_entities
 
 
 @swagger_auto_schema(...)
@@ -247,12 +247,20 @@ def explore_statistics_api_dev(request):
             issue_date__gte=start_date, issue_date__lte=end_date
         )
 
-        # Calculate basic statistics using legacy amounts for aggregation performance
-        stats = filtered_qs.aggregate(
+        # Calculate basic statistics using calculated amounts for accuracy
+        # We annotate with the sum of linked amounts per decision
+        stats_qs = filtered_qs.annotate(
+            calculated_amount=models.Sum(
+                'amount_fields__amount',
+                filter=models.Q(amount_fields__associated_relationship__isnull=False)
+            )
+        )
+        
+        stats = stats_qs.aggregate(
             total_decisions=models.Count("id"),
-            avg_amount=models.Avg("amount"),
-            max_amount=models.Max("amount"),
-            min_amount=models.Min("amount"),
+            avg_amount=models.Avg("calculated_amount"),
+            max_amount=models.Max("calculated_amount"),
+            min_amount=models.Min("calculated_amount"),
         )
 
         # Get accurate financial summary using financial service
@@ -584,6 +592,15 @@ def explore_decisions_api_dev(request):
         if organization_ids:
             decisions_qs = decisions_qs.filter(organization__uid__in=organization_ids)
 
+        # Annotate with calculated amount from DecisionAmountField
+        # This sums up amounts that are linked to entity relationships
+        decisions_qs = decisions_qs.annotate(
+            calculated_amount=models.Sum(
+                'amount_fields__amount',
+                filter=models.Q(amount_fields__associated_relationship__isnull=False)
+            )
+        )
+
         # Apply amount filters
         if min_amount is not None:
             decisions_qs = decisions_qs.filter(amount__gte=min_amount)
@@ -595,9 +612,9 @@ def explore_decisions_api_dev(request):
         if sort_by == "amount_desc":
             decisions_qs = decisions_qs.annotate(
                 amount_for_sorting=models.Case(
-                    models.When(amount__isnull=True, then=models.Value(-999999999)),
-                    models.When(amount=0, then=models.Value(-999999998)),
-                    default=models.F("amount"),
+                    models.When(calculated_amount__isnull=True, then=models.Value(-999999999)),
+                    models.When(calculated_amount=0, then=models.Value(-999999998)),
+                    default=models.F("calculated_amount"),
                     output_field=models.DecimalField(),
                 )
             ).order_by("-amount_for_sorting", "-issue_date")
@@ -605,9 +622,9 @@ def explore_decisions_api_dev(request):
         elif sort_by == "amount_asc":
             decisions_qs = decisions_qs.annotate(
                 amount_for_sorting=models.Case(
-                    models.When(amount__isnull=True, then=models.Value(999999999)),
-                    models.When(amount=0, then=models.Value(999999998)),
-                    default=models.F("amount"),
+                    models.When(calculated_amount__isnull=True, then=models.Value(999999999)),
+                    models.When(calculated_amount=0, then=models.Value(999999998)),
+                    default=models.F("calculated_amount"),
                     output_field=models.DecimalField(),
                 )
             ).order_by("amount_for_sorting", "-issue_date")
@@ -634,6 +651,11 @@ def explore_decisions_api_dev(request):
         results = []
         for decision in page_obj:
             decision_data = serialize_decision_with_content_info(decision)
+            
+            # Use calculated amount if available
+            if hasattr(decision, 'calculated_amount') and decision.calculated_amount is not None:
+                decision_data['amount'] = float(decision.calculated_amount)
+
             # Add organization as object for temporal exploration
             if decision.organization:
                 decision_data["organization"] = {
@@ -735,9 +757,12 @@ def explore_decision_types_api_dev(request):
         decision_types = (
             decisions_qs.values("decision_type__uid", "decision_type__label")
             .annotate(
-                count=models.Count("id"),
-                total_amount=models.Sum("amount"),
-                avg_amount=models.Avg("amount"),
+                count=models.Count("id", distinct=True),
+                total_amount=models.Sum(
+                    'amount_fields__amount',
+                    filter=models.Q(amount_fields__associated_relationship__isnull=False)
+                ),
+                # Use legacy amount for max as approximation since max of sum is hard
                 max_amount=models.Max("amount"),
             )
             .filter(decision_type__uid__isnull=False)  # Exclude decisions without types
@@ -747,13 +772,15 @@ def explore_decision_types_api_dev(request):
         # Format response
         formatted_types = []
         for dt in decision_types:
+            count = dt["count"]
+            total = float(dt["total_amount"] or 0)
             formatted_types.append(
                 {
                     "uid": dt["decision_type__uid"],
                     "label": dt["decision_type__label"],
-                    "count": dt["count"],
-                    "total_amount": float(dt["total_amount"] or 0),
-                    "avg_amount": float(dt["avg_amount"] or 0),
+                    "count": count,
+                    "total_amount": total,
+                    "avg_amount": total / count if count > 0 else 0,
                     "max_amount": float(dt["max_amount"] or 0),
                 }
             )
@@ -831,9 +858,12 @@ def explore_organizations_api_dev(request):
         organizations = (
             decisions_qs.values("organization__uid", "organization__label")
             .annotate(
-                count=models.Count("id"),
-                total_amount=models.Sum("amount"),
-                avg_amount=models.Avg("amount"),
+                count=models.Count("id", distinct=True),
+                total_amount=models.Sum(
+                    'amount_fields__amount',
+                    filter=models.Q(amount_fields__associated_relationship__isnull=False)
+                ),
+                # Use legacy amount for max as approximation
                 max_amount=models.Max("amount"),
             )
             .filter(
@@ -845,13 +875,15 @@ def explore_organizations_api_dev(request):
         # Format response
         formatted_organizations = []
         for org in organizations:
+            count = org["count"]
+            total = float(org["total_amount"] or 0)
             formatted_organizations.append(
                 {
                     "uid": org["organization__uid"],
                     "label": org["organization__label"],
-                    "count": org["count"],
-                    "total_amount": float(org["total_amount"] or 0),
-                    "avg_amount": float(org["avg_amount"] or 0),
+                    "count": count,
+                    "total_amount": total,
+                    "avg_amount": total / count if count > 0 else 0,
                     "max_amount": float(org["max_amount"] or 0),
                 }
             )
@@ -866,6 +898,229 @@ def explore_organizations_api_dev(request):
     except Exception as e:
         import traceback
 
+        return Response(
+            {
+                "error": f"Internal server error: {str(e)}",
+                "traceback": traceback.format_exc() if settings.DEBUG else None,
+            },
+            status=500,
+        )
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+def explore_decisions_optimized_api(request):
+    """
+    OPTIMIZED: Get paginated decisions with entity amounts included upfront.
+    This endpoint eliminates the N+1 query problem by including entity relationship
+    data in the initial response, sorted by amount descending by default.
+    """
+    start_date_str = request.GET.get("start_date")
+    end_date_str = request.GET.get("end_date")
+    page = int(request.GET.get("page", 1))
+    page_size = int(request.GET.get("page_size", 20))
+    search_query = request.GET.get("q", "")
+    status_filter = request.GET.get("status", "")
+    sort_by = request.GET.get("sort_by", "entity_amount_desc")  # Default to amount desc
+
+    # Filters
+    decision_types_str = request.GET.get("decision_types", "")
+    organization_ids_str = request.GET.get("organization_ids", "")
+    min_amount_str = request.GET.get("min_amount", "")
+    max_amount_str = request.GET.get("max_amount", "")
+
+    # Parse filters
+    decision_type_uids = [t.strip() for t in decision_types_str.split(",") if t.strip()] if decision_types_str else []
+    organization_ids = [o.strip() for o in organization_ids_str.split(",") if o.strip()] if organization_ids_str else []
+
+    min_amount = None
+    max_amount = None
+    try:
+        if min_amount_str:
+            min_amount = float(min_amount_str)
+        if max_amount_str:
+            max_amount = float(max_amount_str)
+    except ValueError:
+        return Response({"error": "Invalid amount format"}, status=400)
+
+    try:
+        from core.models.entities import DecisionEntityRelationship
+        
+        # Get all decisions
+        decisions_qs = Decision.objects.all()
+
+        # Apply date filters with timezone awareness
+        if start_date_str:
+            start_date_parsed = parse_date(start_date_str)
+            if start_date_parsed:
+                start_date = timezone.make_aware(
+                    datetime.combine(start_date_parsed, datetime.min.time())
+                )
+                decisions_qs = decisions_qs.filter(issue_date__gte=start_date)
+
+        if end_date_str:
+            end_date_parsed = parse_date(end_date_str)
+            if end_date_parsed:
+                end_date = timezone.make_aware(
+                    datetime.combine(end_date_parsed, datetime.max.time())
+                )
+                decisions_qs = decisions_qs.filter(issue_date__lte=end_date)
+
+        # Apply search filter
+        if search_query:
+            from django.contrib.postgres.search import SearchQuery
+            search_query_obj = SearchQuery(search_query)
+            decisions_qs = decisions_qs.filter(
+                models.Q(subject__icontains=search_query)
+                | models.Q(ada__icontains=search_query)
+                | models.Q(text_extraction__search_vector=search_query_obj)
+            ).distinct()
+
+        # Apply filters
+        if status_filter:
+            decisions_qs = decisions_qs.filter(status=status_filter)
+        if decision_type_uids:
+            decisions_qs = decisions_qs.filter(decision_type__uid__in=decision_type_uids)
+        if organization_ids:
+            decisions_qs = decisions_qs.filter(organization__uid__in=organization_ids)
+        if min_amount is not None:
+            decisions_qs = decisions_qs.filter(amount__gte=min_amount)
+        if max_amount is not None:
+            decisions_qs = decisions_qs.filter(amount__lte=max_amount)
+
+        # Annotate with entity amounts for sorting
+        from django.db.models import OuterRef, Subquery, Sum, DecimalField
+        
+        # Subquery to get total entity amount per decision (excluding 'org' role)
+        entity_amounts = DecisionEntityRelationship.objects.filter(
+            decision_id=OuterRef('pk')
+        ).exclude(
+            role__iexact='org'
+        ).values('decision_id').annotate(
+            total=Sum('linked_amounts__amount')
+        ).values('total')
+
+        decisions_qs = decisions_qs.annotate(
+            entity_total_amount=Subquery(
+                entity_amounts,
+                output_field=DecimalField()
+            )
+        )
+
+        # Apply sorting
+        if sort_by == "entity_amount_desc":
+            # Sort by entity amount (highest first), then by decision amount, then by date
+            decisions_qs = decisions_qs.annotate(
+                sort_amount=models.Case(
+                    models.When(entity_total_amount__isnull=False, then=models.F('entity_total_amount')),
+                    models.When(amount__isnull=False, then=models.F('amount')),
+                    default=models.Value(-999999999),
+                    output_field=models.DecimalField(),
+                )
+            ).order_by("-sort_amount", "-issue_date")
+        elif sort_by == "entity_amount_asc":
+            decisions_qs = decisions_qs.annotate(
+                sort_amount=models.Case(
+                    models.When(entity_total_amount__isnull=False, then=models.F('entity_total_amount')),
+                    models.When(amount__isnull=False, then=models.F('amount')),
+                    default=models.Value(999999999),
+                    output_field=models.DecimalField(),
+                )
+            ).order_by("sort_amount", "-issue_date")
+        elif sort_by == "recent":
+            decisions_qs = decisions_qs.order_by("-issue_date")
+        else:
+            # Default to entity amount desc
+            decisions_qs = decisions_qs.annotate(
+                sort_amount=models.Case(
+                    models.When(entity_total_amount__isnull=False, then=models.F('entity_total_amount')),
+                    models.When(amount__isnull=False, then=models.F('amount')),
+                    default=models.Value(-999999999),
+                    output_field=models.DecimalField(),
+                )
+            ).order_by("-sort_amount", "-issue_date")
+
+        # Optimize with select_related and prefetch_related
+        decisions_qs = decisions_qs.select_related(
+            "decision_type", "organization", "text_extraction"
+        ).prefetch_related("kae_amounts", "signers")
+
+        # Pagination
+        paginator = Paginator(decisions_qs, page_size)
+        page_obj = paginator.get_page(page)
+
+        # Get decision IDs for this page
+        decision_ids = [d.id for d in page_obj]
+
+        # Fetch all entity relationships for these decisions in one query
+        entity_relationships_qs = DecisionEntityRelationship.objects.filter(
+            decision_id__in=decision_ids
+        ).select_related('entity').annotate(
+            total_amount=Sum('linked_amounts__amount')
+        )
+
+        # Group entity relationships by decision_id
+        relationships_by_decision = {}
+        for rel in entity_relationships_qs:
+            if rel.decision_id not in relationships_by_decision:
+                relationships_by_decision[rel.decision_id] = []
+            
+            relationships_by_decision[rel.decision_id].append({
+                'role': rel.role,
+                'entity': {
+                    'afm': rel.entity.afm,
+                    'name': rel.entity.name,
+                    'entity_type': rel.entity.entity_type,
+                },
+                'total_amount': float(rel.total_amount) if rel.total_amount else 0,
+            })
+
+        # Serialize results with entity data
+        results = []
+        for decision in page_obj:
+            entity_rels = relationships_by_decision.get(decision.id, [])
+            decision_data = serialize_decision_with_entities(decision, entity_rels)
+            
+            # Add organization for temporal exploration
+            if decision.organization:
+                decision_data["organization"] = {
+                    "uid": decision.organization.uid,
+                    "label": decision.organization.label,
+                }
+            results.append(decision_data)
+
+        response_data = {
+            "results": results,
+            "pagination": {
+                "current_page": page,
+                "total_pages": paginator.num_pages,
+                "total_count": paginator.count,
+                "has_next": page_obj.has_next(),
+                "has_previous": page_obj.has_previous(),
+                "page_size": page_size,
+            },
+            "filters": {
+                "search_query": search_query,
+                "status": status_filter,
+                "start_date": start_date_str,
+                "end_date": end_date_str,
+                "sort_by": sort_by,
+                "decision_types": decision_types_str,
+                "organization_ids": organization_ids_str,
+                "min_amount": min_amount,
+                "max_amount": max_amount,
+            },
+            "optimization_info": {
+                "entity_data_included": True,
+                "eliminates_n_plus_1": True,
+                "default_sort": "entity_amount_desc"
+            }
+        }
+
+        return Response(response_data)
+
+    except Exception as e:
+        import traceback
         return Response(
             {
                 "error": f"Internal server error: {str(e)}",

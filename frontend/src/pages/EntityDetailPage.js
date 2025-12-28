@@ -313,7 +313,7 @@ const EntityDetailPage = () => {
 
       let endpoint;
       if (explorationMode === 'temporal') {
-        endpoint = `/explore/decisions/?${params.toString()}`;
+        endpoint = `/explore/decisions-optimized/?${params.toString()}`;
       } else {
         endpoint = `/entity/${entityType}/${entityId}/decisions/?${params.toString()}`;
       }

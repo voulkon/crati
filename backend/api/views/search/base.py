@@ -388,3 +388,45 @@ def serialize_decision_with_content_info(decision):
         "discrepancy_percentage": round(discrepancy_percentage, 2),
         "has_document_content": has_document_content,
     }
+
+
+def serialize_decision_with_entities(decision, entity_relationships=None):
+    """
+    Serialize a decision with entity relationship data included.
+    This optimized version includes entity amounts and main recipient upfront,
+    avoiding the need for separate API calls per decision.
+    """
+    # Start with base serialization
+    data = serialize_decision_with_content_info(decision)
+    
+    # Add entity relationship data if provided
+    if entity_relationships is not None:
+        # Find main recipient (sponsor/creditor with amount)
+        main_recipient = None
+        total_entity_amount = 0
+        
+        for rel in entity_relationships:
+            # Skip org entities (usually 0 amount)
+            if rel.get('role', '').lower() == 'org':
+                continue
+                
+            amount = rel.get('total_amount', 0)
+            if amount:
+                total_entity_amount += amount
+                
+                # Prioritize sponsors/creditors
+                if not main_recipient or rel.get('role', '').lower() in ['sponsorafmname', 'creditor', 'sponsor']:
+                    main_recipient = {
+                        'afm': rel.get('entity', {}).get('afm'),
+                        'name': rel.get('entity', {}).get('name'),
+                        'amount': amount,
+                        'role': rel.get('role')
+                    }
+        
+        # Add entity data to response
+        data['entity_amount'] = total_entity_amount if total_entity_amount > 0 else None
+        data['main_recipient'] = main_recipient
+        data['entity_count'] = len([r for r in entity_relationships if r.get('role', '').lower() != 'org'])
+    
+    return data
+

@@ -19,6 +19,9 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
   const primaryAmount = decision.amount;
   const hasAmountDiscrepancy = decision.has_amount_discrepancy;
   
+  // Check if entity data is already included in decision (from optimized endpoint)
+  const hasPreloadedEntityData = decision.entity_amount !== undefined || decision.main_recipient !== undefined;
+  
   const handleViewContent = async () => {
     if (documentContent) {
       setShowContent(!showContent);
@@ -106,15 +109,27 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
     navigate(`/decision/${decision.id}`);
   };
 
-  // Auto-load entities on mount
+  // Auto-load entities on mount (only if not preloaded)
   useEffect(() => {
-    if (!entityRelationships && !loadingEntities) {
+    if (!hasPreloadedEntityData && !entityRelationships && !loadingEntities) {
       handleViewEntities();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Get the main recipient/sponsor with amount
   const getMainRecipient = () => {
+    // If we have preloaded data from optimized API, use it
+    if (hasPreloadedEntityData && decision.main_recipient) {
+      return {
+        entity: {
+          afm: decision.main_recipient.afm,
+          name: decision.main_recipient.name,
+        },
+        total_amount: decision.main_recipient.amount,
+      };
+    }
+    
+    // Otherwise use loaded entity relationships
     if (!entityRelationships?.relationships) return null;
     
     // First try to find sponsor or creditor with amount
@@ -137,6 +152,11 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
   
   // Calculate total amount from all entities if no main recipient
   const getTotalAmount = () => {
+    // If we have preloaded entity amount, use it
+    if (hasPreloadedEntityData && decision.entity_amount) {
+      return decision.entity_amount;
+    }
+    
     if (mainRecipient?.total_amount) return mainRecipient.total_amount;
     
     if (entityRelationships?.relationships) {

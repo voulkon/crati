@@ -49,9 +49,9 @@ const HomePage = () => {
         setTopOrganizations(organizationsResponse.data.organizations || []);
         setSystemStats(systemResponse.data);
 
-        // Get recent high-value decisions
+        // Get recent high-value decisions using optimized endpoint
         const decisionsResponse = await apiClient.get(
-          `/explore/decisions/?start_date=${weekAgo}&end_date=${today}&sort_by=amount_desc&page_size=5&min_amount=50000`
+          `/explore/decisions-optimized/?start_date=${weekAgo}&end_date=${today}&sort_by=entity_amount_desc&page_size=5`
         );
         setRecentDecisions(decisionsResponse.data.results || []);
 

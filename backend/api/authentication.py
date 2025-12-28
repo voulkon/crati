@@ -7,18 +7,18 @@ from diavgeia_project.security_tracing import security_tracer, get_client_ip
 from loguru import logger
 class ClerkAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
-        logger.info(f"ClerkAuthentication.authenticate called for {request.path}")
+        logger.debug(f"ClerkAuthentication.authenticate called for {request.path}")
         auth_header = request.META.get("HTTP_AUTHORIZATION")
-        logger.info(f"Auth header present: {bool(auth_header)}")
+        logger.debug(f"Auth header present: {bool(auth_header)}")
         if not auth_header or not auth_header.startswith("Bearer "):
             logger.warning("No Bearer token found, skipping Clerk auth")
             return None  # No token provided, let other auth methods try
 
         token = auth_header.split(" ")[1]
-        logger.info(f"Token extracted: {token[:20]}...")
+        logger.debug(f"Token extracted: {token[:20]}...")
 
         try:
-            logger.info("Attempting JWT decode...")
+            logger.debug("Attempting JWT decode...")
             # Verify JWT token with Clerk's public key
             # Note: Clerk doesn't always include 'aud' claim, so we skip audience verification
             payload = jwt.decode(
@@ -27,7 +27,7 @@ class ClerkAuthentication(authentication.BaseAuthentication):
                 algorithms=["RS256"],
                 options={"verify_exp": True, "verify_aud": False},
             )
-            logger.info(f"JWT decoded successfully, sub: {payload.get('sub')}")
+            logger.debug(f"JWT decoded successfully, sub: {payload.get('sub')}")
 
             clerk_id = payload.get("sub")
             if not clerk_id:

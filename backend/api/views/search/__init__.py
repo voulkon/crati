@@ -33,6 +33,7 @@ from .temporal_exploration import (
     explore_date_range_api_dev,
     explore_statistics_api_dev,
     explore_decisions_api_dev,
+    explore_decisions_optimized_api,
     explore_decision_types_api_dev,
     explore_organizations_api_dev,
 )

@@ -1,10 +1,12 @@
-/* Add any layout-specific styling here if needed */
-
-.top-controls-container {
-  /* Base styles that apply to all layouts */
+/* Logo container - always on the left */
+.logo-container {
+  position: fixed;
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  z-index: 1000;
 }
 
-/* Suggested code changes */
+/* Top controls - other UI elements */
 .top-controls {
   position: fixed;
   z-index: 1000;

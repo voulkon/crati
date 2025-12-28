@@ -9,8 +9,8 @@ services:
       - "16686"
       - "4317"  # OTLP gRPC
       - "4318"  # OTLP HTTP
-    ports:
-      - "16686"
+    # ports:
+    #   - "16686"
     networks: 
       - diavgeia-net
 

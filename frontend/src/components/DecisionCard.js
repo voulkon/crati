@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../contexts/TranslationContext';
 import apiClient from '../api/client';
@@ -106,111 +106,97 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
     navigate(`/decision/${decision.id}`);
   };
 
+  // Auto-load entities on mount
+  useEffect(() => {
+    if (!entityRelationships && !loadingEntities) {
+      handleViewEntities();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Get the main recipient/sponsor with amount
+  const getMainRecipient = () => {
+    if (!entityRelationships?.relationships) return null;
+    
+    // First try to find sponsor or creditor with amount
+    let recipient = entityRelationships.relationships.find(rel => 
+      (rel.role?.toLowerCase().includes('sponsor') || rel.role?.toLowerCase().includes('creditor')) 
+      && rel.total_amount
+    );
+    
+    // If no sponsor/creditor found, try to find ANY entity with an amount (excluding org which is usually 0)
+    if (!recipient) {
+      recipient = entityRelationships.relationships.find(rel => 
+        rel.total_amount && rel.role?.toLowerCase() !== 'org'
+      );
+    }
+    
+    return recipient;
+  };
+
+  const mainRecipient = getMainRecipient();
+  
+  // Calculate total amount from all entities if no main recipient
+  const getTotalAmount = () => {
+    if (mainRecipient?.total_amount) return mainRecipient.total_amount;
+    
+    if (entityRelationships?.relationships) {
+      const total = entityRelationships.relationships
+        .filter(rel => rel.role?.toLowerCase() !== 'org') // Exclude org amounts
+        .reduce((sum, rel) => {
+          return sum + (rel.total_amount || 0);
+        }, 0);
+      if (total > 0) return total;
+    }
+    
+    return decision.amount || null;
+  };
+
+  const displayAmount = getTotalAmount();
+
   return (
     <div className={`decision-card ${isLastItem ? 'last-item' : ''}`}>
-      <div className="decision-header">
-        <div className="decision-content">
-          {/* Make ADA clickable */}
-          <div className="decision-ada">
-            <span className="ada-label">ADA: </span>
-            <button 
-              className="ada-link clickable-entity"
-              onClick={handleAdaClick}
-              title={t('decisionCard.viewDecisionDetails')}
-            >
-              {decision.ada}
-            </button>
-          </div>
-          <div className="decision-subject">
-            {decision.subject}
-          </div>
-          
-          {/* Organization Information - Clickable */}
-          {decision.organization && (
-            <div className="decision-organization">
-              <span className="organization-label">{t('decisionCard.organization')}:</span>
-              <button 
-                className="organization-name clickable-entity"
-                onClick={() => handleOrganizationClick(decision.organization.uid)}
-                title={t('decisionCard.viewOrganizationDetails')}
-              >
-                {decision.organization.label}
-              </button>
-            </div>
-          )}
+      {/* Clickable Title */}
+      <button 
+        className="decision-subject clickable-title"
+        onClick={handleAdaClick}
+        title={t('decisionCard.viewDecisionDetails')}
+      >
+        {decision.subject}
+      </button>
 
-          {/* Signers Information - Clickable */}
-          {decision.signers && decision.signers.length > 0 && (
-            <div className="decision-signers">
-              <span className="signers-label">
-                {decision.signers.length === 1 ? t('decisionCard.signer') : t('decisionCard.signers')}:
-              </span>
-              <div className="signers-list">
-                {decision.signers.map((signer, signerIndex) => (
-                  <span key={signer.uid || signerIndex}>
-                    <button 
-                      className="signer-name clickable-entity"
-                      onClick={() => handleSignerClick(signer.uid)}
-                      title={t('decisionCard.viewSignerDetails')}
-                    >
-                      {signer.first_name} {signer.last_name}
-                    </button>
-                    {signerIndex < decision.signers.length - 1 && <span className="signer-separator">, </span>}
-                  </span>
-                ))}
+      {/* Simple recipient and amount display */}
+      <div className="decision-main-info">
+        {loadingEntities ? (
+          <div className="loading-state">⏳ {t('common.loading')}</div>
+        ) : (
+          <>
+            <div className="amount-display">
+              {formatAmount(displayAmount)}
+            </div>
+            {mainRecipient && (
+              <div className="recipient-display">
+                → <button
+                  className="recipient-name"
+                  onClick={() => handleEntityClick(mainRecipient.entity.afm)}
+                  title={t('decisionCard.viewEntityDetails')}
+                >
+                  {mainRecipient.entity.name}
+                </button>
               </div>
-            </div>
-          )}
-        </div>
-        
-        <span className={`status-badge ${decision.status.toLowerCase()}`}>
-          {decision.status}
-        </span>
-      </div>
-
-      <div className="decision-amounts">
-        <div className="amount-item">
-          <div className="amount-label">{t('decisionCard.primaryAmount')}</div>
-          <div className={`amount-value ${hasAmountDiscrepancy ? 'discrepancy' : ''}`}>
-            {formatAmount(primaryAmount)}
-          </div>
-        </div>
-
-        {kaeTotal !== null && (
-          <div className="amount-item">
-            <div className="amount-label">
-              {t('decisionCard.kaeTotal', { count: decision.kae_amounts?.length || 0 })}
-            </div>
-            <div className={`amount-value ${hasAmountDiscrepancy ? 'discrepancy' : ''}`}>
-              {formatAmount(kaeTotal)}
-            </div>
-          </div>
+            )}
+          </>
         )}
-
-        <div className="amount-item">
-          <div className="amount-label">{t('decisionCard.issueDate')}</div>
-          <div className="date-value">
-            {new Date(decision.issue_date).toLocaleDateString('en-GB', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric'
-            })}
-          </div>
+        
+        <div className="decision-date">
+          📅 {new Date(decision.issue_date).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+          })}
         </div>
       </div>
 
-      {hasAmountDiscrepancy && (
-        <div className="discrepancy-warning">
-          <div className="warning-title">
-            ⚠️ {t('decisionCard.amountDiscrepancyDetected')}
-          </div>
-          <div className="warning-text">
-            {t('decisionCard.amountDiscrepancyText', { percentage: decision.discrepancy_percentage })}
-          </div>
-        </div>
-      )}
-
-      {/* Document Actions Section */}
+      {/* Document Actions Section - Compact */}
       <div className="document-actions">
         {decision.document_url && (
           <a 
@@ -218,9 +204,9 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
             target="_blank"
             rel="noopener noreferrer"
             className="document-link original"
+            title={t('decisionCard.viewOriginalDocument')}
           >
             📄 {t('decisionCard.viewOriginalDocument')}
-            <span className="external-icon">↗</span>
           </a>
         )}
 
@@ -229,99 +215,23 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
             onClick={handleViewContent}
             disabled={isLoadingContent}
             className="document-link content-button"
+            title={showContent ? t('decisionCard.hideDocumentContent') : t('decisionCard.viewDocumentContent')}
           >
-            {isLoadingContent ? (
-              <>
-                ⏳ {t('common.loading')}
-              </>
-            ) : (
-              <>
-                📋 {showContent ? t('decisionCard.hideDocumentContent') : t('decisionCard.viewDocumentContent')}
-              </>
-            )}
+            {isLoadingContent ? '⏳' : showContent ? '⬆️' : '⬇️'} {showContent ? t('decisionCard.hideText') : t('decisionCard.showText')}
           </button>
         )}
-
-        <button 
-          onClick={handleViewEntities}
-          disabled={loadingEntities}
-          className="document-link entities-button"
-          title={t('decisionCard.viewRelatedEntities')}
-        >
-          {loadingEntities ? (
-            <>
-              ⏳ {t('common.loading')}
-            </>
-          ) : (
-            <>
-              🏢 {showEntities ? t('decisionCard.hideRelatedEntities') : t('decisionCard.viewRelatedEntities')}
-            </>
-          )}
-        </button>
-
-        {/* NEW: Quick link to full decision details */}
-        <button 
-          onClick={handleAdaClick}
-          className="document-link decision-detail-button"
-          title={t('decisionCard.viewDecisionDetails')}
-        >
-          🔍 {t('decisionCard.viewFullDetails')}
-        </button>
       </div>
 
       {/* Document Content Display */}
       {showContent && documentContent && (
-        <details className="document-content-section" open>
-          <summary className="content-summary">
-            {t('decisionCard.documentContentSummary', { provider: documentContent.provider || t('common.unknown') })}
-          </summary>
+        <div className="document-content-section">
           <div className="document-content">
-            <div className="content-metadata">
-              <span className="content-info">
-                {t('decisionCard.extracted')}: {documentContent.extraction_date ? 
-                  new Date(documentContent.extraction_date).toLocaleDateString('en-GB', {
-                    day: '2-digit',
-                    month: '2-digit',
-                    year: 'numeric'
-                  }) : t('common.unknown')}
-              </span>
-              {documentContent.character_count && (
-                <span className="content-info">
-                  {t('decisionCard.characters')}: {documentContent.character_count.toLocaleString()}
-                </span>
-              )}
-              {documentContent.page_count && (
-                <span className="content-info">
-                  {t('decisionCard.pages')}: {documentContent.page_count}
-                </span>
-              )}
-            </div>
             <div className="raw-text-container">
               <pre className="raw-text">{documentContent.raw_text}</pre>
             </div>
           </div>
-        </details>
+        </div>
       )}
-
-      {/* Entity Relationships Display */}
-      {showEntities && entityRelationships && (
-                <details className="entities-content-section" open>
-          <summary className="entities-summary">
-            {t('decisionCard.relatedEntitiesSummary', { 
-              count: entityRelationships.total_entities || entityRelationships.relationships?.length || 0 
-            })}
-          </summary>
-          <div className="entities-content">
-            <EntityDisplay 
-              entityRelationships={entityRelationships.relationships}
-              showRoleBadge={true}
-              compact={true}
-              className="decision-card-entities"
-            />
-          </div>
-        </details>
-      )
-      }
 
       {decision.kae_amounts && decision.kae_amounts.length > 1 && (
         <details className="kae-breakdown">
@@ -341,63 +251,6 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
           </div>
         </details>
       )}
-
-      {/* NEW: Entity Relationships Section */}
-      <div className="entity-relationships">
-        <div className="section-header" onClick={handleViewEntities} role="button" tabIndex={0}>
-          <h3 className="section-title">
-            {t('decisionCard.entityRelationships')}
-          </h3>
-          <span className="toggle-icon">
-            {showEntities ? '▲' : '▼'}
-          </span>
-        </div>
-
-        {showEntities && (
-          <div className="section-content">
-            {loadingEntities ? (
-              <div className="loading-spinner">
-                ⏳ {t('common.loading')}
-              </div>
-            ) : (
-              <div className="entities-list">
-                {entityRelationships && entityRelationships.length > 0 ? (
-                  entityRelationships.map((entity, index) => (
-                    <div key={entity.afm} className={`entity-item ${index < entityRelationships.length - 1 ? 'has-border' : ''}`}>
-                      <div className="entity-info">
-                        <span className="entity-label">{t('decisionCard.entity')}:</span>
-                        <span className="entity-value">{entity.entity_name}</span>
-                      </div>
-                      <div className="entity-actions">
-                        <button 
-                          onClick={() => handleEntityClick(entity.afm)}
-                          className="entity-link"
-                          title={t('decisionCard.viewEntityDetails')}
-                        >
-                          {t('decisionCard.viewDetails')}
-                        </button>
-                        {entity.company_id && (
-                          <button 
-                            onClick={() => handleCompanyClick(entity.company_id)}
-                            className="company-link"
-                            title={t('decisionCard.viewCompanyDetails')}
-                          >
-                            {t('decisionCard.viewCompany')}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="no-entities">
-                    {t('decisionCard.noEntityRelationships')}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 };

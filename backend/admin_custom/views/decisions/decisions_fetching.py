@@ -1,14 +1,19 @@
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
+from django.core.management import call_command
 from datetime import date, datetime, timedelta
 from loguru import logger
+from io import StringIO
 
 @staff_member_required
 def fetch_daily_decisions(request):
-    """Admin view to trigger fetching decisions for a specific day"""
+    """Admin view to trigger fetching decisions for a specific day using the management command"""
     if request.method == "POST":
         target_date_str = request.POST.get("date")
-        force = request.POST.get("force", False)
+        force = request.POST.get("force", "false").lower() == "true"
+        reconcile = request.POST.get("reconcile", "true").lower() == "true"  # Default to true
+        distributed = request.POST.get("distributed", "false").lower() == "true"
+        incremental = request.POST.get("incremental", "false").lower() == "true"
 
         try:
             target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
@@ -18,39 +23,75 @@ def fetch_daily_decisions(request):
             )
 
         try:
-            # Import here to avoid circular imports
-            from core.fetchers.diavgeia_fetcher import DiavgeiaFetcher
-            from core.importers.decisions import DecisionImporter
-            from core.services.decision_ingestion_service import (
-                DecisionIngestionService,
-            )
-
-            # Create service components
-            fetcher = DiavgeiaFetcher()
-            decision_importer = DecisionImporter()
-            service = DecisionIngestionService(
-                diavgeia_fetcher=fetcher,
-                decision_importer=decision_importer,
-            )
-
-            # Fetch decisions for the day
-            result = service.fetch_daily_decisions(
-                target_date=target_date, save_to_db=True
-            )
-
-            return JsonResponse(
-                {
-                    "success": True,
-                    "message": f'Successfully fetched {result["processed_count"]} decisions for {target_date}',
-                    "processed_count": result["processed_count"],
-                    "date": target_date.isoformat(),
+            # Build command arguments
+            cmd_args = ["--date", target_date.isoformat()]
+            
+            if force:
+                cmd_args.append("--force")
+            if reconcile and not incremental:  # Reconcile doesn't apply to incremental
+                cmd_args.append("--reconcile")
+            if distributed and not incremental:  # Distributed only for daily sync
+                cmd_args.append("--distributed")
+            if incremental:
+                cmd_args.append("--incremental")
+            
+            # Capture command output
+            output = StringIO()
+            
+            # Execute the management command
+            call_command("import_decisions_daily", *cmd_args, stdout=output)
+            
+            command_output = output.getvalue()
+            
+            # Parse output for key information
+            processed_count = "N/A"
+            log_file = None
+            task_id = None
+            
+            for line in command_output.split('\n'):
+                if 'Processed' in line or 'processed' in line:
+                    # Try to extract count
+                    import re
+                    match = re.search(r'(\d+)\s+decisions', line)
+                    if match:
+                        processed_count = match.group(1)
+                if 'Logs' in line or 'logs' in line or 'log_file' in line.lower():
+                    # Extract log file path
+                    match = re.search(r'/code/logs/[^\s]+', line)
+                    if match:
+                        log_file = match.group(0)
+                if 'task ID' in line or 'Task ID' in line:
+                    # Extract Celery task ID for distributed mode
+                    match = re.search(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', line)
+                    if match:
+                        task_id = match.group(0)
+            
+            response_data = {
+                "success": True,
+                "message": f"Successfully initiated import for {target_date}",
+                "date": target_date.isoformat(),
+                "processed_count": processed_count,
+                "command_output": command_output,
+                "options": {
+                    "force": force,
+                    "reconcile": reconcile,
+                    "distributed": distributed,
+                    "incremental": incremental
                 }
-            )
+            }
+            
+            if log_file:
+                response_data["log_file"] = log_file
+            if task_id:
+                response_data["task_id"] = task_id
+                response_data["message"] = f"Distributed import dispatched for {target_date}. Task ID: {task_id}"
+            
+            return JsonResponse(response_data)
 
         except Exception as e:
-            logger.error(f"Error fetching decisions for {target_date}: {str(e)}")
+            logger.error(f"Error executing import command for {target_date}: {str(e)}", exc_info=True)
             return JsonResponse(
-                {"success": False, "error": f"Failed to fetch decisions: {str(e)}"},
+                {"success": False, "error": f"Failed to execute import: {str(e)}"},
                 status=500,
             )
 

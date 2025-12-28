@@ -467,10 +467,30 @@
         <a href="?date={{ next_date|date:'Y-m-d' }}">{{ next_date|date:'M d, Y' }} &rarr;</a>
     {% endif %}
     
-    <!-- Fetch button -->
-    <button id="fetch-button" class="fetch-button" onclick='fetchDecisions("{{ target_date|date:"Y-m-d" }}")'>
-        🔄 Fetch Day
-    </button>
+    <!-- Fetch button with options -->
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 10px;">
+        <button id="fetch-button" class="fetch-button" onclick='fetchDecisions("{{ target_date|date:"Y-m-d" }}")'>
+            🔄 Fetch Day
+        </button>
+        <div style="display: flex; gap: 15px; font-size: 12px;">
+            <label style="cursor: pointer;">
+                <input type="checkbox" id="opt-distributed" checked>
+                <span title="🚀 DISTRIBUTED MODE&#10;&#10;Uses Celery to process decisions in parallel (~30 worker tasks).&#10;&#10;✓ Faster for large batches (~1500 decisions)&#10;✓ Better resource utilization&#10;✓ Non-blocking (runs in background)&#10;&#10;⚠️ Requires Celery workers to be running&#10;⚠️ Results appear after a few minutes&#10;&#10;Default: ON (recommended for daily imports)">🚀 Distributed</span>
+            </label>
+            <label style="cursor: pointer;">
+                <input type="checkbox" id="opt-reconcile" checked>
+                <span title="📊 RECONCILE MODE&#10;&#10;Compares your imported count with official Diavgeia API statistics.&#10;&#10;✓ Validates data completeness&#10;✓ Shows detailed analysis if discrepancy > 5%&#10;✓ Identifies missing or extra decisions&#10;&#10;Displays:&#10;  • Official count vs. your count&#10;  • Percentage difference&#10;  • Top organizations and types&#10;&#10;Default: ON (recommended for quality assurance)">📊 Reconcile</span>
+            </label>
+            <label style="cursor: pointer;">
+                <input type="checkbox" id="opt-force">
+                <span title="⚠️ FORCE MODE&#10;&#10;Re-imports decisions even if they were already processed for this date.&#10;&#10;Use when:&#10;  • You suspect incomplete/corrupted data&#10;  • You want to refresh existing decisions&#10;  • You need to re-run after a bug fix&#10;&#10;⚠️ WARNING:&#10;  • May create duplicate work&#10;  • Slower than normal import&#10;  • Updates existing records&#10;&#10;Default: OFF (use only when needed)">⚠️ Force</span>
+            </label>
+            <label style="cursor: pointer;">
+                <input type="checkbox" id="opt-incremental">
+                <span title="⚡ INCREMENTAL MODE&#10;&#10;Syncs only NEW decisions published since your last import (timestamp-based).&#10;&#10;Use when:&#10;  • You want to catch up on recent changes&#10;  • Running multiple imports per day&#10;  • You need fast updates&#10;&#10;✓ Much faster than full day import&#10;✓ Automatically finds new decisions&#10;&#10;⚠️ NOTE:&#10;  • Ignores the date picker (uses last sync time)&#10;  • Cannot be combined with Distributed/Reconcile&#10;  • Only fetches decisions published after last import&#10;&#10;Default: OFF (use for quick updates)">⚡ Incremental</span>
+            </label>
+        </div>
+    </div>
 </div>
 
 {% if analysis.is_weekend and not analysis.has_data %}
@@ -848,9 +868,15 @@ function fetchDecisions(date) {
     const button = document.getElementById('fetch-button');
     const loading = document.getElementById('loading');
     
+    // Get checkbox values
+    const distributed = document.getElementById('opt-distributed').checked;
+    const reconcile = document.getElementById('opt-reconcile').checked;
+    const force = document.getElementById('opt-force').checked;
+    const incremental = document.getElementById('opt-incremental').checked;
+    
     // Disable button and show loading
     button.disabled = true;
-    button.textContent = 'Fetching...';
+    button.textContent = incremental ? 'Syncing...' : (distributed ? 'Dispatching...' : 'Fetching...');
     loading.style.display = 'block';
     
     // Get CSRF token
@@ -858,22 +884,56 @@ function fetchDecisions(date) {
                      document.querySelector('meta[name=csrf-token]')?.getAttribute('content') ||
                      '{{ csrf_token }}';
     
+    // Build request body
+    const params = new URLSearchParams({
+        date: date,
+        distributed: distributed,
+        reconcile: reconcile,
+        force: force,
+        incremental: incremental,
+        csrfmiddlewaretoken: csrfToken
+    });
+    
     fetch('/api/admin/decisions/fetch-daily/', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             'X-CSRFToken': csrfToken,
         },
-        body: `date=${date}&csrfmiddlewaretoken=${csrfToken}`
+        body: params.toString()
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showAlert(data.message, 'success');
-            // Reload the page after a short delay to show updated analysis
-            setTimeout(() => {
-                window.location.reload();
-            }, 2000);
+            let message = data.message;
+            
+            // Add log file info if available
+            if (data.log_file) {
+                message += `\n\nLogs: ${data.log_file}`;
+            }
+            
+            // Add task ID for distributed mode
+            if (data.task_id) {
+                message += `\n\nMonitor with: python manage.py monitor_distributed_import --status`;
+            }
+            
+            // Show command output in console
+            if (data.command_output) {
+                console.log('=== Import Command Output ===');
+                console.log(data.command_output);
+            }
+            
+            showAlert(message, 'success');
+            
+            // Only reload if not distributed (distributed is async)
+            if (!data.task_id) {
+                setTimeout(() => {
+                    window.location.reload();
+                }, 3000);
+            } else {
+                // For distributed, show message and don't reload immediately
+                showAlert('Distributed import running in background. Refresh page in a few minutes.', 'info');
+            }
         } else {
             showAlert(data.error || 'An error occurred', 'error');
         }

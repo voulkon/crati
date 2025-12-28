@@ -1,0 +1,1 @@
+python manage.py create_superuser my_real_mail@gmail.com my_actual_username my_very_strong_password

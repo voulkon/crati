@@ -19,6 +19,9 @@ class Command(BaseCommand):
         username = options.get('username') or os.environ.get('DJANGO_SUPERUSER_USERNAME', 'admin')
         password = options.get('password') or os.environ.get('DJANGO_SUPERUSER_PASSWORD', 'password')
         
+        # Check if we should auto-update existing superuser (default: False for safety)
+        auto_update = os.getenv("DJANGO_SUPERUSER_AUTO_UPDATE", "False").lower() in ("true", "1", "t")
+        
         # Check if stealth mode with allowlist is enabled
         stealth_mode = os.getenv("STEALTH_MODE", "False").lower() in ("true", "1", "t")
         stealth_allowlist = os.getenv("STEALTH_ALLOWLIST", "False").lower() in ("true", "1", "t")
@@ -27,18 +30,28 @@ class Command(BaseCommand):
         existing_superuser = User.objects.filter(is_superuser=True).first()
         
         if existing_superuser:
-            # Update existing superuser
-            existing_superuser.email = email
-            existing_superuser.username = username
-            existing_superuser.set_password(password)
-            existing_superuser.save()
-            
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f'Superuser "{username}" updated successfully (email: {email})'
+            if auto_update:
+                # Update existing superuser
+                existing_superuser.email = email
+                existing_superuser.username = username
+                existing_superuser.set_password(password)
+                existing_superuser.save()
+                
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f'Superuser "{username}" updated successfully (email: {email})'
+                    )
                 )
-            )
-            user = existing_superuser
+                user = existing_superuser
+            else:
+                # Don't update, just ensure they're in allowlist if needed
+                self.stdout.write(
+                    self.style.WARNING(
+                        f'Superuser already exists (username: {existing_superuser.username}). '
+                        'Set DJANGO_SUPERUSER_AUTO_UPDATE=true to auto-update credentials.'
+                    )
+                )
+                user = existing_superuser
         else:
             # Create new superuser
             user = User.objects.create_superuser(

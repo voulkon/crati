@@ -1,7 +1,6 @@
 services:
 
   # ───────────────────── Observability ──────────────────────
-  # port: 16686
   jaeger:
     image: jaegertracing/all-in-one:latest
     environment:
@@ -12,6 +11,8 @@ services:
       - "4318"  # OTLP HTTP
     networks: 
       - diavgeia-net
+    labels:
+      - 'caddy_0.handle_path.0_reverse_proxy={{upstreams 16686}}'
 
   loki:
     image: grafana/loki:latest

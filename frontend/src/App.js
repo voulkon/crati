@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { SignedIn, SignedOut, RedirectToSignIn, useAuth } from '@clerk/clerk-react';
 import HomePage from "./pages/HomePage";
@@ -18,11 +18,18 @@ import TopControls from './components/TopControls';
 import './index.css';
 import RateLimitIndicator from './components/RateLimitIndicator';
 import RateLimitModal from './components/RateLimitModal';
+import { setTokenGetter } from './api/client';
 
 // Authentication wrapper component with allowlist check
 function AuthenticatedApp({ controlsLayout }) {
+  const { getToken } = useAuth();
   const stealthAllowlist = process.env.REACT_APP_STEALTH_ALLOWLIST === 'true';
   const { isAllowed, isChecking } = useAllowlistCheck();
+  
+  // Set up the token getter for API client
+  useEffect(() => {
+    setTokenGetter(getToken);
+  }, [getToken]);
   
   // If allowlist is enabled, check if user is allowed
   if (stealthAllowlist) {

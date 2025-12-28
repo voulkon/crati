@@ -9,6 +9,8 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.db import models
 from rest_framework import status
+from rest_framework.request import Request
+from rest_framework.authentication import get_authorization_header
 
 
 class StealthModeMiddleware:
@@ -29,6 +31,10 @@ class StealthModeMiddleware:
         self.stealth_allowlist = getattr(settings, 'STEALTH_ALLOWLIST', False)
         
     def __call__(self, request):
+        # Allow OPTIONS requests (CORS preflight) without authentication
+        if request.method == 'OPTIONS':
+            return self.get_response(request)
+        
         # Only enforce in stealth mode and for API endpoints
         if self.stealth_mode and request.path.startswith('/api/'):
             # Exempt health check and admin endpoints
@@ -45,8 +51,10 @@ class StealthModeMiddleware:
             )
             
             if not is_exempt:
-                # Check if user is authenticated
-                if not request.user or not request.user.is_authenticated:
+                # Manually authenticate using DRF authentication classes
+                user = self._authenticate_request(request)
+                
+                if not user:
                     return JsonResponse(
                         {
                             'error': 'Authentication required',
@@ -56,22 +64,70 @@ class StealthModeMiddleware:
                         status=status.HTTP_401_UNAUTHORIZED
                     )
                 
+                # Attach authenticated user to request for downstream use
+                request.user = user
+                request._dont_enforce_csrf_checks = True
+                
                 # If allowlist is enabled, check if user is allowed
+                # Note: Superusers and staff are always allowed regardless of allowlist
                 if self.stealth_allowlist:
-                    is_allowed = self._check_user_allowed(request.user)
-                    if not is_allowed:
-                        return JsonResponse(
-                            {
-                                'error': 'Access forbidden',
-                                'detail': 'Your account is not authorized to access this application.',
-                                'stealth_mode': True,
-                                'allowlist_enabled': True
-                            },
-                            status=status.HTTP_403_FORBIDDEN
-                        )
+                    # Always allow superusers and staff
+                    if user.is_superuser or user.is_staff:
+                        pass  # Allow through
+                    else:
+                        # Check regular users against allowlist
+                        is_allowed = self._check_user_allowed(user)
+                        if not is_allowed:
+                            return JsonResponse(
+                                {
+                                    'error': 'Access forbidden',
+                                    'detail': 'Your account is not authorized to access this application.',
+                                    'stealth_mode': True,
+                                    'allowlist_enabled': True
+                                },
+                                status=status.HTTP_403_FORBIDDEN
+                            )
         
         response = self.get_response(request)
         return response
+    
+    def _authenticate_request(self, request):
+        """
+        Manually run DRF authentication to check if request has valid credentials.
+        Returns the authenticated user or None.
+        """
+        from django.conf import settings
+        from rest_framework.request import Request as DRFRequest
+        
+        # Wrap Django request in DRF request
+        drf_request = DRFRequest(request)
+        
+        # Try each authentication class configured in REST_FRAMEWORK settings
+        auth_classes = []
+        rest_config = getattr(settings, 'REST_FRAMEWORK', {})
+        auth_class_paths = rest_config.get('DEFAULT_AUTHENTICATION_CLASSES', [])
+        
+        for auth_class_path in auth_class_paths:
+            try:
+                # Import the authentication class
+                module_path, class_name = auth_class_path.rsplit('.', 1)
+                module = __import__(module_path, fromlist=[class_name])
+                auth_class = getattr(module, class_name)
+                auth_classes.append(auth_class())
+            except (ImportError, AttributeError):
+                continue
+        
+        # Try to authenticate with each class
+        for authenticator in auth_classes:
+            try:
+                result = authenticator.authenticate(drf_request)
+                if result is not None:
+                    user, auth = result
+                    return user
+            except Exception:
+                continue
+        
+        return None
     
     def _check_user_allowed(self, user):
         """

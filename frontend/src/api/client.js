@@ -1,5 +1,12 @@
 import axios from 'axios';
 
+// Create a global token getter that will be set by the app
+let getClerkToken = null;
+
+export const setTokenGetter = (getter) => {
+  getClerkToken = getter;
+};
+
 const apiClient = axios.create({
   baseURL: process.env.REACT_APP_API_URL || '/api',
   timeout: 10000,
@@ -9,11 +16,17 @@ const apiClient = axios.create({
 });
 
 // Add interceptors for auth, etc.
-apiClient.interceptors.request.use(config => {
-  // Add auth token if available
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Token ${token}`;
+apiClient.interceptors.request.use(async config => {
+  // Get Clerk token if available
+  if (getClerkToken) {
+    try {
+      const token = await getClerkToken();
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch (error) {
+      console.error('Error getting Clerk token:', error);
+    }
   }
   return config;
 },

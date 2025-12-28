@@ -4,24 +4,30 @@ from django.conf import settings
 import jwt
 from users.models import CustomUser
 from diavgeia_project.security_tracing import security_tracer, get_client_ip
-
+from loguru import logger
 class ClerkAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
+        logger.info(f"ClerkAuthentication.authenticate called for {request.path}")
         auth_header = request.META.get("HTTP_AUTHORIZATION")
+        logger.info(f"Auth header present: {bool(auth_header)}")
         if not auth_header or not auth_header.startswith("Bearer "):
+            logger.warning("No Bearer token found, skipping Clerk auth")
             return None  # No token provided, let other auth methods try
 
         token = auth_header.split(" ")[1]
+        logger.info(f"Token extracted: {token[:20]}...")
 
         try:
+            logger.info("Attempting JWT decode...")
             # Verify JWT token with Clerk's public key
+            # Note: Clerk doesn't always include 'aud' claim, so we skip audience verification
             payload = jwt.decode(
                 token,
                 settings.CLERK_JWT_PUBLIC_KEY,
                 algorithms=["RS256"],
-                audience=settings.CLERK_JWT_AUDIENCE,
-                options={"verify_exp": True},
+                options={"verify_exp": True, "verify_aud": False},
             )
+            logger.info(f"JWT decoded successfully, sub: {payload.get('sub')}")
 
             clerk_id = payload.get("sub")
             if not clerk_id:
@@ -73,15 +79,19 @@ class ClerkAuthentication(authentication.BaseAuthentication):
                 severity="WARNING"
             )
             raise exceptions.AuthenticationFailed("Token expired")
-        except jwt.InvalidTokenError:
+        except jwt.InvalidTokenError as e:
+
+            logger.error(f"JWT validation failed: {str(e)}")
             security_tracer.log_security_event(
                 "authentication.clerk.invalid",
-                {"token_preview": token[:10] + "..."},
+                {"token_preview": token[:10] + "...", "error": str(e)},
                 ip=get_client_ip(request),
                 severity="WARNING"
             )
             raise exceptions.AuthenticationFailed("Invalid token")
         except Exception as e:
+
+            logger.error(f"Unexpected auth error: {str(e)}")
             security_tracer.log_security_event(
                 "authentication.clerk.error",
                 {"error": str(e)},

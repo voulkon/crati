@@ -39,31 +39,105 @@
   border-radius: var(--radius-sm);
 }
 
+/* Metadata Section (Organization & Signers) */
+.decision-metadata {
+  margin-bottom: var(--spacing-md);
+  font-size: var(--font-sm);
+  color: var(--text-color);
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: 0 var(--spacing-xs);
+  flex-wrap: wrap;
+}
+
+.metadata-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  flex: 0 1 auto; /* Allow shrinking, don't force grow equally */
+}
+
+.metadata-icon {
+  color: var(--muted-text);
+  flex-shrink: 0;
+}
+
+.metadata-value {
+  color: var(--text-color);
+  font-weight: 500;
+}
+
+.metadata-value.clickable {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--primary-blue);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  transition: var(--transition-fast);
+}
+
+.metadata-value.clickable:hover {
+  color: var(--dark-blue);
+  text-decoration: underline;
+}
+
+.signers-list-inline {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.separator {
+  color: var(--muted-text);
+}
+
 /* Main Info Section - Amount, Recipient, Date */
 .decision-main-info {
   background: linear-gradient(135deg, #f0f8ff 0%, #ffffff 100%);
-  border: 2px solid var(--primary-blue);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-lg);
+  border: 1px solid var(--primary-blue);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
   margin-bottom: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  margin-left: auto; /* Align to right */
+  max-width: 100%;
+}
+
+.info-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .amount-display {
-  font-size: 2.5rem;
+  font-size: 1.5rem;
   font-weight: var(--font-bold);
   color: var(--secondary-blue);
-  margin-bottom: var(--spacing-sm);
-  text-align: center;
+  margin: 0;
+  white-space: nowrap;
 }
 
 .recipient-display {
-  font-size: var(--font-lg);
-  margin-bottom: var(--spacing-md);
-  text-align: center;
+  font-size: var(--font-md);
+  margin: 0;
+  text-align: left;
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: var(--spacing-sm);
+}
+
+.recipient-arrow {
+  color: var(--muted-text);
 }
 
 .recipient-name {
@@ -76,22 +150,24 @@
   text-decoration: underline;
   text-decoration-style: dotted;
   transition: var(--transition-fast);
-  padding: var(--spacing-xs);
+  padding: 0;
+  text-align: left;
 }
 
 .recipient-name:hover {
   color: var(--dark-blue);
-  background-color: var(--hover-bg);
   text-decoration-style: solid;
-  border-radius: var(--radius-sm);
 }
 
 .decision-date {
-  text-align: center;
-  font-size: var(--font-md);
+  text-align: left;
+  font-size: var(--font-sm);
   color: var(--muted-text);
-  padding-top: var(--spacing-sm);
-  border-top: 1px solid var(--border-color);
+  padding: 0;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
 }
 
 .loading-state {

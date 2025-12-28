@@ -14,17 +14,19 @@ on:
   workflow_dispatch:
     inputs:
       pytorch_version:
-        description: 'PyTorch version (cpu or default for GPU support)'
+        description: 'PyTorch version (cpu for CPU-only, default for GPU support)'
         required: false
-        default: 'default'
+        default: 'cpu'
         type: choice
         options:
-          - default
           - cpu
+          - default
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/worker-base
+  # Default to CPU builds on automated triggers to avoid disk space issues
+  DEFAULT_PYTORCH: cpu
 
 jobs:
   build-and-push:
@@ -36,6 +38,18 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Free up disk space
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          echo "Disk space after cleanup:"
+          df -h
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -54,17 +68,17 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             # Tag with branch name and pytorch variant
-            type=raw,value={{branch}}-${{ inputs.pytorch_version || 'default' }}
-            # Tag with 'latest' on main branch (GPU-enabled by default)
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && (inputs.pytorch_version == 'default' || inputs.pytorch_version == '') }}
-            # Tag with 'latest-cpu' on main branch for CPU builds
-            type=raw,value=latest-cpu,enable=${{ github.ref == 'refs/heads/main' && inputs.pytorch_version == 'cpu' }}
-            # Tag with 'preview' on preview branch (GPU-enabled by default)
-            type=raw,value=preview,enable=${{ github.ref == 'refs/heads/preview' && (inputs.pytorch_version == 'default' || inputs.pytorch_version == '') }}
-            # Tag with 'preview-cpu' on preview branch for CPU builds
-            type=raw,value=preview-cpu,enable=${{ github.ref == 'refs/heads/preview' && inputs.pytorch_version == 'cpu' }}
+            type=raw,value={{branch}}-${{ inputs.pytorch_version || env.DEFAULT_PYTORCH }}
+            # Tag with 'latest' on main branch (CPU by default for automated builds)
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && (inputs.pytorch_version == 'cpu' || inputs.pytorch_version == '') }}
+            # Tag with 'latest-gpu' on main branch for GPU builds
+            type=raw,value=latest-gpu,enable=${{ github.ref == 'refs/heads/main' && inputs.pytorch_version == 'default' }}
+            # Tag with 'preview' on preview branch (CPU by default for automated builds)
+            type=raw,value=preview,enable=${{ github.ref == 'refs/heads/preview' && (inputs.pytorch_version == 'cpu' || inputs.pytorch_version == '') }}
+            # Tag with 'preview-gpu' on preview branch for GPU builds
+            type=raw,value=preview-gpu,enable=${{ github.ref == 'refs/heads/preview' && inputs.pytorch_version == 'default' }}
             # Tag with short commit SHA and variant
-            type=sha,prefix={{branch}}-${{ inputs.pytorch_version || 'default' }}-
+            type=sha,prefix={{branch}}-${{ inputs.pytorch_version || env.DEFAULT_PYTORCH }}-
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -75,9 +89,9 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            PYTORCH_VERSION=${{ inputs.pytorch_version || 'default' }}
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ inputs.pytorch_version || 'default' }}
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ inputs.pytorch_version || 'default' }},mode=max
+            PYTORCH_VERSION=${{ inputs.pytorch_version || env.DEFAULT_PYTORCH }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ inputs.pytorch_version || env.DEFAULT_PYTORCH }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ inputs.pytorch_version || env.DEFAULT_PYTORCH }},mode=max
           platforms: linux/amd64
 
       - name: Output image tags

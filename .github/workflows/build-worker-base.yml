@@ -1,26 +1,26 @@
 name: Build and Push Worker Base Image
 
 # Trigger on changes to dependency files or manual dispatch
-on:
-  push:
-    branches:
-      - main
-      - dev
-      - preview
-    paths:
-      - 'backend/pyproject.toml'
-      - 'backend/poetry.lock'
-      - 'docker/Dockerfile.worker-base'
-  workflow_dispatch:
-    inputs:
-      pytorch_version:
-        description: 'PyTorch version (cpu for CPU-only, default for GPU support)'
-        required: false
-        default: 'cpu'
-        type: choice
-        options:
-          - cpu
-          - default
+# on:
+#   push:
+#     branches:
+#       - main
+#       - dev
+#       - preview
+#     paths:
+#       - 'backend/pyproject.toml'
+#       - 'backend/poetry.lock'
+#       - 'docker/Dockerfile.worker-base'
+#   workflow_dispatch:
+#     inputs:
+#       pytorch_version:
+#         description: 'PyTorch version (cpu for CPU-only, default for GPU support)'
+#         required: false
+#         default: 'cpu'
+#         type: choice
+#         options:
+#           - cpu
+#           - default
 
 env:
   REGISTRY: ghcr.io

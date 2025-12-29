@@ -6,33 +6,6 @@ from core.pydantic_models.text_preprocessing import PreprocessingResult
 import pytest
 from core.models.document_analysis import ProcessingProvider
 
-@pytest.fixture
-def corrupted_file_name() -> str:
-    """Fixture to provide the name of a corrupted file."""
-    return "Corrupted_text - 9ΑΦΞ6-ΧΚΗ.pdf"
-
-@pytest.fixture
-def not_corrupted_file_name() -> str:
-    """Fixture to provide the name of a not corrupted file."""
-    return "Not_Corrupted - ΨΑ8Α469Β7Ι-ΤΔΒ.pdf"
-
-@pytest.fixture
-def corrupted_file_path(pdf_for_testing_path, corrupted_file_name) -> Path:
-    """Fixture to provide the path of a corrupted file."""
-    the_path = pdf_for_testing_path / Path(corrupted_file_name)
-    # Ensure the file exists in the test directory
-    if not the_path.exists():
-        raise FileNotFoundError(f"Test file {the_path} does not exist. Please ensure it is present in the test directory.")
-    return the_path
-
-@pytest.fixture
-def not_corrupted_file_path(pdf_for_testing_path, not_corrupted_file_name) -> Path:
-    """Fixture to provide the path of a not corrupted file."""
-    the_path = pdf_for_testing_path / Path(not_corrupted_file_name)
-    # Ensure the file exists in the test directory
-    if not the_path.exists():
-        raise FileNotFoundError(f"Test file {the_path} does not exist. Please ensure it is present in the test directory.")
-    return the_path
 
 @pytest.fixture
 def preprocessor_service() -> TextPreprocessor:

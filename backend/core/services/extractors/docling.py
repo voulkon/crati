@@ -140,11 +140,14 @@ class DoclingExtractor:
                 metadata=metadata,
             )
 
-        except ImportError:
-            raise ImportError(
-                "Docling is not installed. Please install it with 'pip install docling'."
-            )
+        except ImportError as e:
+            # Don't hide the real error - log it and re-raise
+            logger.error(f"ImportError during Docling extraction: {e}")
+            logger.error(f"This is likely a missing optional dependency, not Docling itself")
+            logger.exception("Full traceback:")
+            raise
 
         except Exception as e:
             logger.error(f"Error in Docling extraction: {e}")
+            logger.exception("Full traceback:")
             raise

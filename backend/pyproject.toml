@@ -42,16 +42,33 @@ stamina="^25.1.0"
 python-json-logger="^2.0.7"
 boto3 = "^1.42.0"
 
+[tool.poetry.group.worker]
+optional = false  # Always install with worker
+
 [tool.poetry.group.worker.dependencies]
+# ════════════════════════════════════════════════════════════════════════════
+# Analytics & Data Science Stack (required for analytics module)
+# ════════════════════════════════════════════════════════════════════════════
+# These are explicitly imported in analytics/*.py files
+# Installed in ALL worker modes (both light and full)
+pandas="^2.3.0"          # DataFrame operations
+numpy="^2.3.0"           # Numerical computing
+scipy="^1.15.3"          # Scientific computing
+matplotlib="^3.10.3"     # Plotting (analytics/*)
+seaborn="^0.13.2"        # Statistical visualizations
+networkx="^3.5"          # Graph analysis
+
+[tool.poetry.group.docling]
+optional = true  # Only install when LIGHT_WORKER=false
+
+[tool.poetry.group.docling.dependencies]
+# ════════════════════════════════════════════════════════════════════════════
+# ⚠️ WARNING: EXTREMELY HEAVY (~10GB+ with torch, transformers, OCR models)
+# ════════════════════════════════════════════════════════════════════════════
+# This is THE culprit for the massive Docker image size
+# Only installed when LIGHT_WORKER=false in Docker
+# Provides advanced document extraction (tables, structure, etc.)
 docling="^2.54.0"
-networkx="^3.5"
-matplotlib="^3.10.3"
-seaborn="^0.13.2"
-# scikit-learn="^1.7.0"
-# sentence-transformers="^4.1.0" 
-pandas="^2.3.0"
-numpy="^2.3.0"
-scipy="^1.15.3"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.2.0"

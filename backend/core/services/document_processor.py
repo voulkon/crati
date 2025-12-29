@@ -112,16 +112,15 @@ class TextExtractionProcessor(BaseDocumentProcessor):
     """Handles text extraction from PDFs using various providers"""
 
     # Define extractors as class variables (shared across all instances)
+    # NOTE: PyMuPDF is lightweight and fast (0.5s), Docling is heavy but more accurate (12s+ init)
+    # Use DOCUMENT_EXTRACTOR env var to override: PYMUPDF (default) or DOCLING
     extractors = {
         ProcessingProvider.PYMUPDF: PyMuPDFExtractor(),
-        ProcessingProvider.DOCLING: DoclingExtractor(),
+        # Docling loaded lazily only when needed (see _get_docling_extractor)
         # ProcessingProvider.PLAINTEXT: PlainTextExtractor(),
-        # ! Do Not use this - it's just a poc and total crap
-        # ProcessingProvider.PYPDF: PyPdfExtractor(),
-        # ProcessingProvider.DOCLING: DoclingExtractor(),
     }
-    default_extractor = ProcessingProvider.DOCLING
-    # default_extractor = ProcessingProvider.PYMUPDF
+    default_extractor = ProcessingProvider.PYMUPDF  # Fast, lightweight default
+    # default_extractor = ProcessingProvider.DOCLING  # Heavy, accurate alternative
     
     # Track instance creation for performance monitoring
     _instance_count = 0
@@ -134,6 +133,41 @@ class TextExtractionProcessor(BaseDocumentProcessor):
             f"📊 TextExtractionProcessor instance #{TextExtractionProcessor._instance_count} created "
             f"(PID: {os.getpid()})"
         )
+        
+        # Check LIGHT_WORKER mode first (takes precedence)
+        light_worker = os.getenv('LIGHT_WORKER', 'false').lower() == 'true'
+        
+        if light_worker:
+            # Light mode: force PyMuPDF
+            self.default_extractor = ProcessingProvider.PYMUPDF
+            logger.info("🪶 LIGHT_WORKER mode: Using PyMuPDF extractor (Docling disabled)")
+        else:
+            # Full mode: check DOCUMENT_EXTRACTOR env var for override
+            env_extractor = os.getenv('DOCUMENT_EXTRACTOR', '').upper()
+            if env_extractor == 'DOCLING':
+                self.default_extractor = ProcessingProvider.DOCLING
+                logger.info("🚀 FULL_WORKER mode: Using DOCLING extractor (from DOCUMENT_EXTRACTOR env var)")
+            elif env_extractor == 'PYMUPDF':
+                self.default_extractor = ProcessingProvider.PYMUPDF
+                logger.info("🚀 FULL_WORKER mode: Using PyMuPDF extractor (from DOCUMENT_EXTRACTOR env var)")
+            elif env_extractor:
+                logger.warning(f"⚠️  Unknown DOCUMENT_EXTRACTOR value: {env_extractor}, using default (PyMuPDF)")
+            else:
+                # Default in full mode is still PyMuPDF unless explicitly set
+                logger.info("🚀 FULL_WORKER mode: Using PyMuPDF extractor (default)")
+    
+    def _get_docling_extractor(self):
+        """Lazy-load Docling extractor only when needed to avoid heavy initialization"""
+        if ProcessingProvider.DOCLING not in self.extractors:
+            try:
+                logger.info("⚙️ Lazy-loading Docling extractor (first use)...")
+                self.extractors[ProcessingProvider.DOCLING] = DoclingExtractor()
+                logger.success("✅ Docling extractor loaded successfully")
+            except ImportError as e:
+                logger.error(f"❌ Docling not available: {e}")
+                logger.error("💡 Install worker dependencies: poetry install --with worker")
+                raise RuntimeError("Docling not installed. Use PyMuPDF or install worker group.") from e
+        return self.extractors[ProcessingProvider.DOCLING]
 
     def process_document(self, decision: Decision, provider: str = None) -> bool:
         """
@@ -157,17 +191,28 @@ class TextExtractionProcessor(BaseDocumentProcessor):
 
         # Use the specified provider or default
         provider = provider or self.default_extractor
-        if provider not in self.extractors:
-            logger.error(f"Unknown extraction provider: {provider}")
-            return False
-
+        
         provider_name: str = (
             provider.value
             if isinstance(provider, ProcessingProvider)
             else str(provider)
         )
-
+        
         logger.debug(f"🔧 Using extraction provider: {provider_name}")
+        
+        # Lazy-load Docling if needed
+        if provider == ProcessingProvider.DOCLING:
+            try:
+                extractor = self._get_docling_extractor()
+            except RuntimeError:
+                logger.warning("⚠️  Falling back to PyMuPDF extractor")
+                provider = ProcessingProvider.PYMUPDF
+                extractor = self.extractors[ProcessingProvider.PYMUPDF]
+        elif provider not in self.extractors:
+            logger.error(f"Unknown extraction provider: {provider}")
+            return False
+        else:
+            extractor = self.extractors[provider]
 
         # Check if we already have an extraction
         extraction, created = DocumentExtraction.objects.get_or_create(
@@ -208,10 +253,7 @@ class TextExtractionProcessor(BaseDocumentProcessor):
             start_time = time.time()
             logger.debug(f"🔍 Starting text extraction for {decision.ada}")
 
-            # Get the appropriate extractor
-            extractor = self.extractors[provider]
-
-            # Extract text using the selected provider
+            # Extract text using the selected provider (extractor already fetched above)
             result: ExtractionResult = extractor.extract_text(temp_path)
 
             raw_extracted_text = result.text

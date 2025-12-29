@@ -184,11 +184,12 @@ services:
   worker:
     build:
       context: .
-      dockerfile: docker/Dockerfile.worker.prod
+      dockerfile: docker/Dockerfile.worker
       args:
-        # 'preview' = CPU-only (default), 'preview-gpu' = GPU support
-        # Change to 'latest'/'latest-gpu' when deploying from main branch
-        BASE_IMAGE_TAG: ${WORKER_BASE_IMAGE_TAG:-preview}
+        # Control worker mode via environment variable
+        # LIGHT_WORKER=true  → lightweight (no Docling, ~500MB, 2-3 min build)
+        # LIGHT_WORKER=false → full mode (with Docling, ~13GB, 15+ min build)
+        LIGHT_WORKER: ${LIGHT_WORKER:-false}
     container_name: diavgeia_worker
     command:  ["/bin/sh", "-c", "chmod +x /code/worker_entrypoint.sh && /code/worker_entrypoint.sh"]
     networks:
@@ -208,6 +209,7 @@ services:
       - JAEGER_HOST=${JAEGER_HOST:-jaeger}
       - JAEGER_PORT=${JAEGER_PORT:-4317}
       - GEMI_API_KEY=${GEMI_API_KEY}
+      - LIGHT_WORKER=${LIGHT_WORKER:-false}
 
   beat:
     build:

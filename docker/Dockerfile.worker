@@ -37,12 +37,10 @@ RUN --mount=type=cache,target=/root/.cache/pip \
         poetry install --no-root --no-interaction --no-ansi --without docling; \
     else \
         echo "🚀 FULL_WORKER mode: Installing ALL dependencies (including Docling)..."; \
-        # For full mode, install CPU-only PyTorch first to avoid 4GB+ CUDA packages
-        pip install \
-            torch==2.5.1+cpu \
-            torchvision==0.20.1+cpu \
-            torchaudio==2.5.1+cpu \
-            --index-url https://download.pytorch.org/whl/cpu && \
+        # Let Poetry/Docling handle PyTorch installation
+        # Set pip index to prefer CPU-only wheels to avoid 4GB+ CUDA packages
+        PIP_INDEX_URL=https://download.pytorch.org/whl/cpu \
+        PIP_EXTRA_INDEX_URL=https://pypi.org/simple \
         poetry install --no-root --no-interaction --no-ansi --with docling; \
     fi
 

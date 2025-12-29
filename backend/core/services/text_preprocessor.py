@@ -16,7 +16,7 @@ class TextPreprocessor:
                 dictionary_path: Optional[Path] = None,
                 char_validity_threshold: float = 0.7,
                 detection_ratio_threshold: float = 0.05,  # Deprecated, kept for compatibility
-                coverage_ratio_threshold: float = 0.10,  # % of text words that must be recognizable (10%)
+                coverage_ratio_threshold: float = 0.04,  # % of text words that must be recognizable (5% - lowered for technical documents)
                 verbose: bool = False
                  ):
         

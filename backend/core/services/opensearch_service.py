@@ -3,38 +3,54 @@ import json
 import time
 import math
 from django.conf import settings
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from loguru import logger
 
 class OpenSearchService:
-    def __init__(self):
+    # Class-level connection cache to avoid repeated testing
+    _connection_tested = False
+    _connection_test_time = 0
+    _connection_test_ttl = 300  # Cache connection test for 5 minutes
+    
+    def __init__(self, test_connection: bool = False):
+        """
+        Initialize OpenSearch service.
+        
+        Args:
+            test_connection: If True, force connection test. Otherwise uses cached result.
+        """
         self.opensearch_url = getattr(settings, 'OPENSEARCH_URL', 'http://opensearch:9200')
         self.index_name = 'diavgeia-documents'
         self.max_content_length = 10000
         self.preview_length = 500
         
-        # Test connection on initialization
-        self._test_connection()
+        # Only test connection if explicitly requested or cache expired
+        current_time = time.time()
+        if test_connection or not OpenSearchService._connection_tested or \
+           (current_time - OpenSearchService._connection_test_time) > OpenSearchService._connection_test_ttl:
+            self._test_connection()
+            OpenSearchService._connection_tested = True
+            OpenSearchService._connection_test_time = current_time
     
     def _test_connection(self):
-        """Test OpenSearch connection and log results"""
+        """Test OpenSearch connection and log results at DEBUG level"""
         try:
             response = requests.get(f"{self.opensearch_url}/_cluster/health", timeout=5)
             if response.status_code == 200:
                 health = response.json()
-                logger.info(f"✅ OpenSearch connection OK - Status: {health.get('status')}")
+                logger.debug(f"✅ OpenSearch connection OK - Status: {health.get('status')}")
                 
                 # Test if our index exists
                 index_response = requests.get(f"{self.opensearch_url}/{self.index_name}", timeout=5)
                 if index_response.status_code == 200:
-                    logger.info(f"✅ Index '{self.index_name}' exists")
+                    logger.debug(f"✅ Index '{self.index_name}' exists")
                     
                     # Get document count
                     count_response = requests.get(f"{self.opensearch_url}/{self.index_name}/_count", timeout=5)
                     if count_response.status_code == 200:
                         count_data = count_response.json()
                         doc_count = count_data.get('count', 0)
-                        logger.info(f"📊 Index contains {doc_count} documents")
+                        logger.debug(f"📊 Index contains {doc_count} documents")
                     else:
                         logger.warning(f"❌ Could not get document count: {count_response.status_code}")
                 else:

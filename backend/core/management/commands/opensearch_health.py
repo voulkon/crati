@@ -10,7 +10,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write("=== OpenSearch Health Check ===")
         
-        opensearch_service = OpenSearchService()
+        opensearch_service = OpenSearchService(test_connection=True)
         
         # 1. Test OpenSearch connection
         try:

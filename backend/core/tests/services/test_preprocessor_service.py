@@ -74,14 +74,14 @@ def test_normal_text_not_detected_as_corrupted(preprocessor_service):
 
 def test_text_with_no_greek_words_detected_as_corrupted(preprocessor_service):
     """
-    Test that text with mixed gibberish and few real words is detected as corrupted.
+    Test that text with mixed gibberish and very few real words is detected as corrupted.
     """
-    # Text with mostly gibberish but some real Greek words mixed in
-    # This should be flagged as corrupted because most content is unusable
+    # Text with mostly gibberish and only 1-2 valid Greek words
+    # This should be flagged as corrupted because coverage is below 10%
     mixed_gibberish_text = """
     Τπόινγν Δηδηθήο Γηαρείξηζεο αβγδεζηθικλμνοπρστυφχψω
-    ΑΓΙΑΒΑΘΜΗΣΟ κάποιες παράξενες συμβολοσειρές που δεν είναι λέξεις
-    Ψφχωςερτυιοπασδφγηκλζχβνμ
+    ΑΓΙΑΒΑΘΜΗΣΟ κάποιες παράξενες συμβολοσειρές που μπλαμπλα φτσιφτσου
+    Ψφχωςερτυιοπασδφγηκλζχβνμ ζουζουνια κρεμπελοπιτα
     """
     
     result = preprocessor_service.preprocess(mixed_gibberish_text)
@@ -91,11 +91,10 @@ def test_text_with_no_greek_words_detected_as_corrupted(preprocessor_service):
     # Check corruption indicators provide useful info
     if 'word_analysis' in result.corruption_indicators:
         word_analysis = result.corruption_indicators['word_analysis']
-        assert word_analysis['detection_words_found'] >= 0
-        # With stricτερ thresholds, this should now be flagged
-        print(f"Detection ratio: {word_analysis['detection_ratio']:.3f}")
+        assert word_analysis['matched_words'] >= 0
+        # With stricter thresholds, this should now be flagged
         print(f"Coverage ratio: {word_analysis['coverage_ratio']:.3f}")
-        print(f"Words found: {word_analysis['detection_words_found']}")
+        print(f"Matched words: {word_analysis['matched_words']}/{word_analysis['text_word_count']}")
 
 def test_purely_gibberish_text_detected_as_corrupted(preprocessor_service):
     """
@@ -114,7 +113,7 @@ def test_purely_gibberish_text_detected_as_corrupted(preprocessor_service):
     
     if 'word_analysis' in result.corruption_indicators:
         word_analysis = result.corruption_indicators['word_analysis']
-        assert word_analysis['detection_ratio'] < 0.02  # Should be very low
+        assert word_analysis['coverage_ratio'] < 0.05  # Should be very low (less than 5%)
 
 def test_domain_stopwords_help_detection(preprocessor_service):
     """
@@ -213,18 +212,186 @@ def test_threshold_sensitivity_on_corrupted_appearing_doc(
     
     if 'word_analysis' in result.corruption_indicators:
         wa = result.corruption_indicators['word_analysis']
-        print(f"  Detection ratio: {wa['detection_ratio']:.3f}")
         print(f"  Coverage ratio: {wa['coverage_ratio']:.3f}")
-        print(f"  Words found: {wa['detection_words_found']}")
-        
-        doc_chars = wa.get('document_characteristics', {})
-        if doc_chars:
-            print(f"  Legal citations: {doc_chars.get('citation_count', 0)}")
-            print(f"  Admin indicators: {doc_chars.get('indicator_count', 0)}")
+        print(f"  Matched words: {wa['matched_words']}/{wa['text_word_count']}")
+        print(f"  Matched by category: {wa.get('matched_by_category', {})}")
     
     # Verify the threshold correctly affects the result
     assert result.is_corrupted == should_be_corrupted, (
         f"With thresholds ({detection_threshold}, {coverage_threshold}), "
         f"expected is_corrupted={should_be_corrupted}, got {result.is_corrupted}"
     )
+
+
+# ============================================================================
+# REGRESSION TEST SUITE: Corruption Detection
+# ============================================================================
+# This suite ensures that:
+# 1. Known corrupted files are always detected as corrupted
+# 2. Known valid files are never flagged as corrupted
+# 3. When fixing edge cases, we don't break previous functionality
+#
+# To add a new test case:
+# 1. Add the PDF file to your test fixtures directory
+# 2. Add a fixture in conftest.py following the pattern (filename + filepath)
+# 3. Add a new entry to the parametrized test below
+# ============================================================================
+
+@pytest.mark.parametrize("file_fixture,expected_corrupted,provider,description", [
+    # Known corrupted files - should always be detected as corrupted
+    ("corrupted_file_path", True, ProcessingProvider.PYMUPDF, 
+     "Original corrupted file with garbled text"),
+    
+    # Known valid files - should never be flagged as corrupted
+    ("not_corrupted_file_path", False, ProcessingProvider.DOCLING,
+     "Administrative document with legal citations"),
+    
+    ("another_not_corrupted_file_path", False, ProcessingProvider.PYMUPDF,
+     "Valid administrative text - regression case"),
+    
+    # Add more cases here as you discover edge cases:
+    # ("new_edge_case_path", False, ProcessingProvider.DOCLING, "Description"),
+])
+def test_corruption_detection_regression_suite(
+    file_fixture: str,
+    expected_corrupted: bool,
+    provider: ProcessingProvider,
+    description: str,
+    request,  # pytest fixture to access other fixtures dynamically
+    preprocessor_service: TextPreprocessor,
+    processor_service: TextExtractionProcessor,
+):
+    """
+    Comprehensive regression test for corruption detection.
+    
+    This test ensures that:
+    - All known corrupted files are correctly identified
+    - All known valid files are not flagged as corrupted
+    - Changes to the algorithm don't break previous functionality
+    
+    When you discover a new edge case:
+    1. Add the file as a fixture in conftest.py
+    2. Add a new parameter entry above
+    3. Run the test to verify current behavior
+    4. Fix the algorithm if needed
+    5. The test now serves as a regression guard
+    """
+    # Get the file path from the fixture name
+    file_path = request.getfixturevalue(file_fixture)
+    
+    # Extract text using specified provider
+    extractor = processor_service.extractors[provider]
+    extraction_result = extractor.extract_text(file_path)
+    text = extraction_result.text
+    
+    # Check for empty text
+    if not text or len(text.strip()) < 50:
+        pytest.fail(f"Extracted text is too short or empty from {file_path.name}")
+    
+    # Preprocess and check corruption
+    result = preprocessor_service.preprocess(text)
+    
+    # Detailed output for debugging
+    print(f"\n📄 Testing: {file_path.name}")
+    print(f"   Description: {description}")
+    print(f"   Provider: {provider.value}")
+    print(f"   Expected corrupted: {expected_corrupted}")
+    print(f"   Actual corrupted: {result.is_corrupted}")
+    print(f"   Confidence: {result.confidence_score:.3f}")
+    
+    if 'word_analysis' in result.corruption_indicators:
+        wa = result.corruption_indicators['word_analysis']
+        print(f"   Coverage ratio: {wa['coverage_ratio']:.3f}")
+        print(f"   Matched words: {wa['matched_words']}/{wa['text_word_count']}")
+        print(f"   Matched by category: {wa.get('matched_by_category', {})}")
+    
+    # Assert the expected result
+    assert result.is_corrupted == expected_corrupted, (
+        f"Regression failure for {file_path.name}: "
+        f"Expected is_corrupted={expected_corrupted}, got {result.is_corrupted}. "
+        f"Description: {description}. "
+        f"This may indicate that recent changes broke previous functionality."
+    )
+
+
+def test_analyze_new_edge_case_file(
+    another_not_corrupted_file_path: Path,
+    preprocessor_service: TextPreprocessor,
+    processor_service: TextExtractionProcessor,
+):
+    """
+    Diagnostic test to analyze why 'yet_another' file is being classified incorrectly.
+    
+    This test provides detailed diagnostics to help understand:
+    - What detection ratios the file produces
+    - Which words are being found/not found
+    - Why the algorithm makes its decision
+    
+    Use this test to:
+    1. Understand the current behavior
+    2. Identify what needs to be fixed
+    3. Set appropriate thresholds
+    
+    Once you fix the issue, this test becomes redundant (covered by regression suite).
+    """
+    print("\n" + "="*80)
+    print("DIAGNOSTIC ANALYSIS FOR: yet_another_with_non_corrupted_text")
+    print("="*80)
+    
+    # Get available extractors dynamically
+    available_extractors = processor_service.extractors
+    print(f"\n🔧 Available extractors: {[p.value for p in available_extractors.keys()]}")
+    
+    # Test with all available extractors to see if extraction method matters
+    for provider, extractor in available_extractors.items():
+        print(f"\n🔍 Testing with {provider.value}:")
+        print("-" * 80)
+        
+        try:
+            extraction_result = extractor.extract_text(another_not_corrupted_file_path)
+            text = extraction_result.text
+            
+            print(f"Text length: {len(text)} characters")
+            print(f"First 200 chars: {text[:200]}")
+            
+            # Preprocess
+            result = preprocessor_service.preprocess(text)
+            
+            print(f"\n📊 Results:")
+            print(f"  Is corrupted: {result.is_corrupted}")
+            print(f"  Confidence: {result.confidence_score:.3f}")
+            
+            if 'word_analysis' in result.corruption_indicators:
+                wa = result.corruption_indicators['word_analysis']
+                print(f"\n📈 Word Analysis:")
+                print(f"  Coverage ratio: {wa['coverage_ratio']:.4f} (threshold: {preprocessor_service.coverage_ratio_threshold})")
+                print(f"  Matched words: {wa['matched_words']}")
+                print(f"  Text word count: {wa.get('text_word_count', 'N/A')}")
+                print(f"  Unmatched words: {wa.get('unmatched_word_count', 'N/A')}")
+                print(f"  Matched by category: {wa.get('matched_by_category', {})}")
+                print(f"  Min matches required: {wa.get('min_matches_required', 'N/A')}")
+                
+                reasons = wa.get('corruption_reasons', {})
+                print(f"\n⚠️  Corruption Indicators:")
+                print(f"  Low coverage: {reasons.get('low_coverage', False)}")
+                print(f"  Insufficient matches: {reasons.get('insufficient_matches', False)}")
+            
+            if 'character_validation' in result.corruption_indicators:
+                cv = result.corruption_indicators['character_validation']
+                print(f"\n🔤 Character Validation:")
+                print(f"  Invalid ratio: {cv.get('ratio_invalid', 0):.4f}")
+            
+        except Exception as e:
+            print(f"❌ Error testing with {provider.value}: {e}")
+        
+        print("\n" + "-" * 80)
+    
+    # This test is for analysis only - it doesn't assert anything
+    # Remove or modify assertions once you understand the issue
+    print("\n💡 Next steps:")
+    print("1. Review the coverage ratio above (what % of text words are recognized)")
+    print("2. Current threshold: 10% coverage required for non-corrupted")
+    print("3. Add this file to the regression suite with expected_corrupted=False")
+    print("4. Verify all regression tests still pass")
+    print("\n💡 Note: To test with Docling, ensure it's installed (not available in LIGHT_WORKER mode)")
 

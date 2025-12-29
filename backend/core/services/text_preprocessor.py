@@ -15,12 +15,14 @@ class TextPreprocessor:
                 strategy: CorruptionDetectionStrategy = CorruptionDetectionStrategy.COMMON_WORDS,
                 dictionary_path: Optional[Path] = None,
                 char_validity_threshold: float = 0.7,
-                detection_ratio_threshold: float = 0.05,
-                coverage_ratio_threshold: float = 0.15# Lowered from 8 to 3 for administrative docs
+                detection_ratio_threshold: float = 0.05,  # Deprecated, kept for compatibility
+                coverage_ratio_threshold: float = 0.10,  # % of text words that must be recognizable (10%)
+                verbose: bool = False
                  ):
         
         self.char_validity_threshold = char_validity_threshold
         self.detection_ratio_threshold = detection_ratio_threshold
+        self.verbose = verbose
         self.coverage_ratio_threshold = coverage_ratio_threshold
         
         # Load Greek stopwords - domain-specific terms from Greek government decisions
@@ -49,7 +51,10 @@ class TextPreprocessor:
             # Administrative Actions
             "ΕΚΔΟΣΗ", "ΑΙΤΙΟΛΟΓΙΑ", "ΣΥΝΗΜΜΕΝΑ",
             "ΘΕΣΣΑΛΟΝΙΚΗ", "ΑΘΗΝΑ", "ΗΜΕΡΟΜΗΝΙΑ",
-            "ΕΤΟΣ", "ΑΡΙΘΜΟΣ", "ΚΑΤΑΣΤΑΣΗ"
+            "ΕΤΟΣ", "ΑΡΙΘΜΟΣ", "ΚΑΤΑΣΤΑΣΗ",
+            "ΕΚΔΩΣΑΣ", "ΥΠΟΓΡΑΦΗ", "ΠΡΩΤΟΚΟΛΛΟ",
+            "ΠΡΟΙΣΤΑΜΕΝΟΣ", "ΔΙΕΥΘΥΝΤΗΣ",
+            "ΑΔΑ", 
         }
                 # Greek legal citation patterns (regex patterns for detection)
         self.legal_citation_patterns = [
@@ -73,8 +78,8 @@ class TextPreprocessor:
             
             # Financial terms
             'ΕΝΤΑΛΜΑ', 'ΕΠΙΤΑΓΗ', 'ΛΟΓΑΡΙΑΣΜΟΣ', 'ΤΡΑΠΕΖΑ',
-            'ΠΛΗΡΩΜΗ', 'ΠΡΟΠΛΗΡΩΜΗ', 'ΕΞΟΦΛΗΣΗ',
-            'ΔΑΠΑΝΗ', 'ΕΣΟΔΟ', 'ΚΡΑΤΗΣΗ', 'ΔΙΚΑΙΟΥΧΟΣ',
+            'ΠΛΗΡΩΜΗ', 'ΠΛΗΡΩΜΗΣ', 'ΠΡΟΠΛΗΡΩΜΗ', 'ΕΞΟΦΛΗΣΗ',
+            'ΔΑΠΑΝΗ', 'ΕΣΟΔΟ', 'ΚΡΑΤΗΣΗ','ΚΡΑΤΗΣΕΙΣ', 'ΔΙΚΑΙΟΥΧΟΣ',
             'ΟΙΚΟΝΟΜΙΚ', 'ΛΟΓΙΣΤΗΡΙ', 'ΧΡΗΜΑΤΙΚ',
             
             # Legal/regulatory markers
@@ -192,77 +197,182 @@ class TextPreprocessor:
             logger.warning(f"Failed to initialize gr-nlp-toolkit: {e}")
             self.gr_nlp_pipeline = None
 
+    def _normalize_greek_text(self, text: str) -> str:
+        """Normalize Greek text by removing accents and stress marks for better matching."""
+        # Map accented characters to their non-accented equivalents
+        accent_map = str.maketrans({
+            'ά': 'α', 'έ': 'ε', 'ή': 'η', 'ί': 'ι', 'ό': 'ο', 'ύ': 'υ', 'ώ': 'ω',
+            'Ά': 'Α', 'Έ': 'Ε', 'Ή': 'Η', 'Ί': 'Ι', 'Ό': 'Ο', 'Ύ': 'Υ', 'Ώ': 'Ω',
+            'ΐ': 'ι', 'ΰ': 'υ', 'ϊ': 'ι', 'ϋ': 'υ', 'Ϊ': 'Ι', 'Ϋ': 'Υ'
+        })
+        return text.translate(accent_map)
+
     def _extract_words(self, text: str) -> List[str]:
         """Extract words from text, filtering out numbers and very short tokens."""
         words = re.findall(r'[Α-ΩΆΈΉΊΌΎΏΪΫα-ωάέήίόύώϊϋΐΰ]+', text)
         return [word for word in words if len(word) >= 2]
 
-    def _check_common_words_presence(self, text: str) -> Tuple[bool, float]:
-        """Strategy 1: Check if sufficient common Greek words appear as whole words in the text."""
+    def _check_common_words_presence(self, text: str, verbose: bool = False) -> Tuple[bool, float]:
+        """Strategy 1: Check if sufficient common Greek words appear as whole words in the text.
+        
+        Uses coverage-based approach: checks what % of the text's words are recognizable Greek words.
+        This is more robust than checking what % of our detection word list appears in the text.
+        """
         start_time = time.time()
         
-        # Convert text to lowercase for case-insensitive matching
-        text_lower = text.lower()
-        
-        # Use combined detection words (common + domain-specific + administrative)
-        detection_words = self._get_all_detection_words()
+        # Normalize and convert text to lowercase for better matching
+        text_normalized = self._normalize_greek_text(text.lower())
         
         # Extract actual words from text for comparison
-        text_words = self._extract_words(text_lower)
+        text_words = self._extract_words(text_normalized)
         text_words_set = set(text_words)
-        
-        # Count how many of our detection words are found as whole words
-        found_count = 0
-        total_detection_words = len(detection_words)
-        
-        for word in detection_words:
-            if word in text_words_set:
-                found_count += 1
-        
-        # Calculate ratio of detection words found
-        detection_ratio = found_count / total_detection_words if total_detection_words > 0 else 0
-        
-        # Also calculate ratio relative to total words in text (for additional validation)
         text_word_count = len(text_words)
-        if text_word_count > 0:
-            word_coverage_ratio = found_count / text_word_count
+        
+        if text_word_count == 0:
+            return False, time.time() - start_time
+        
+        # Build normalized detection word sets by category
+        detection_sets = {
+            'common_words': {self._normalize_greek_text(w.lower()) for w in self.common_greek_words},
+            'stopwords': set(),
+            'administrative': set()
+        }
+        
+        # Normalize stopwords (multi-word stopwords broken into individual words)
+        for stopword in self.greek_stopwords:
+            words_in_stopword = self._normalize_greek_text(stopword.lower()).split()
+            detection_sets['stopwords'].update(words_in_stopword)
+        
+        # Normalize administrative indicators
+        for indicator in self.administrative_indicators:
+            clean_indicator = self._normalize_greek_text(indicator.replace('.', '').lower())
+            if len(clean_indicator) >= 2:
+                detection_sets['administrative'].add(clean_indicator)
+        
+        # Combine all detection words
+        all_detection_words = set()
+        for category_words in detection_sets.values():
+            all_detection_words.update(category_words)
+        
+        # Track which text words match which categories
+        matched_text_words = {
+            'common_words': set(),
+            'stopwords': set(),
+            'administrative': set(),
+            'unmatched': set()
+        }
+        
+        for text_word in text_words_set:
+            matched = False
+            if text_word in detection_sets['common_words']:
+                matched_text_words['common_words'].add(text_word)
+                matched = True
+            if text_word in detection_sets['stopwords']:
+                matched_text_words['stopwords'].add(text_word)
+                matched = True
+            if text_word in detection_sets['administrative']:
+                matched_text_words['administrative'].add(text_word)
+                matched = True
+            if not matched:
+                matched_text_words['unmatched'].add(text_word)
+        
+        # Calculate unique matched words (a word might be in multiple categories)
+        unique_matched_words = set()
+        for category in ['common_words', 'stopwords', 'administrative']:
+            unique_matched_words.update(matched_text_words[category])
+        
+        matched_word_count = len(unique_matched_words)
+        
+        # PRIMARY METRIC: What % of text words are recognizable? (Coverage)
+        word_coverage_ratio = matched_word_count / text_word_count if text_word_count > 0 else 0
+        
+        # SECONDARY METRIC: Minimum absolute count for very short texts
+        # For very short texts (<10 words), require at least 2 matches to avoid false positives
+        # For longer texts, coverage ratio is the primary and sufficient metric
+        if text_word_count < 10:
+            min_matches_required = 2
+            has_min_matches = matched_word_count >= min_matches_required
+            # For very short texts, use minimum matches check
+            is_corrupted = not has_min_matches
         else:
-            word_coverage_ratio = 0
-        
-        # Corruption detection: Both thresholds must fail
-        low_detection = detection_ratio < self.detection_ratio_threshold
-        low_coverage = word_coverage_ratio < self.coverage_ratio_threshold
-        
-        is_corrupted = low_detection and low_coverage
+            # For normal/long texts, use coverage ratio exclusively
+            # If less than 10% of words are recognizable, it's corrupted
+            min_matches_required = int(text_word_count * self.coverage_ratio_threshold)  # 10% of text
+            has_min_matches = matched_word_count >= min_matches_required
+            low_coverage = word_coverage_ratio < self.coverage_ratio_threshold
+            is_corrupted = low_coverage
         
         processing_time = time.time() - start_time
         
+        # Verbose logging
+        if verbose:
+            logger.debug("=== Word Detection Detailed Analysis ===")
+            logger.debug(f"Total unique words in text: {text_word_count}")
+            logger.debug(f"Matched (valid) words: {matched_word_count}")
+            logger.debug(f"Unmatched words: {len(matched_text_words['unmatched'])}")
+            logger.debug(f"Coverage ratio: {word_coverage_ratio:.3f} ({word_coverage_ratio*100:.1f}% of text words are valid)")
+            logger.debug(f"Coverage threshold: {self.coverage_ratio_threshold} ({self.coverage_ratio_threshold*100:.1f}%)")
+            logger.debug(f"Minimum matches required: {min_matches_required} (has {matched_word_count})")
+            
+            for category in ['common_words', 'stopwords', 'administrative']:
+                words = matched_text_words[category]
+                logger.debug(f"\n{category.upper()} ({len(words)} matched):")
+                if words:
+                    sample_words = sorted(list(words))[:20]
+                    logger.debug(f"  Matched: {', '.join(sample_words)}")
+                    if len(words) > 20:
+                        logger.debug(f"  ... and {len(words) - 20} more")
+                else:
+                    logger.debug(f"  No matches in this category")
+            
+            # Show unmatched words
+            if matched_text_words['unmatched']:
+                sample_unmatched = sorted(list(matched_text_words['unmatched']))[:30]
+                logger.debug(f"\nUNMATCHED WORDS ({len(matched_text_words['unmatched'])} total):")
+                logger.debug(f"  {', '.join(sample_unmatched)}")
+                if len(matched_text_words['unmatched']) > 30:
+                    logger.debug(f"  ... and {len(matched_text_words['unmatched']) - 30} more")
+        
         # Store detailed stats for debugging
         self.performance_stats['word_detection'] = {
-            'detection_words_found': found_count,
-            'total_detection_words': total_detection_words,
-            'detection_ratio': detection_ratio,
+            'matched_words': matched_word_count,
             'text_word_count': text_word_count,
+            'unmatched_word_count': len(matched_text_words['unmatched']),
             'word_coverage_ratio': word_coverage_ratio,
+            'min_matches_required': min_matches_required,
+            'has_min_matches': has_min_matches,
+            'matched_by_category': {k: len(v) for k, v in matched_text_words.items() if k != 'unmatched'},
+            'is_short_text': text_word_count < 10,
             'corruption_reasons': {
-                'low_detection': low_detection,
-                'low_coverage': low_coverage
+                'low_coverage': word_coverage_ratio < self.coverage_ratio_threshold if text_word_count >= 10 else False,
+                'insufficient_matches': not has_min_matches if text_word_count < 10 else False
             }
         }
         
         if is_corrupted:
-            logger.warning(
-                f"Corruption detected: low detection ratio ({detection_ratio:.3f} < {self.detection_ratio_threshold}) "
-                f"AND low coverage ({word_coverage_ratio:.3f} < {self.coverage_ratio_threshold})"
-            )
+            if text_word_count < 10:
+                logger.warning(
+                    f"Corruption detected (short text): insufficient matches ({matched_word_count} < {min_matches_required})"
+                )
+            else:
+                logger.warning(
+                    f"Corruption detected: low coverage ({word_coverage_ratio:.3f} < {self.coverage_ratio_threshold}) "
+                    f"- only {matched_word_count}/{text_word_count} words matched"
+                )
         else:
-            logger.debug(f"Word detection passed. Found {found_count} detection words out of {total_detection_words} "
-                        f"(detection ratio: {detection_ratio:.3f}, coverage: {word_coverage_ratio:.3f})")
+            logger.debug(
+                f"Word detection passed. {matched_word_count}/{text_word_count} words matched "
+                f"(coverage: {word_coverage_ratio:.3f}, {word_coverage_ratio*100:.1f}%)"
+            )
         
         return is_corrupted, processing_time
 
     def _get_all_detection_words(self) -> Set[str]:
-        """Get combined set of common words, domain stopwords, and administrative indicators for detection."""
+        """Get combined set of common words, domain stopwords, and administrative indicators for detection.
+        
+        Note: This method is now primarily used by other strategies. The common_words strategy
+        tracks categories separately for better diagnostics.
+        """
         detection_words = self.common_greek_words.copy()
         
         # Add domain stopwords (converted to lowercase for consistency)
@@ -284,6 +394,7 @@ class TextPreprocessor:
         start_time = time.time()
         
         if not self.greek_dictionary or len(words) < 10:
+            logger.warning("Greek dictionary not initialized or not enough words to check. Returning no corruption detected.")
             return False, time.time() - start_time
             
         # Sample words for performance (check first 50 words)
@@ -311,6 +422,7 @@ class TextPreprocessor:
         start_time = time.time()
         
         if not self.gr_nlp_pipeline:
+            logger.warning("gr-nlp-toolkit pipeline not initialized. Returning no corruption detected.")
             return False, time.time() - start_time
         
         try:
@@ -450,9 +562,9 @@ class TextPreprocessor:
         if char_corrupted:
             return True
 
-        # Apply strategy-specific heuristics
+        # Apply strategy-specific heuristics, verbose=self.verbose
         if self.strategy == CorruptionDetectionStrategy.COMMON_WORDS:
-            is_corrupted, strategy_time = self._check_common_words_presence(text)
+            is_corrupted, strategy_time = self._check_common_words_presence(text, verbose=True)
             self.performance_stats['common_words'] = strategy_time
             
         elif self.strategy == CorruptionDetectionStrategy.GREEK_DICTIONARY:
@@ -465,7 +577,7 @@ class TextPreprocessor:
             self.performance_stats['gr_nlp_toolkit'] = strategy_time
             
         elif self.strategy == CorruptionDetectionStrategy.HYBRID:
-            # Try common words first (fastest)
+            # Try common words first (fastest), verbose=self.verbose
             common_corrupted, common_time = self._check_common_words_presence(text)
             self.performance_stats['common_words'] = common_time
             
@@ -640,11 +752,13 @@ class TextPreprocessor:
         # Factor 1: Word detection confidence
         if 'word_detection' in self.performance_stats:
             word_stats = self.performance_stats['word_detection']
-            detection_ratio = word_stats.get('detection_ratio', 0)
             coverage_ratio = word_stats.get('word_coverage_ratio', 0)
+            has_min_matches = word_stats.get('has_min_matches', False)
             
-            # Higher ratios = higher confidence in "not corrupted"
-            word_confidence = min(1.0, (detection_ratio * 10) + (coverage_ratio * 2))
+            # Higher coverage = higher confidence in "not corrupted"
+            word_confidence = min(1.0, coverage_ratio * 3)  # Scale up since threshold is 0.10
+            if has_min_matches:
+                word_confidence = max(word_confidence, 0.5)  # Boost if minimum matches met
             confidence_factors.append(word_confidence)
         
         # Factor 2: Character validity confidence
@@ -674,13 +788,14 @@ class TextPreprocessor:
         if 'word_detection' in self.performance_stats:
             word_stats = self.performance_stats['word_detection']
             indicators['word_analysis'] = {
-                'detection_words_found': word_stats.get('detection_words_found', 0),
-                'total_detection_words': word_stats.get('total_detection_words', 0),
-                'detection_ratio': word_stats.get('detection_ratio', 0),
+                'matched_words': word_stats.get('matched_words', 0),
                 'text_word_count': word_stats.get('text_word_count', 0),
+                'unmatched_word_count': word_stats.get('unmatched_word_count', 0),
                 'coverage_ratio': word_stats.get('word_coverage_ratio', 0),
+                'min_matches_required': word_stats.get('min_matches_required', 0),
+                'has_min_matches': word_stats.get('has_min_matches', False),
+                'matched_by_category': word_stats.get('matched_by_category', {}),
                 'thresholds': {
-                    'detection_ratio_threshold': self.detection_ratio_threshold,
                     'coverage_ratio_threshold': self.coverage_ratio_threshold
                 }
             }

@@ -237,7 +237,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.celery-light
     container_name: diavgeia_flower
-    command: celery -A diavgeia_project flower --port=5555
+    command: celery -A diavgeia_project flower --port=5555 --basic-auth=${FLOWER_BASIC_AUTH}
     networks:
       - diavgeia-net
     expose:
@@ -253,6 +253,7 @@ services:
         condition: service_started
     environment:
       - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
+      - FLOWER_BASIC_AUTH=${FLOWER_BASIC_AUTH}
 
   # ───────────────────────── Front end ───────────────────────
   frontend:

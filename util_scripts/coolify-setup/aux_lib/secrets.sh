@@ -144,6 +144,9 @@ BASIC_AUTH_USER=${GEN_BASIC_AUTH_USER}
 BASIC_AUTH_PASSWORD=${GEN_BASIC_AUTH_PASSWORD}
 BASIC_AUTH_HASH=${GEN_BASIC_AUTH_HASH}
 
+# Flower authentication (format: username:password)
+FLOWER_BASIC_AUTH=${GEN_BASIC_AUTH_USER}:${GEN_BASIC_AUTH_PASSWORD}
+
 # ──────────────────────── Service URLs ──────────────────────
 # Public URLs for services (set by Coolify)
 SERVICE_URL_NGINX=https://${env_name}.${domain}

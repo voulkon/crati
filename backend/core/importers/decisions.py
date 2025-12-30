@@ -56,11 +56,12 @@ class DecisionImporter(BaseImporter):
         "decisionTypeId",
     ]
     
-    def __init__(self):
+    def __init__(self, import_job=None):
         # Initialize the organization cache as an instance attribute
         self.org_cache = {}
         # Initialize entity extraction service
         self.entity_extraction_service = EntityExtractionService()
+        self.import_job = import_job
 
     # Fields automatically managed or never updated
     do_not_update_fields = ["created_at", "id"]  # Django auto fields
@@ -876,7 +877,11 @@ class DecisionImporter(BaseImporter):
                 connection.close()
                 
                 # Process this batch
-                batch_created = self.import_many(batch)
+                extra_defaults = {}
+                if self.import_job is not None:
+                    extra_defaults["import_job"] = self.import_job
+
+                batch_created = self.import_many(batch, defaults=extra_defaults)
                 total_created += batch_created
                 
                 # Track successfully processed batch

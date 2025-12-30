@@ -138,18 +138,49 @@ class DecisionPipelineOrchestrator:
             afms = [rel.entity.afm for rel in relationships]
             
             if afms:
-                # Extract parent context from logger for tracing child tasks
-                parent_task_id = logger._core.extra.get('task_id')
-                parent_ada = decision.ada
+                # Check which AFMs need company data fetching
+                from core.models.entities import AFMEntity
+                entities = AFMEntity.objects.filter(afm__in=afms)
                 
-                # Trigger the task with parent context for complete traceability
-                fetch_company_data_for_entities.delay(
-                    afms, 
-                    parent_task_id=parent_task_id, 
-                    parent_ada=parent_ada
-                )
-                # We mark as HEALTHY but technically it's "SCHEDULED". 
-                # A stricter check would verify data presence.
+                # Filter out AFMs that already have recent company data
+                afms_needing_fetch = []
+                afms_already_fetched = []
+                
+                for entity in entities:
+                    if entity.gemi_lookup_attempted and entity.gemi_lookup_success:
+                        afms_already_fetched.append(entity.afm)
+                        logger.info(
+                            f"AFM {entity.afm} already has company data",
+                            companies_count=entity.gemi_companies_count,
+                            last_fetch=entity.gemi_lookup_attempted.isoformat()
+                        )
+                    else:
+                        afms_needing_fetch.append(entity.afm)
+                
+                # Only spawn task if there are AFMs that need fetching
+                if afms_needing_fetch:
+                    logger.info(
+                        f"Spawning company fetch task",
+                        afms_to_fetch=len(afms_needing_fetch),
+                        afms_already_fetched=len(afms_already_fetched)
+                    )
+                    
+                    # Extract parent context from logger for tracing child tasks
+                    parent_task_id = logger._core.extra.get('task_id')
+                    parent_ada = decision.ada
+                    
+                    # Trigger the task with parent context for complete traceability
+                    fetch_company_data_for_entities.delay(
+                        afms_needing_fetch, 
+                        parent_task_id=parent_task_id, 
+                        parent_ada=parent_ada
+                    )
+                else:
+                    logger.info(
+                        f"All AFMs already have company data, skipping fetch",
+                        total_afms=len(afms),
+                        already_fetched=len(afms_already_fetched)
+                    )
             
             self.update_health_status(health_check, 'relations', HealthStatus.HEALTHY)
         except Exception as e:

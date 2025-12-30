@@ -22,6 +22,12 @@ from .document_analysis import (
     DocumentAnalysis,
     DocumentEmbedding,
 )
+from .ai_pricing import (
+    AIModelPricing,
+    TaskOutputEstimate,
+    AIJobDefinition,
+    AIJobExecution,
+)
 from .search_analytics import SearchAnalytics, PopularQuery
 
 from .entities import AFMEntity, DecisionEntityRelationship

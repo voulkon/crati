@@ -11,6 +11,10 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "diavgeia_project.settings")
 # Initialize OpenTelemetry FIRST
 tracer = initialize_otel("diavgeia-celery")
 
+# Configure Loguru for JSON logging BEFORE any Loguru imports
+from .loguru_config import configure_loguru
+configure_loguru()
+
 # Create Celery app
 app = Celery("diavgeia_project")
 app.config_from_object("django.conf:settings", namespace="CELERY")

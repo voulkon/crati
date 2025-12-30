@@ -15,6 +15,36 @@ Usage:
 """
 
 import sys
+import logging
+from pythonjsonlogger import jsonlogger
+
+
+class CustomJsonFormatter(jsonlogger.JsonFormatter):
+    """
+    Custom JSON formatter that properly handles timestamp with milliseconds.
+    """
+    def add_fields(self, log_record, record, message_dict):
+        super(CustomJsonFormatter, self).add_fields(log_record, record, message_dict)
+        
+        # Format timestamp with milliseconds
+        if 'asctime' in log_record:
+            # Convert to our desired format with milliseconds
+            import datetime
+            dt = datetime.datetime.fromtimestamp(record.created)
+            log_record['timestamp'] = dt.strftime('%Y-%m-%d %H:%M:%S.') + f'{int(record.msecs):03d}'
+            del log_record['asctime']
+        
+        # Rename fields to match our desired structure
+        if 'levelname' in log_record:
+            log_record['level'] = log_record.pop('levelname')
+        if 'name' in log_record:
+            log_record['logger'] = log_record.pop('name')
+        if 'funcName' in log_record:
+            log_record['function'] = log_record.pop('funcName')
+        if 'pathname' in log_record:
+            log_record['file'] = log_record.pop('pathname')
+        if 'lineno' in log_record:
+            log_record['line'] = log_record.pop('lineno')
 
 
 def get_json_logging_config(debug_mode=False):
@@ -34,17 +64,8 @@ def get_json_logging_config(debug_mode=False):
         
         'formatters': {
             'json': {
-                '()': 'pythonjsonlogger.json.JsonFormatter',
+                '()': 'diavgeia_project.logging_config_json.CustomJsonFormatter',
                 'format': '%(asctime)s %(name)s %(levelname)s %(message)s %(funcName)s %(pathname)s %(lineno)d',
-                'rename_fields': {
-                    'asctime': 'timestamp',
-                    'levelname': 'level',
-                    'name': 'logger',
-                    'funcName': 'function',
-                    'pathname': 'file',
-                    'lineno': 'line',
-                },
-                'datefmt': '%Y-%m-%d %H:%M:%S.%f',
             },
             'verbose': {
                 'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',

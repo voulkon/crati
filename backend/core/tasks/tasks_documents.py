@@ -38,60 +38,59 @@ def run_decision_pipeline_task(self, ada: str, force_reprocess: bool = False):
     from core.services.pipeline_orchestrator import DecisionPipelineOrchestrator
     import uuid
     
-    try:
-        # Generate task-level ID for Celery task tracking
-        task_id = self.request.id if hasattr(self, 'request') else 'sync'
-        
-        logger.info(f"" * 80)
-        logger.info(f"🚀 Starting FULL pipeline for decision {ada}")
-        logger.info(f"   Celery Task ID: {task_id}")
-        logger.info(f"   Force reprocess: {force_reprocess}")
-        logger.info(f"=" * 80)
-        
-        orchestrator = DecisionPipelineOrchestrator()
-        health_check = orchestrator.run_pipeline(
-            decision_ada=ada,
-            force_reprocess=force_reprocess
-        )
-        
-        logger.info(f"\n{'='*80}")
-        logger.info(f"✅ PIPELINE COMPLETED FOR {ada}")
-        logger.info(f"{'='*80}")
-        logger.info(
-            f"   Overall Status: {health_check.overall_status}\n"
-            f"   Celery Task ID: {task_id}\n"
-            f"\n   Component Status:\n"
-            f"   ├─ Ingestion: {health_check.ingestion_status}\n"
-            f"   ├─ Entities: {health_check.entities_status}\n"
-            f"   ├─ Companies: {health_check.relations_status}\n"
-            f"   ├─ Documents: {health_check.document_extraction_status}\n"
-            f"   ├─ OpenSearch: {health_check.opensearch_status}\n"
-            f"   └─ Coverage: {health_check.coverage_status}"
-        )
-        logger.info(f"{'='*80}\n")
-        
-        return {
-            "success": True,
-            "ada": ada,
-            "overall_status": health_check.overall_status,
-            "health_check_id": health_check.id,
-            "components": {
-                "ingestion": health_check.ingestion_status,
-                "entities": health_check.entities_status,
-                "companies": health_check.relations_status,
-                "documents": health_check.document_extraction_status,
-                "opensearch": health_check.opensearch_status,
-                "coverage": health_check.coverage_status,
-            },
-            "errors": [
-                msg for component, msg in health_check.findings.items() 
-                if msg and isinstance(msg, str)
-            ] if health_check.findings else []
-        }
-        
-    except Exception as e:
-        logger.error(f"❌ Failed to run pipeline for {ada}: {str(e)}")
-        raise self.retry(exc=e, countdown=60, max_retries=3)
+    # Generate task-level ID for Celery task tracking
+    task_id = self.request.id if hasattr(self, 'request') else 'sync'
+    
+    # Use contextualize to propagate context to ALL Loguru loggers in this execution
+    # This allows filtering in Grafana: {component="celery"} | json | record.extra.task_id="abc-123-def"
+    with logger.contextualize(
+        task_id=task_id,
+        ada=ada,
+        task_name="run_decision_pipeline_task",
+        force_reprocess=force_reprocess
+    ):
+        try:
+            logger.info("🚀 Starting FULL pipeline for decision")
+            
+            orchestrator = DecisionPipelineOrchestrator()
+            health_check = orchestrator.run_pipeline(
+                decision_ada=ada,
+                force_reprocess=force_reprocess
+            )
+            
+            logger.info(
+                "✅ PIPELINE COMPLETED",
+                overall_status=health_check.overall_status,
+                ingestion_status=health_check.ingestion_status,
+                entities_status=health_check.entities_status,
+                relations_status=health_check.relations_status,
+                document_extraction_status=health_check.document_extraction_status,
+                opensearch_status=health_check.opensearch_status,
+                coverage_status=health_check.coverage_status
+            )
+            
+            return {
+                "success": True,
+                "ada": ada,
+                "overall_status": health_check.overall_status,
+                "health_check_id": health_check.id,
+                "components": {
+                    "ingestion": health_check.ingestion_status,
+                    "entities": health_check.entities_status,
+                    "companies": health_check.relations_status,
+                    "documents": health_check.document_extraction_status,
+                    "opensearch": health_check.opensearch_status,
+                    "coverage": health_check.coverage_status,
+                },
+                "errors": [
+                    msg for component, msg in health_check.findings.items() 
+                    if msg and isinstance(msg, str)
+                ] if health_check.findings else []
+            }
+            
+        except Exception as e:
+            logger.error("❌ Failed to run pipeline", error=str(e), error_type=type(e).__name__)
+            raise self.retry(exc=e, countdown=60, max_retries=3)
 
 # ============================================================================
 # LEGACY TASKS: These are kept for backward compatibility but should be

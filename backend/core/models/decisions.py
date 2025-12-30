@@ -50,6 +50,19 @@ class Decision(models.Model):
     subject = models.TextField()
     issue_date = models.DateTimeField()
 
+    # ------------------------------------------------------------------
+    # Batch tracking
+    # ------------------------------------------------------------------
+    import_job = models.ForeignKey(
+        "core.ImportJob",
+        on_delete=models.SET_NULL,
+        related_name="decisions",
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=_("The import batch (ImportJob) that created/updated this decision"),
+    )
+
     organization = models.ForeignKey(
         Organization,
         on_delete=models.PROTECT,  # Prevent deleting Org if Decisions exist

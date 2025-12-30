@@ -41,6 +41,7 @@ bleach="^6.2.0"
 stamina="^25.1.0"
 python-json-logger="^4.0.0"
 boto3 = "^1.42.0"
+tiktoken="^0.8.0"  # Token counting for AI cost estimation
 
 [tool.poetry.group.worker]
 optional = false  # Always install with worker

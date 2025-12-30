@@ -376,6 +376,7 @@ def import_decisions_task(start_date, end_date, organization_id=None, unit_id=No
         job_id: ID of the ImportJob record
     """
     # Update job status
+    job = None
     if job_id:
         job = ImportJob.objects.get(id=job_id)
         job.status = ImportJobStatus.RUNNING
@@ -388,7 +389,7 @@ def import_decisions_task(start_date, end_date, organization_id=None, unit_id=No
         
         # Create components
         fetcher = DiavgeiaFetcher()
-        decision_importer = DecisionImporter()
+        decision_importer = DecisionImporter(import_job=job)
         service = DecisionIngestionService(
             diavgeia_fetcher=fetcher,
             decision_importer=decision_importer,
@@ -411,6 +412,7 @@ def import_decisions_task(start_date, end_date, organization_id=None, unit_id=No
             search_params=search_params,
             distributed=True,
             save_to_db=True,
+            job_id=job_id,
         )
         
         # Update job with results

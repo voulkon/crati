@@ -199,6 +199,7 @@ services:
       - JAEGER_HOST=${JAEGER_HOST:-jaeger}
       - JAEGER_PORT=${JAEGER_PORT:-4317}
       - LIGHT_WORKER=${LIGHT_WORKER:-false}
+      - USE_JSON_LOGGING=true
 
   beat:
     build:

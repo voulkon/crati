@@ -4,6 +4,7 @@ from loguru import logger
 from core.models.import_jobs import DateCoverage
 from core.services.opensearch_service import OpenSearchService
 from .tasks_opensearch import index_recent_documents
+from diavgeia_project.logging_helpers import log_document_processing
 
 # ============================================================================
 # SINGLE SOURCE OF TRUTH: Use this for processing individual decisions
@@ -100,26 +101,42 @@ def run_decision_pipeline_task(self, ada: str, force_reprocess: bool = False):
 @shared_task(bind=True, max_retries=3)
 def process_document_task(self, ada, provider=None):
     """
-    Celery task to process a document
+    Celery task to process a document with structured logging.
+    All logs are tagged with document_ada and task_id for easy filtering in Grafana.
     """
     from core.models.decisions import Decision
     from core.services.document_processor import DocumentAnalysisService
 
-    try:
-        # Get the decision
-        decision = Decision.objects.get(ada=ada)
+    # Use structured logging context for this document processing job
+    with log_document_processing(ada, task_id=self.request.id, provider=provider):
+        try:
+            logger.info("Document processing task started")
+            
+            # Get the decision
+            decision = Decision.objects.get(ada=ada)
+            logger.info("Decision retrieved", subject=decision.subject[:50] if decision.subject else "N/A")
 
-        # Process the document with the specified provider
-        service = DocumentAnalysisService()
-        result = service.process_decision(decision, provider=provider)
+            # Process the document with the specified provider
+            service = DocumentAnalysisService()
+            result = service.process_decision(decision, provider=provider)
 
-        return {"success": True, "ada": ada, "result": result}
-    except Exception as e:
-        # Log the error
-        logger.error(f"Failed to process document {ada}: {str(e)}")
+            logger.info("Document processing completed", 
+                       success=result.get('success'),
+                       extraction_status=result.get('extraction_status'))
 
-        # Retry a few times
-        raise self.retry(exc=e, countdown=60, max_retries=3)
+            return {"success": True, "ada": ada, "result": result}
+            
+        except Decision.DoesNotExist:
+            logger.warning("Decision not found, will retry", retry_count=self.request.retries)
+            raise self.retry(exc=Exception(f"Decision {ada} not found"), countdown=60, max_retries=3)
+            
+        except Exception as e:
+            logger.error("Document processing failed", 
+                        error=str(e), 
+                        error_type=type(e).__name__,
+                        retry_count=self.request.retries)
+            # Retry a few times
+            raise self.retry(exc=e, countdown=60, max_retries=3)
 
 @shared_task
 def process_scanned_document_task(decision_ada, provider="GOOGLE_VISION"):
@@ -152,69 +169,110 @@ def process_document_batch(ada_list, max_concurrency=10):
 @shared_task(bind=True, max_retries=3)
 def process_document_task_enhanced(self, ada, provider=None):
     """
-    Enhanced Celery task to process a document with OpenSearch indexing
+    Enhanced Celery task to process a document with OpenSearch indexing and full observability.
+    Includes structured logging with metadata for Grafana/Loki filtering.
     """
     from core.models.decisions import Decision
     from core.services.document_processor import DocumentAnalysisService
+    from opentelemetry import trace
+    
+    # Get tracer for distributed tracing
+    tracer = trace.get_tracer(__name__)
 
-    try:
-        logger.info(f"-"*100)
-        logger.info(f"🔄 Starting document processing task for {ada}")
-        
-        # Get the decision
-        decision = Decision.objects.get(ada=ada)
-
-        # Process the document with the specified provider
-        service = DocumentAnalysisService()
-        result = service.process_decision(decision, provider=provider)
-
-        if result.get('success') and result.get('extraction_status') == 'COMPLETED':
-            logger.info(f"✅ Document processing completed for {ada}")
-            logger.info(f"-"*100)
+    # Use structured logging context for this document processing job
+    with log_document_processing(ada, task_id=self.request.id, provider=provider):
+        try:
+            # Get the decision first
+            decision = Decision.objects.get(ada=ada)
             
-            # Force OpenSearch indexing if the signal didn't work
-            try:
-                extraction = DocumentExtraction.objects.get(
-                    decision=decision,
-                    extraction_status=ProcessingStatus.COMPLETED
-                )
+            # Start OpenTelemetry span for the entire task
+            with tracer.start_as_current_span(
+                "process_document_task",
+                attributes={
+                    "document.ada": ada,
+                    "task.id": self.request.id,
+                    "provider": provider or "default"
+                }
+            ) as span:
+                # Get trace context for correlation
+                span_context = span.get_span_context()
+                trace_id = format(span_context.trace_id, '032x') if span_context.is_valid else None
+                span_id = format(span_context.span_id, '016x') if span_context.is_valid else None
                 
-                if extraction.raw_text:
-                    opensearch_service = OpenSearchService()
-                    
-                    # Prepare document for indexing
-                    document_data = {
-                        'decision_id': decision.id,
-                        'ada': decision.ada,
-                        'title': decision.subject or '',
-                        'content': extraction.raw_text,
-                        'organization': str(decision.organization) if decision.organization else '',
-                        'decision_type': str(decision.decision_type) if decision.decision_type else '',
-                        'issue_date': decision.issue_date.isoformat() if decision.issue_date else None,
-                        'extraction_date': extraction.extraction_date.isoformat() if extraction.extraction_date else None,
-                        'character_count': extraction.character_count,
-                        'page_count': extraction.page_count
-                    }
-                    
-                    success = opensearch_service.index_document(document_data)
-                    if success:
-                        logger.info(f"🔍 Force-indexed document {ada} to OpenSearch")
-                    else:
-                        logger.warning(f"⚠️ Failed to force-index document {ada} to OpenSearch")
-                        
-            except DocumentExtraction.DoesNotExist:
-                logger.warning(f"⚠️ No completed extraction found for {ada}")
-            except Exception as e:
-                logger.error(f"❌ Error force-indexing {ada}: {e}")
+                # Add trace context to logs
+                logger.bind(trace_id=trace_id, span_id=span_id).info(
+                    "Document processing started", 
+                    subject=decision.subject[:50] if decision.subject else "N/A"
+                )
 
-        return {"success": True, "ada": ada, "result": result}
-        
-    except Exception as e:
-        # Log the error
-        logger.error(f"❌ Failed to process document {ada}: {str(e)}")
-        
-        # Retry a few times
-        raise self.retry(exc=e, countdown=60, max_retries=3)
+                # Process the document with the specified provider
+                service = DocumentAnalysisService()
+                result = service.process_decision(decision, provider=provider)
+
+                if result.get('success') and result.get('extraction_status') == 'COMPLETED':
+                    # Set span attributes for successful processing
+                    span.set_attribute("task.status", "success")
+                    span.set_status(trace.Status(trace.StatusCode.OK))
+                    
+                    logger.info("Document processing completed successfully")
+                    
+                    # Force OpenSearch indexing if the signal didn't work
+                    try:
+                        extraction = DocumentExtraction.objects.get(
+                            decision=decision,
+                            extraction_status=ProcessingStatus.COMPLETED
+                        )
+                        
+                        if extraction.raw_text:
+                            opensearch_service = OpenSearchService()
+                            
+                            # Prepare document for indexing
+                            document_data = {
+                                'decision_id': decision.id,
+                                'ada': decision.ada,
+                                'title': decision.subject or '',
+                                'content': extraction.raw_text,
+                                'organization': str(decision.organization) if decision.organization else '',
+                                'decision_type': str(decision.decision_type) if decision.decision_type else '',
+                                'issue_date': decision.issue_date.isoformat() if decision.issue_date else None,
+                                'extraction_date': extraction.extraction_date.isoformat() if extraction.extraction_date else None,
+                                'character_count': extraction.character_count,
+                                'page_count': extraction.page_count
+                            }
+                            
+                            success = opensearch_service.index_document(document_data)
+                            if success:
+                                logger.info("Document indexed to OpenSearch")
+                            else:
+                                logger.warning("Failed to index document to OpenSearch")
+                                
+                    except DocumentExtraction.DoesNotExist:
+                        logger.warning("No completed extraction found")
+                    except Exception as e:
+                        logger.error("Error indexing to OpenSearch", error=str(e))
+
+                return {"success": True, "ada": ada, "result": result}
+            
+        except Decision.DoesNotExist:
+            logger.warning("Decision not found, will retry", retry_count=self.request.retries)
+            raise self.retry(exc=Exception(f"Decision {ada} not found"), countdown=60, max_retries=3)
+            
+        except Exception as e:
+            # Set error status on span
+            from opentelemetry import trace
+            current_span = trace.get_current_span()
+            if current_span:
+                current_span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+                current_span.record_exception(e)
+            
+            # Log the error with context
+            logger.error("Document processing failed", 
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        retry_count=self.request.retries)
+            
+            # Retry a few times
+            raise self.retry(exc=e, countdown=60, max_retries=3)
 
 @shared_task
 def process_documents_task(ada_list=None, from_date=None, limit=50, user_id=None):

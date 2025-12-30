@@ -360,24 +360,35 @@ GEMI_TIMEOUT = 30
 GEMI_MAX_RETRIES = 3
 
 # Logging Configuration
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
+# Control logging format via environment variable:
+# USE_JSON_LOGGING=true  -> JSON structured logging (for Loki/Grafana)
+# USE_JSON_LOGGING=false -> Regular text logging (default)
+USE_JSON_LOGGING = os.getenv('USE_JSON_LOGGING', 'false').lower() in ('true', '1', 't')
+
+if USE_JSON_LOGGING:
+    # JSON structured logging for Grafana/Loki
+    from diavgeia_project.logging_config_json import get_json_logging_config
+    LOGGING = get_json_logging_config(DEBUG)
+else:
+    # Traditional text logging (default)
+    LOGGING = {
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {
+            'verbose': {
+                'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+                'style': '{',
+            },
+            'json': {
+                '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
+                'format': '%(asctime)s %(name)s %(levelname)s %(message)s %(pathname)s %(lineno)d %(funcName)s %(process)d %(thread)d',
+                'datefmt': '%Y-%m-%d %H:%M:%S',
+            },
+            'simple': {
+                'format': '{levelname} {message}',
+                'style': '{',
+            },
         },
-        'json': {
-            '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
-            'format': '%(asctime)s %(name)s %(levelname)s %(message)s %(pathname)s %(lineno)d %(funcName)s %(process)d %(thread)d',
-            'datefmt': '%Y-%m-%d %H:%M:%S',
-        },
-        'simple': {
-            'format': '{levelname} {message}',
-            'style': '{',
-        },
-    },
     'filters': {
         'require_debug_false': {
             '()': 'django.utils.log.RequireDebugFalse',

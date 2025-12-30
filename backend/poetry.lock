@@ -227,18 +227,18 @@ css = ["tinycss2 (>=1.1.0,<1.5)"]
 
 [[package]]
 name = "boto3"
-version = "1.42.17"
+version = "1.42.18"
 description = "The AWS SDK for Python"
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "boto3-1.42.17-py3-none-any.whl", hash = "sha256:e0ee40f7102712452f6776af891c8f49b5ae9133bdaf22711d6f4a78963c2614"},
-    {file = "boto3-1.42.17.tar.gz", hash = "sha256:8a2e345e96d5ceba755c55539c93f99705f403fbfdeef2e838eabdc56750828b"},
+    {file = "boto3-1.42.18-py3-none-any.whl", hash = "sha256:3077ad8f2b5ecb65208c33e79ba08fa4d85d6554154872cfd0f7336a68a091fc"},
+    {file = "boto3-1.42.18.tar.gz", hash = "sha256:6388d8908331f29e7fc7a464f24aaa49070fac70bda1284ba3b7996c32f55465"},
 ]
 
 [package.dependencies]
-botocore = ">=1.42.17,<1.43.0"
+botocore = ">=1.42.18,<1.43.0"
 jmespath = ">=0.7.1,<2.0.0"
 s3transfer = ">=0.16.0,<0.17.0"
 
@@ -247,14 +247,14 @@ crt = ["botocore[crt] (>=1.21.0,<2.0a0)"]
 
 [[package]]
 name = "botocore"
-version = "1.42.17"
+version = "1.42.18"
 description = "Low-level, data-driven core of boto 3."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "botocore-1.42.17-py3-none-any.whl", hash = "sha256:a832e4c04e63141221480967e9e511363aa54d24c405935fccb913a18583c96b"},
-    {file = "botocore-1.42.17.tar.gz", hash = "sha256:d73fe22c8e1497e4d59ff7dc68eb05afac68a4a6457656811562285d6132bc04"},
+    {file = "botocore-1.42.18-py3-none-any.whl", hash = "sha256:b9fd2363f93e9550eca96189891b2f7687a76945715bbf282e59aae89e065c1c"},
+    {file = "botocore-1.42.18.tar.gz", hash = "sha256:49fe04e25ec90e516a1399aceee2a38ebf63e183d25e4823a8d8e01349589742"},
 ]
 
 [package.dependencies]
@@ -267,14 +267,14 @@ crt = ["awscrt (==0.29.2)"]
 
 [[package]]
 name = "celery"
-version = "5.6.0"
+version = "5.6.1"
 description = "Distributed Task Queue."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "celery-5.6.0-py3-none-any.whl", hash = "sha256:33cf01477b175017fc8f22c5ee8a65157591043ba8ca78a443fe703aa910f581"},
-    {file = "celery-5.6.0.tar.gz", hash = "sha256:641405206042d52ae460e4e9751a2e31b06cf80ab836fcf92e0b9311d7ea8113"},
+    {file = "celery-5.6.1-py3-none-any.whl", hash = "sha256:ee87aa14d344c655fe83bfc44b2c93bbb7cba39ae11e58b88279523506159d44"},
+    {file = "celery-5.6.1.tar.gz", hash = "sha256:bdc9e02b1480dd137f2df392358c3e94bb623d4f47ae1bc0a7dc5821c90089c7"},
 ]
 
 [package.dependencies]
@@ -283,7 +283,6 @@ click = ">=8.1.2,<9.0"
 click-didyoumean = ">=0.3.0"
 click-plugins = ">=1.1.1"
 click-repl = ">=0.2.0"
-exceptiongroup = ">=1.3.0"
 kombu = ">=5.6.0"
 python-dateutil = ">=2.8.2"
 tzlocal = "*"
@@ -303,7 +302,7 @@ django = ["Django (>=2.2.28)"]
 dynamodb = ["boto3 (>=1.26.143)"]
 elasticsearch = ["elastic-transport (<=9.1.0)", "elasticsearch (<=9.1.2)"]
 eventlet = ["eventlet (>=0.32.0) ; python_version < \"3.10\""]
-gcs = ["google-cloud-firestore (==2.21.0)", "google-cloud-storage (>=2.10.0)", "grpcio (==1.75.1)"]
+gcs = ["google-cloud-firestore (==2.22.0)", "google-cloud-storage (>=2.10.0)", "grpcio (==1.75.1)"]
 gevent = ["gevent (>=1.5.0)"]
 librabbitmq = ["librabbitmq (>=2.0.0) ; python_version < \"3.11\""]
 memcache = ["pylibmc (==1.6.3) ; platform_system != \"Windows\""]
@@ -1172,24 +1171,6 @@ files = [
 ]
 
 [[package]]
-name = "exceptiongroup"
-version = "1.3.1"
-description = "Backport of PEP 654 (exception groups)"
-optional = false
-python-versions = ">=3.7"
-groups = ["main"]
-files = [
-    {file = "exceptiongroup-1.3.1-py3-none-any.whl", hash = "sha256:a7a39a3bd276781e98394987d3a5701d0c4edffb633bb7a5144577f82c773598"},
-    {file = "exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219"},
-]
-
-[package.dependencies]
-typing-extensions = {version = ">=4.6.0", markers = "python_version < \"3.13\""}
-
-[package.extras]
-test = ["pytest (>=6)"]
-
-[[package]]
 name = "executing"
 version = "2.2.1"
 description = "Get the currently executing AST node of a frame, and other information"
@@ -1912,20 +1893,20 @@ files = [
 
 [[package]]
 name = "kombu"
-version = "5.6.1"
+version = "5.6.2"
 description = "Messaging library for Python."
 optional = false
 python-versions = ">=3.9"
 groups = ["main"]
 files = [
-    {file = "kombu-5.6.1-py3-none-any.whl", hash = "sha256:b69e3f5527ec32fc5196028a36376501682973e9620d6175d1c3d4eaf7e95409"},
-    {file = "kombu-5.6.1.tar.gz", hash = "sha256:90f1febb57ad4f53ca327a87598191b2520e0c793c75ea3b88d98e3b111282e4"},
+    {file = "kombu-5.6.2-py3-none-any.whl", hash = "sha256:efcfc559da324d41d61ca311b0c64965ea35b4c55cc04ee36e55386145dace93"},
+    {file = "kombu-5.6.2.tar.gz", hash = "sha256:8060497058066c6f5aed7c26d7cd0d3b574990b09de842a8c5aaed0b92cc5a55"},
 ]
 
 [package.dependencies]
 amqp = ">=5.1.1,<6.0.0"
 packaging = "*"
-tzdata = {version = ">=2025.2", markers = "python_version >= \"3.9\""}
+tzdata = ">=2025.2"
 vine = "5.1.0"
 
 [package.extras]
@@ -4799,15 +4780,18 @@ cli = ["click (>=5.0)"]
 
 [[package]]
 name = "python-json-logger"
-version = "2.0.7"
-description = "A python library adding a json log formatter"
+version = "4.0.0"
+description = "JSON Log Formatter for the Python Logging Package"
 optional = false
-python-versions = ">=3.6"
+python-versions = ">=3.8"
 groups = ["main"]
 files = [
-    {file = "python-json-logger-2.0.7.tar.gz", hash = "sha256:23e7ec02d34237c5aa1e29a070193a4ea87583bb4e7f8fd06d3de8264c4b2e1c"},
-    {file = "python_json_logger-2.0.7-py3-none-any.whl", hash = "sha256:f380b826a991ebbe3de4d897aeec42760035ac760345e57b812938dc8b35e2bd"},
+    {file = "python_json_logger-4.0.0-py3-none-any.whl", hash = "sha256:af09c9daf6a813aa4cc7180395f50f2a9e5fa056034c9953aec92e381c5ba1e2"},
+    {file = "python_json_logger-4.0.0.tar.gz", hash = "sha256:f58e68eb46e1faed27e0f574a55a0455eecd7b8a5b88b85a784519ba3cff047f"},
 ]
+
+[package.extras]
+dev = ["backports.zoneinfo ; python_version < \"3.9\"", "black", "build", "freezegun", "mdx_truly_sane_lists", "mike", "mkdocs", "mkdocs-awesome-pages-plugin", "mkdocs-gen-files", "mkdocs-literate-nav", "mkdocs-material (>=8.5)", "mkdocstrings[python]", "msgspec ; implementation_name != \"pypy\"", "mypy", "orjson ; implementation_name != \"pypy\"", "pylint", "pytest", "tzdata", "validate-pyproject[all]"]
 
 [[package]]
 name = "python-pptx"
@@ -6810,4 +6794,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "483fd629b9e72d24b16bc1a3bd2c0dfe4e8d66f874ce0ff4d84d7ce30d350748"
+content-hash = "f87b40ed1aea0cae3cef68d25b60dac47787288ee2538a88200359ab30b4ad61"

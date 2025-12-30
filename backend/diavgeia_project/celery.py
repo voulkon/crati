@@ -15,6 +15,14 @@ tracer = initialize_otel("diavgeia-celery")
 app = Celery("diavgeia_project")
 app.config_from_object("django.conf:settings", namespace="CELERY")
 
+# Disable Celery's logging setup to use Django's configuration
+from celery.signals import setup_logging
+
+@setup_logging.connect
+def config_loggers(*args, **kwargs):
+    """Prevent Celery from overriding Django's logging configuration"""
+    pass  # Do nothing, let Django handle logging
+
 # Modern instrumentation for v0.53b1+
 CeleryInstrumentor().instrument(
     tracer_provider=trace.get_tracer_provider(),

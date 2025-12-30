@@ -350,8 +350,8 @@
             {% csrf_token %}
             <input type="hidden" name="action" value="extract_all">
             <button type="submit" class="btn-primary" 
-                    onclick="return confirm('This will queue extraction for up to 100 decisions at a time. The system will process them automatically. Continue?')">
-                📥 Start Batch Extraction (100 at a time)
+                    onclick="return confirm('This will queue extraction for up to 500 decisions at a time. The system will process them automatically. Continue?')">
+                📥 Start Batch Extraction (500 at a time)
             </button>
         </form>
         

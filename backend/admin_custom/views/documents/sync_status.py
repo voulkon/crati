@@ -99,8 +99,8 @@ def sync_status_dashboard(request):
                 
                 total_to_extract = decisions_without + failed_count
                 
-                # Trigger extraction tasks (batch of 100 at a time to avoid overwhelming)
-                batch_size = 100
+                # Trigger extraction tasks (batch of 500 at a time to avoid overwhelming)
+                batch_size = 500
                 queued = 0
                 
                 # Queue decisions without extraction

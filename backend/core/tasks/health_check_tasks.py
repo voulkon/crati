@@ -13,6 +13,7 @@ from loguru import logger
 from core.models.decisions import Decision
 from core.models.decision_health import DecisionHealthCheck, HealthStatus
 from core.services.decision_health_service import DecisionHealthService
+from core.models.import_jobs import ImportJob
 
 
 @shared_task
@@ -215,3 +216,140 @@ def check_single_decision_health(ada: str):
     except Exception as e:
         logger.error(f"Failed to check health for {ada}: {e}")
         return {"status": "error", "message": str(e)}
+
+
+@shared_task
+def backfill_health_checks_for_import_job(import_job_id: int, max_workers: int = 5, force_reprocess: bool = False):
+    """
+    Create/refresh DecisionHealthCheck records for decisions in an ImportJob that are missing them.
+
+    This is intended to be triggered from admin actions so that large batches don't require log spelunking.
+
+    Args:
+        import_job_id: ImportJob primary key
+        max_workers: Thread concurrency for orchestrator runs
+        force_reprocess: If True, forces reprocessing steps even if already healthy
+
+    Returns:
+        Summary dict
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from core.services.pipeline_orchestrator import DecisionPipelineOrchestrator
+
+    try:
+        job = ImportJob.objects.get(id=import_job_id)
+    except ImportJob.DoesNotExist:
+        return {"status": "error", "message": f"ImportJob {import_job_id} not found"}
+
+    missing_qs = Decision.objects.filter(import_job_id=import_job_id, health_check__isnull=True)
+    total = missing_qs.count()
+
+    if total == 0:
+        return {
+            "status": "completed",
+            "import_job_id": import_job_id,
+            "missing": 0,
+            "successful": 0,
+            "failed": 0,
+            "message": "No missing health checks",
+        }
+
+    logger.info(f"🩺 Backfilling health checks for ImportJob #{import_job_id}: {total} missing")
+    orchestrator = DecisionPipelineOrchestrator()
+
+    # Pull ADAs only to keep memory predictable.
+    adas = list(missing_qs.values_list("ada", flat=True))
+
+    results = {"successful": 0, "failed": 0, "errors": []}
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_ada = {
+            executor.submit(orchestrator.run_pipeline, ada, force_reprocess=force_reprocess): ada
+            for ada in adas
+        }
+
+        for idx, future in enumerate(as_completed(future_to_ada), start=1):
+            ada = future_to_ada[future]
+            try:
+                health_check = future.result()
+                if health_check is None or health_check.overall_status == HealthStatus.ERROR:
+                    results["failed"] += 1
+                    results["errors"].append({"ada": ada})
+                else:
+                    results["successful"] += 1
+            except Exception as e:
+                results["failed"] += 1
+                results["errors"].append({"ada": ada, "error": str(e)})
+
+            if idx % 100 == 0:
+                logger.info(
+                    f"🩺 Backfill progress for ImportJob #{import_job_id}: {idx}/{total} "
+                    f"({results['successful']} ✅, {results['failed']} ❌)"
+                )
+
+    logger.info(
+        f"✅ Backfill completed for ImportJob #{import_job_id}: "
+        f"{results['successful']} succeeded, {results['failed']} failed"
+    )
+
+    return {
+        "status": "completed",
+        "import_job_id": import_job_id,
+        "missing": total,
+        "successful": results["successful"],
+        "failed": results["failed"],
+        "errors": results["errors"][:50],
+        "errors_note": "Showing first 50 errors" if len(results["errors"]) > 50 else None,
+    }
+
+
+@shared_task
+def retry_failed_decisions_for_import_job(
+    import_job_id: int,
+    component: str = None,
+    max_workers: int = 5
+):
+    """
+    Retry all ERROR-status DecisionHealthCheck records for an ImportJob.
+    
+    Uses the orchestrator's retry logic to re-run specific failed components
+    or the entire pipeline.
+    
+    Args:
+        import_job_id: ImportJob primary key
+        component: Optional specific component to retry (e.g., 'document', 'opensearch')
+        max_workers: Thread concurrency for retries
+        
+    Returns:
+        Summary dict with retry results
+    """
+    from core.services.pipeline_orchestrator import DecisionPipelineOrchestrator
+    
+    try:
+        job = ImportJob.objects.get(id=import_job_id)
+    except ImportJob.DoesNotExist:
+        return {"status": "error", "message": f"ImportJob {import_job_id} not found"}
+    
+    orchestrator = DecisionPipelineOrchestrator()
+    
+    logger.info(
+        f"🔄 Starting retry for ImportJob #{import_job_id}, component: {component or 'all'}"
+    )
+    
+    results = orchestrator.retry_batch_failures(
+        import_job_id=import_job_id,
+        component=component,
+        max_workers=max_workers
+    )
+    
+    logger.info(
+        f"✅ Retry completed for ImportJob #{import_job_id}: "
+        f"{results.get('retried', 0)} fixed, {results.get('still_failed', 0)} still failed"
+    )
+    
+    return {
+        "status": "completed",
+        "import_job_id": import_job_id,
+        "component": component or "all",
+        **results
+    }

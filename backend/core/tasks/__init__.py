@@ -63,6 +63,8 @@ from .health_check_tasks import (
     cleanup_old_health_checks,
     auto_fix_simple_issues,
     check_single_decision_health,
+    backfill_health_checks_for_import_job,
+    retry_failed_decisions_for_import_job,
 )
 
 # This ensures all tasks are available when importing from core.tasks
@@ -108,4 +110,6 @@ __all__ = [
     "cleanup_old_health_checks",
     "auto_fix_simple_issues",
     "check_single_decision_health",
+    "backfill_health_checks_for_import_job",
+    "retry_failed_decisions_for_import_job",
 ]

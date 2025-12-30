@@ -2,6 +2,7 @@ from django.core.management.base import BaseCommand
 from core.services.decision_ingestion_service import DecisionIngestionService
 from core.fetchers.diavgeia_fetcher import DiavgeiaFetcher
 from core.importers.decisions import DecisionImporter
+from core.models.import_jobs import ImportJob, ImportJobStatus
 from datetime import date, datetime, timedelta
 from django.utils import timezone
 import requests
@@ -62,9 +63,19 @@ class Command(BaseCommand):
         self.stdout.write(f"Starting sync for {target_date}")
         self.stdout.write(f"Logs are being saved to: {log_file}")
 
-        # Create service components
+        # Create ImportJob for batch tracking
+        import_job = ImportJob.objects.create(
+            start_date=target_date,
+            end_date=target_date,
+            status=ImportJobStatus.RUNNING,
+            created_by=None,  # Management command has no user
+        )
+        logger.info(f"Created ImportJob #{import_job.id} for {target_date}")
+        self.stdout.write(f"ImportJob #{import_job.id} created for tracking")
+
+        # Create service components with ImportJob linkage
         fetcher = DiavgeiaFetcher()
-        decision_importer = DecisionImporter()
+        decision_importer = DecisionImporter(import_job=import_job)
         service = DecisionIngestionService(
             diavgeia_fetcher=fetcher,
             decision_importer=decision_importer,
@@ -133,6 +144,13 @@ class Command(BaseCommand):
                         )
                     )
 
+            # Update ImportJob with results
+            import_job.status = ImportJobStatus.COMPLETED
+            import_job.completed_at = timezone.now()
+            import_job.total_decisions = result.get('processed_count', 0) if isinstance(result.get('processed_count'), int) else 0
+            import_job.save()
+            logger.info(f"ImportJob #{import_job.id} marked as COMPLETED")
+
             # Reconciliation
             if options["reconcile"]:
                 logger.info("Starting reconciliation")
@@ -140,9 +158,20 @@ class Command(BaseCommand):
 
             logger.info(f"Import process completed successfully. Check logs at: {log_file}")
             self.stdout.write(f"Import completed. Full logs available at: {log_file}")
+            self.stdout.write(self.style.SUCCESS(f"✅ ImportJob #{import_job.id}: View in admin for batch health status"))
 
         except Exception as e:
             logger.error(f"Import process failed: {str(e)}", exc_info=True)
+            
+            # Mark ImportJob as failed
+            try:
+                import_job.status = ImportJobStatus.FAILED
+                import_job.error_details = str(e)
+                import_job.save()
+                logger.error(f"ImportJob #{import_job.id} marked as FAILED")
+            except:
+                pass
+            
             self.stdout.write(self.style.ERROR(f"Sync failed: {str(e)}"))
             self.stdout.write(f"Check detailed error logs at: {log_file}")
             raise

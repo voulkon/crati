@@ -160,7 +160,19 @@ def update_coverage_on_delete(sender, instance, **kwargs):
 @receiver(post_save, sender=Decision)
 @prevent_recursion
 def queue_document_processing(sender, instance, created, **kwargs):
-    """Automatically queue document processing for new decisions with documents"""
+    """Automatically queue document processing for new decisions with documents
+    
+    ⚠️ DISABLED when USE_ORCHESTRATOR_MODE=True
+    Use run_decision_pipeline_task instead for orchestrated processing.
+    """
+    # Skip if orchestrator mode is enabled
+    if getattr(settings, 'USE_ORCHESTRATOR_MODE', False):
+        logger.debug(
+            f"⏭️ Skipping legacy document queue for {instance.ada} "
+            f"(orchestrator mode enabled - use run_decision_pipeline_task instead)"
+        )
+        return
+    
     if created and instance.document_url:
         # Import here to avoid circular imports
         from core.tasks import process_document_task
@@ -170,7 +182,18 @@ def queue_document_processing(sender, instance, created, **kwargs):
         
 @receiver(post_save, sender=DocumentExtraction)
 def index_document_in_opensearch(sender, instance, created, **kwargs):
-    """Index document in OpenSearch when extraction completes"""
+    """Index document in OpenSearch when extraction completes
+    
+    ⚠️ DISABLED when USE_ORCHESTRATOR_MODE=True
+    Orchestrator's _step_index_opensearch() handles indexing explicitly.
+    """
+    # Skip if orchestrator mode is enabled
+    if getattr(settings, 'USE_ORCHESTRATOR_MODE', False):
+        logger.debug(
+            f"⏭️ Skipping legacy OpenSearch indexing for {instance.decision.ada} "
+            f"(orchestrator mode enabled - orchestrator handles indexing)"
+        )
+        return
     
     # Add comprehensive logging to understand signal behavior
     logger.debug(
@@ -226,10 +249,15 @@ def index_document_in_opensearch(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Decision)
 def decision_saved_health_check_signal(sender, instance, created, **kwargs):
+    """Mark health check for refresh when decision is saved
+    
+    ⚠️ DISABLED when USE_ORCHESTRATOR_MODE=True
+    Orchestrator creates/updates health checks explicitly.
     """
-    When a decision is saved, mark any existing health check for refresh.
-    Don't run immediately to avoid blocking the main request.
-    """
+    # Skip if orchestrator mode is enabled
+    if getattr(settings, 'USE_ORCHESTRATOR_MODE', False):
+        return
+    
     from django.utils import timezone
     from datetime import timedelta
     from core.models.decision_health import DecisionHealthCheck
@@ -255,10 +283,15 @@ def decision_saved_health_check_signal(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=DocumentExtraction)
 def document_extraction_health_check_signal(sender, instance, created, **kwargs):
+    """Schedule health check when document extraction status changes
+    
+    ⚠️ DISABLED when USE_ORCHESTRATOR_MODE=True
+    Orchestrator updates DecisionHealthCheck after each pipeline step.
     """
-    When document extraction status changes significantly, schedule immediate health check.
-    This provides real-time visibility into extraction progress.
-    """
+    # Skip if orchestrator mode is enabled
+    if getattr(settings, 'USE_ORCHESTRATOR_MODE', False):
+        return
+    
     from core.models.document_analysis import ProcessingStatus
     
     if not instance.decision:

@@ -126,28 +126,32 @@ def sync_status_dashboard(request):
                 logger.error(f"Failed to trigger bulk extraction: {e}")
         
         elif action == "extract_selected":
-            # Extract specific decisions
+            # Process specific decisions through FULL pipeline (not just documents)
             selected_adas = request.POST.getlist("selected_decisions")
             if selected_adas:
                 try:
+                    from core.tasks.tasks_documents import run_decision_pipeline_task
+                    
                     queued_count = 0
                     
                     for ada in selected_adas:
                         try:
-                            # Queue the extraction task
-                            process_document_task_enhanced.delay(ada)
+                            # Queue FULL pipeline: entities, companies, documents, opensearch
+                            run_decision_pipeline_task.delay(ada, force_reprocess=True)
                             queued_count += 1
                         except Exception as e:
-                            logger.error(f"Failed to queue extraction for {ada}: {e}")
+                            logger.error(f"Failed to queue pipeline for {ada}: {e}")
                     
                     messages.success(
                         request,
-                        f"Queued {queued_count} decisions for text extraction. Check back soon!"
+                        f"🚀 Queued {queued_count} decisions for FULL pipeline processing "
+                        f"(entities, companies, documents, OpenSearch). "
+                        f"Check DecisionHealthCheck admin for component-level status."
                     )
                 except Exception as e:
-                    messages.error(request, f"Error queueing extractions: {str(e)}")
+                    messages.error(request, f"Error queueing pipeline: {str(e)}")
             else:
-                messages.warning(request, "No decisions selected for extraction.")
+                messages.warning(request, "No decisions selected for processing.")
         
         return redirect('admin:sync_status_dashboard')
     

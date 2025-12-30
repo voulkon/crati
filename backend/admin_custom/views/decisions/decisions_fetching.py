@@ -38,7 +38,7 @@ def fetch_daily_decisions(request):
             # Capture command output
             output = StringIO()
             
-            # Execute the management command
+            # Execute the management command (now creates ImportJob automatically)
             call_command("import_decisions_daily", *cmd_args, stdout=output)
             
             command_output = output.getvalue()
@@ -47,6 +47,7 @@ def fetch_daily_decisions(request):
             processed_count = "N/A"
             log_file = None
             task_id = None
+            import_job_id = None
             
             for line in command_output.split('\n'):
                 if 'Processed' in line or 'processed' in line:
@@ -55,6 +56,11 @@ def fetch_daily_decisions(request):
                     match = re.search(r'(\d+)\s+decisions', line)
                     if match:
                         processed_count = match.group(1)
+                if 'ImportJob #' in line:
+                    # Extract ImportJob ID
+                    match = re.search(r'ImportJob #(\d+)', line)
+                    if match:
+                        import_job_id = match.group(1)
                 if 'Logs' in line or 'logs' in line or 'log_file' in line.lower():
                     # Extract log file path
                     match = re.search(r'/code/logs/[^\s]+', line)
@@ -80,6 +86,10 @@ def fetch_daily_decisions(request):
                 }
             }
             
+            if import_job_id:
+                response_data["import_job_id"] = import_job_id
+                response_data["import_job_url"] = f"/api/admin/core/importjob/{import_job_id}/change/"
+                response_data["message"] += f" (ImportJob #{import_job_id})"
             if log_file:
                 response_data["log_file"] = log_file
             if task_id:

@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.db import transaction
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+import uuid
 
 from core.models.decisions import Decision
 from core.models.decision_health import DecisionHealthCheck, HealthStatus
@@ -71,34 +72,53 @@ class DecisionPipelineOrchestrator:
         """
         Runs the full processing pipeline for a decision.
         """
-        logger.info(f"🚀 Starting pipeline for decision {decision_ada}")
+        # Generate unique ingestion ID for log tracing in Grafana
+        ingestion_id = str(uuid.uuid4())[:8]
         
-        try:
-            decision = Decision.objects.get(ada=decision_ada)
-        except Decision.DoesNotExist:
-            logger.error(f"Decision {decision_ada} not found")
-            return None
+        # Bind ingestion_id to all logs in this context
+        with logger.contextualize(ingestion_id=ingestion_id, ada=decision_ada):
+            logger.info(f"\n{'='*80}")
+            logger.info(f"🚀 Starting pipeline for decision {decision_ada}")
+            logger.info(f"   Ingestion ID: {ingestion_id} (use this to filter logs)")
+            logger.info(f"   Force reprocess: {force_reprocess}")
+            logger.info(f"{'='*80}\n")
+            
+            try:
+                decision = Decision.objects.get(ada=decision_ada)
+            except Decision.DoesNotExist:
+                logger.error(f"❌ Decision {decision_ada} not found")
+                return None
 
-        health_check = self.get_or_create_health_check(decision)
-        self.update_health_status(health_check, 'ingestion', HealthStatus.HEALTHY)
+            health_check = self.get_or_create_health_check(decision)
+            self.update_health_status(health_check, 'ingestion', HealthStatus.HEALTHY)
 
-        # 1. Entity Extraction
-        self._step_extract_entities(decision, health_check)
+            # 1. Entity Extraction
+            logger.info(f"\n{'='*80}\n📝 STAGE 1/5: ENTITY EXTRACTION\n{'='*80}")
+            self._step_extract_entities(decision, health_check)
 
-        # 2. Company Data Enrichment
-        self._step_enrich_companies(decision, health_check)
+            # 2. Company Data Enrichment
+            logger.info(f"\n{'='*80}\n🏢 STAGE 2/5: COMPANY ENRICHMENT\n{'='*80}")
+            self._step_enrich_companies(decision, health_check)
 
-        # 3. Document Processing
-        self._step_process_document(decision, health_check, force_reprocess)
+            # 3. Document Processing
+            logger.info(f"\n{'='*80}\n📄 STAGE 3/5: DOCUMENT PROCESSING\n{'='*80}")
+            self._step_process_document(decision, health_check, force_reprocess)
 
-        # 4. OpenSearch Indexing
-        self._step_index_opensearch(decision, health_check)
+            # 4. OpenSearch Indexing
+            logger.info(f"\n{'='*80}\n🔎 STAGE 4/5: OPENSEARCH INDEXING\n{'='*80}")
+            self._step_index_opensearch(decision, health_check)
 
-        # 5. Coverage (Usually handled by signal, but we can verify)
-        self._step_verify_coverage(decision, health_check)
+            # 5. Coverage
+            logger.info(f"\n{'='*80}\n📊 STAGE 5/5: COVERAGE METRICS\n{'='*80}")
+            self._step_verify_coverage(decision, health_check)
 
-        logger.info(f"✅ Pipeline completed for {decision_ada}. Status: {health_check.overall_status}")
-        return health_check
+            logger.info(f"\n{'='*80}")
+            logger.info(f"✅ Pipeline completed for {decision_ada}")
+            logger.info(f"   Overall Status: {health_check.overall_status}")
+            logger.info(f"   Ingestion ID: {ingestion_id}")
+            logger.info(f"{'='*80}\n")
+            
+            return health_check
 
     def _step_extract_entities(self, decision: Decision, health_check: DecisionHealthCheck):
         try:
@@ -160,19 +180,33 @@ class DecisionPipelineOrchestrator:
         try:
             logger.info(f"Step 4: Indexing in OpenSearch for {decision.ada}")
             
-            # Check if indexed
-            # This is expensive, maybe just trigger indexing?
-            # For orchestration, let's try to index.
-            
             extraction = DocumentExtraction.objects.filter(decision=decision).first()
-            if extraction and extraction.extraction_status == ProcessingStatus.COMPLETED:
-                success = self.search_service.index_document(extraction)
+            if extraction and extraction.extraction_status == ProcessingStatus.COMPLETED and extraction.raw_text:
+                # Build document data dict for OpenSearch
+                document_data = {
+                    'decision_id': decision.id,
+                    'ada': decision.ada,
+                    'title': decision.subject or '',
+                    'content': extraction.raw_text,
+                    'organization': str(decision.organization) if decision.organization else '',
+                    'decision_type': str(decision.decision_type) if decision.decision_type else '',
+                    'issue_date': decision.issue_date.isoformat() if decision.issue_date else None,
+                    'extraction_date': extraction.extraction_date.isoformat() if extraction.extraction_date else None,
+                    'character_count': extraction.character_count,
+                    'page_count': extraction.page_count
+                }
+                
+                success = self.search_service.index_document(document_data)
                 if success:
                     self.update_health_status(health_check, 'opensearch', HealthStatus.HEALTHY)
                 else:
                     self.update_health_status(health_check, 'opensearch', HealthStatus.ERROR, "Indexing failed")
+            elif extraction and extraction.extraction_status != ProcessingStatus.COMPLETED:
+                self.update_health_status(health_check, 'opensearch', HealthStatus.WARNING, f"Extraction status: {extraction.extraction_status}")
+            elif extraction and not extraction.raw_text:
+                self.update_health_status(health_check, 'opensearch', HealthStatus.WARNING, "No text extracted")
             else:
-                self.update_health_status(health_check, 'opensearch', HealthStatus.WARNING, "No completed extraction to index")
+                self.update_health_status(health_check, 'opensearch', HealthStatus.WARNING, "No extraction found")
 
         except Exception as e:
             logger.error(f"Failed OpenSearch indexing: {e}")

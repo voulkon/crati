@@ -5,6 +5,98 @@ from core.models.import_jobs import DateCoverage
 from core.services.opensearch_service import OpenSearchService
 from .tasks_opensearch import index_recent_documents
 
+# ============================================================================
+# SINGLE SOURCE OF TRUTH: Use this for processing individual decisions
+# ============================================================================
+
+@shared_task(bind=True, max_retries=3)
+def run_decision_pipeline_task(self, ada: str, force_reprocess: bool = False):
+    """
+    🎯 SINGLE SOURCE OF TRUTH for processing one decision through the full pipeline.
+    
+    This task ensures ALL stages complete for a decision:
+    1. ✅ Ingestion (already done)
+    2. 🔍 Entity Extraction (AFM detection)
+    3. 🏢 Company Enrichment (GEMI lookup)
+    4. 📄 Document Processing (PDF download + text extraction)
+    5. 🔎 OpenSearch Indexing (make searchable)
+    6. 📊 Coverage Metrics (DateCoverage updates)
+    
+    Use this instead of:
+    - process_document_task (only does documents)
+    - process_document_task_enhanced (only does documents + opensearch)
+    - Scattered signals that may or may not fire
+    
+    Args:
+        ada: Decision ADA to process
+        force_reprocess: If True, reprocess even if already completed
+        
+    Returns:
+        DecisionHealthCheck status with component-level results
+    """
+    from core.services.pipeline_orchestrator import DecisionPipelineOrchestrator
+    import uuid
+    
+    try:
+        # Generate task-level ID for Celery task tracking
+        task_id = self.request.id if hasattr(self, 'request') else 'sync'
+        
+        logger.info(f"" * 80)
+        logger.info(f"🚀 Starting FULL pipeline for decision {ada}")
+        logger.info(f"   Celery Task ID: {task_id}")
+        logger.info(f"   Force reprocess: {force_reprocess}")
+        logger.info(f"=" * 80)
+        
+        orchestrator = DecisionPipelineOrchestrator()
+        health_check = orchestrator.run_pipeline(
+            decision_ada=ada,
+            force_reprocess=force_reprocess
+        )
+        
+        logger.info(f"\n{'='*80}")
+        logger.info(f"✅ PIPELINE COMPLETED FOR {ada}")
+        logger.info(f"{'='*80}")
+        logger.info(
+            f"   Overall Status: {health_check.overall_status}\n"
+            f"   Celery Task ID: {task_id}\n"
+            f"\n   Component Status:\n"
+            f"   ├─ Ingestion: {health_check.ingestion_status}\n"
+            f"   ├─ Entities: {health_check.entities_status}\n"
+            f"   ├─ Companies: {health_check.relations_status}\n"
+            f"   ├─ Documents: {health_check.document_extraction_status}\n"
+            f"   ├─ OpenSearch: {health_check.opensearch_status}\n"
+            f"   └─ Coverage: {health_check.coverage_status}"
+        )
+        logger.info(f"{'='*80}\n")
+        
+        return {
+            "success": True,
+            "ada": ada,
+            "overall_status": health_check.overall_status,
+            "health_check_id": health_check.id,
+            "components": {
+                "ingestion": health_check.ingestion_status,
+                "entities": health_check.entities_status,
+                "companies": health_check.relations_status,
+                "documents": health_check.document_extraction_status,
+                "opensearch": health_check.opensearch_status,
+                "coverage": health_check.coverage_status,
+            },
+            "errors": [
+                msg for component, msg in health_check.findings.items() 
+                if msg and isinstance(msg, str)
+            ] if health_check.findings else []
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to run pipeline for {ada}: {str(e)}")
+        raise self.retry(exc=e, countdown=60, max_retries=3)
+
+# ============================================================================
+# LEGACY TASKS: These are kept for backward compatibility but should be
+# replaced with run_decision_pipeline_task in new code
+# ============================================================================
+
 @shared_task(bind=True, max_retries=3)
 def process_document_task(self, ada, provider=None):
     """

@@ -8,6 +8,7 @@ when decisions are modified, providing real-time visibility.
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.utils import timezone
+from django.conf import settings
 from datetime import timedelta
 from loguru import logger
 
@@ -18,12 +19,15 @@ from core.models.document_analysis import DocumentExtraction, ProcessingStatus
 
 @receiver(post_save, sender=Decision)
 def decision_saved_signal(sender, instance, created, **kwargs):
-    """
-    When a decision is saved, schedule a health check update.
+    """Mark health check for refresh when decision is saved
     
-    We don't run it immediately to avoid blocking the main request,
-    but we mark any existing health check as needing refresh.
+    ⚠️ DISABLED when USE_ORCHESTRATOR_MODE=True
+    Orchestrator creates/updates health checks explicitly during processing.
     """
+    # Skip if orchestrator mode is enabled
+    if getattr(settings, 'USE_ORCHESTRATOR_MODE', False):
+        return
+    
     if created:
         logger.info(f"New decision {instance.ada} created - will check health on next automated run")
     else:
@@ -44,10 +48,15 @@ def decision_saved_signal(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=DocumentExtraction)
 def document_extraction_updated_signal(sender, instance, created, **kwargs):
+    """Schedule health check when document extraction status changes
+    
+    ⚠️ DISABLED when USE_ORCHESTRATOR_MODE=True
+    Orchestrator updates DecisionHealthCheck after each pipeline step.
     """
-    When document extraction status changes, update the related decision's health check.
-    This provides immediate visibility into extraction progress.
-    """
+    # Skip if orchestrator mode is enabled
+    if getattr(settings, 'USE_ORCHESTRATOR_MODE', False):
+        return
+    
     if not instance.decision:
         return
         

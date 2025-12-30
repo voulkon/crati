@@ -4,12 +4,13 @@ Import all tasks to maintain backward compatibility
 
 # Import all tasks from sub-modules
 from .tasks_documents import (
+    run_decision_pipeline_task,  # 🎯 SINGLE SOURCE OF TRUTH
     process_document_task,
     process_scanned_document_task,
     generate_summary_task,
     process_document_batch,
     collect_batch_results,
-    process_document_task_enhanced,
+    process_document_task_enhanced,  # LEGACY: Use run_decision_pipeline_task instead
     process_documents_task_enhanced,
     process_documents_task,
 )

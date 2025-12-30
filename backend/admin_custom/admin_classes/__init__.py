@@ -4,6 +4,7 @@ from .health import DecisionHealthCheckAdmin, DecisionHealthSummaryAdmin
 from .analytics import APIAnalyticsAdmin, EndpointStatsAdmin, DailyTrafficAdmin, ImportJobAdmin
 from .users import CustomUserAdmin, SubscriptionAdmin
 from .backup import BackupAdmin
+from .ai_pricing import AIModelPricingAdmin, TaskOutputEstimateAdmin, AIJobDefinitionAdmin, AIJobExecutionAdmin
 
 __all__ = [
     # Decision admin classes
@@ -17,6 +18,12 @@ __all__ = [
     'DocumentExtractionAdmin',
     'DocumentAnalysisAdmin',
     'DocumentEmbeddingAdmin',
+    
+    # AI Pricing admin classes
+    'AIModelPricingAdmin',
+    'TaskOutputEstimateAdmin',
+    'AIJobDefinitionAdmin',
+    'AIJobExecutionAdmin',
     
     # Health admin classes
     'DecisionHealthCheckAdmin',

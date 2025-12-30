@@ -134,12 +134,14 @@ def register_all_models():
         DocumentExtractionAdmin, DocumentAnalysisAdmin, DocumentEmbeddingAdmin,
         DecisionHealthCheckAdmin, DecisionHealthSummaryAdmin,
         APIAnalyticsAdmin, EndpointStatsAdmin, DailyTrafficAdmin, ImportJobAdmin,
-        CustomUserAdmin, SubscriptionAdmin, BackupAdmin
+        CustomUserAdmin, SubscriptionAdmin, BackupAdmin,
+        AIModelPricingAdmin, TaskOutputEstimateAdmin, AIJobDefinitionAdmin, AIJobExecutionAdmin
     )
     
     from core.models.decisions import Decision, Attachment
     from core.models.organizations import Organization, Unit, Signer
     from core.models.document_analysis import DocumentExtraction, DocumentAnalysis, DocumentEmbedding
+    from core.models.ai_pricing import AIModelPricing, TaskOutputEstimate, AIJobDefinition, AIJobExecution
     from core.models.decision_health import DecisionHealthCheck, DecisionHealthSummary
     from core.models.import_jobs import ImportJob, DateCoverage
     from core.models.backups import Backup
@@ -157,6 +159,12 @@ def register_all_models():
     admin_site.register(DocumentExtraction, DocumentExtractionAdmin)
     admin_site.register(DocumentAnalysis, DocumentAnalysisAdmin)
     admin_site.register(DocumentEmbedding, DocumentEmbeddingAdmin)
+    
+    # Register AI Pricing models
+    admin_site.register(AIModelPricing, AIModelPricingAdmin)
+    admin_site.register(TaskOutputEstimate, TaskOutputEstimateAdmin)
+    admin_site.register(AIJobDefinition, AIJobDefinitionAdmin)
+    admin_site.register(AIJobExecution, AIJobExecutionAdmin)
     
     # Register Health models
     admin_site.register(DecisionHealthCheck, DecisionHealthCheckAdmin)

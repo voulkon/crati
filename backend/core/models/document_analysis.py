@@ -29,6 +29,7 @@ class ProcessingProvider(models.TextChoices):
     OPENAI = "OPENAI", _("OpenAI")
     ANTHROPIC = "ANTHROPIC", _("Anthropic Claude")
     GOOGLE_VERTEX = "GOOGLE_VERTEX", _("Google Vertex AI")
+    AWS_BEDROCK = "AWS_BEDROCK", _("AWS Bedrock")
     MISTRAL = "MISTRAL", _("Mistral AI")
     OLLAMA = "OLLAMA", _("Ollama Local Models")
 
@@ -125,6 +126,32 @@ class DocumentAnalysis(models.Model):
     version = models.CharField(max_length=20, default="1.0")
     confidence_score = models.FloatField(null=True, blank=True)
 
+    # Cost tracking
+    input_tokens = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=_("Actual or estimated input tokens used")
+    )
+    output_tokens = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=_("Actual or estimated output tokens generated")
+    )
+    estimated_cost_usd = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        help_text=_("Estimated total cost in USD")
+    )
+    actual_cost_usd = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        help_text=_("Actual cost if reported by API in USD")
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -164,6 +191,20 @@ class DocumentEmbedding(models.Model):
     # For regular databases:
     vector_json = models.JSONField()
 
+    # Cost tracking for embeddings
+    input_tokens = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=_("Tokens used for embedding generation")
+    )
+    estimated_cost_usd = models.DecimalField(
+        max_digits=10,
+        decimal_places=6,
+        null=True,
+        blank=True,
+        help_text=_("Estimated cost for this embedding in USD")
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -188,7 +229,7 @@ class DocumentPage(models.Model):
     page_number = models.IntegerField()
     raw_text = models.TextField(null=True, blank=True)
     character_count = models.IntegerField(null=True, blank=True)
-
+  
     # Page-level search vector for better performance
     search_vector = SearchVectorField(null=True, blank=True)
 

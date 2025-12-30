@@ -1,0 +1,14 @@
+# Query by Celery task ID (to see all logs for a specific task execution)
+{container_name="diavgeia_worker"} | json | record_extra_task_id="c5f2f319-e3ae-4213-a82e-8f3aaf5b70cd"
+
+# Query by Decision ADA (to see all logs related to a specific decision)
+{container_name="diavgeia_worker"} | json | record_extra_ada="Ε6ΗΟΩΡΟ-Ν1Λ"
+
+# Query by parent task ID (to see child tasks spawned by a parent)
+{container_name="diavgeia_worker"} | json | record_extra_parent_task_id="e986bc77-47be-4fdc-894a-31946f809fa7"
+
+# Query by parent ADA (to see child tasks related to a decision)
+{container_name="diavgeia_worker"} | json | record_extra_parent_ada="Ε6ΗΟΩΡΟ-Ν1Λ"
+
+# Combination: See all logs (parent + children) for a decision pipeline
+{container_name="diavgeia_worker"} | json | record_extra_ada="Ε6ΗΟΩΡΟ-Ν1Λ" or record_extra_parent_ada="Ε6ΗΟΩΡΟ-Ν1Λ" 

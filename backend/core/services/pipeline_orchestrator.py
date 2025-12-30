@@ -138,9 +138,16 @@ class DecisionPipelineOrchestrator:
             afms = [rel.entity.afm for rel in relationships]
             
             if afms:
-                # Trigger the task (or run inline if needed, but task is safer for rate limits)
-                # For orchestration, we might want to check if data exists first
-                fetch_company_data_for_entities.delay(afms)
+                # Extract parent context from logger for tracing child tasks
+                parent_task_id = logger._core.extra.get('task_id')
+                parent_ada = decision.ada
+                
+                # Trigger the task with parent context for complete traceability
+                fetch_company_data_for_entities.delay(
+                    afms, 
+                    parent_task_id=parent_task_id, 
+                    parent_ada=parent_ada
+                )
                 # We mark as HEALTHY but technically it's "SCHEDULED". 
                 # A stricter check would verify data presence.
             

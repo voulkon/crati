@@ -7,34 +7,49 @@ from core.services.gemi_service import GemiService
 from gemi.exceptions import GemiNotFoundError
 
 @shared_task(bind=True, max_retries=3)
-def fetch_company_data_for_entities(self, afm_list: List[str]):
+def fetch_company_data_for_entities(self, afm_list: List[str], parent_task_id: str = None, parent_ada: str = None):
     """
     Celery task to fetch company data for a list of AFMs.
 
     Args:
         afm_list: List of AFM numbers to fetch company data for
+        parent_task_id: Optional parent task ID for tracing
+        parent_ada: Optional parent decision ADA for context
     """
-    try:
-        # Get the actual entities
-        entities = AFMEntity.objects.filter(afm__in=afm_list)
+    # Get this task's ID
+    task_id = self.request.id if hasattr(self, 'request') else 'sync'
+    
+    # Use contextualize to propagate context to all logs in this task
+    with logger.contextualize(
+        task_id=task_id,
+        task_name="fetch_company_data_for_entities",
+        parent_task_id=parent_task_id,
+        parent_ada=parent_ada,
+        afm_count=len(afm_list)
+    ):
+        try:
+            logger.info(f"Starting company data fetch for {len(afm_list)} AFMs")
+            
+            # Get the actual entities
+            entities = AFMEntity.objects.filter(afm__in=afm_list)
 
-        if not entities.exists():
-            logger.warning(f"No entities found for AFMs: {afm_list}")
-            return {"status": "no_entities_found", "afms": afm_list}
+            if not entities.exists():
+                logger.warning(f"No entities found for AFMs: {afm_list}")
+                return {"status": "no_entities_found", "afms": afm_list}
 
-        # Use the extraction service to fetch company data
-        service = EntityExtractionService()
-        stats = service.fetch_company_data_for_entities(
-            list(entities), max_requests_per_minute=6  # Respect API limits
-        )
+            # Use the extraction service to fetch company data
+            service = EntityExtractionService()
+            stats = service.fetch_company_data_for_entities(
+                list(entities), max_requests_per_minute=6  # Respect API limits
+            )
 
-        logger.info(f"Company data fetch task completed: {stats}")
-        return stats
+            logger.info(f"Company data fetch task completed", stats=stats)
+            return stats
 
-    except Exception as e:
-        logger.error(f"Error in company data fetch task: {e}")
-        # Retry the task
-        raise self.retry(countdown=60 * (self.request.retries + 1))
+        except Exception as e:
+            logger.error(f"Error in company data fetch task", error=str(e), error_type=type(e).__name__)
+            # Retry the task
+            raise self.retry(countdown=60 * (self.request.retries + 1))
 
 
 @shared_task(bind=True, max_retries=3, rate_limit="6/m")

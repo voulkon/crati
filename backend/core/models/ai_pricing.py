@@ -10,12 +10,18 @@ class AIModelPricing(models.Model):
     provider = models.CharField(
         max_length=50,
         db_index=True,
-        help_text=_("Provider name (e.g., OPENAI, ANTHROPIC, GOOGLE_VERTEX)")
+        help_text=_("Provider name (e.g., OPENAI, ANTHROPIC, AWS_BEDROCK)")
     )
     model_name = models.CharField(
-        max_length=100,
+        max_length=200,
         db_index=True,
-        help_text=_("Specific model name (e.g., gpt-4-turbo, claude-3-opus)")
+        help_text=_("Actual model identifier used in API calls (e.g., 'anthropic.claude-3-haiku-20240307-v1:0', 'gpt-4-turbo-2024-04-09')")
+    )
+    display_name = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        help_text=_("Human-friendly name (e.g., 'Claude Haiku 3', 'GPT-4 Turbo'). If empty, model_name is used.")
     )
     
     # Pricing configuration
@@ -87,7 +93,8 @@ class AIModelPricing(models.Model):
         unique_together = [['provider', 'model_name', 'effective_date']]
     
     def __str__(self):
-        return f"{self.provider} - {self.model_name} ({self.effective_date})"
+        name = self.display_name or self.model_name
+        return f"{self.provider} - {name} ({self.effective_date})"
     
     def get_input_price_per_token(self) -> Decimal:
         """Get normalized price per single token for input"""
@@ -122,7 +129,12 @@ class AIModelPricing(models.Model):
 
 
 class TaskOutputEstimate(models.Model):
-    """Stores output token estimation ratios for different task types"""
+    """
+    DEPRECATED: This model is no longer used in the codebase.
+    Output estimation is now handled directly in AIJobDefinition via output_ratio field.
+    
+    Kept for backward compatibility. Can be removed in future after data migration.
+    """
     
     task_type = models.CharField(
         max_length=50,

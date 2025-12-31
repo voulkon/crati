@@ -165,6 +165,7 @@ class AIJobDefinitionAdmin(admin.ModelAdmin):
         'batch_size',
         'is_active',
         'execution_stats_display',
+        'estimate_cost_link',
     ]
     
     list_filter = [
@@ -185,11 +186,12 @@ class AIJobDefinitionAdmin(admin.ModelAdmin):
         'updated_at',
         'execution_summary',
         'available_models_display',
+        'estimate_cost_link',
     ]
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('job_name', 'display_name', 'description', 'is_active')
+            'fields': ('job_name', 'display_name', 'description', 'is_active', 'estimate_cost_link')
         }),
         ('Job Implementation', {
             'fields': ('algorithm_module', 'algorithm_class'),
@@ -225,6 +227,12 @@ class AIJobDefinitionAdmin(admin.ModelAdmin):
     )
     
     actions = ['activate_jobs', 'deactivate_jobs', 'estimate_sample_cost']
+    
+    def estimate_cost_link(self, obj):
+        """Link to estimate cost page"""
+        url = reverse('admin:estimate_job_cost', args=[obj.pk])
+        return format_html('<a class="button" href="{}">Estimate Cost</a>', url)
+    estimate_cost_link.short_description = 'Actions'
     
     def execution_stats_display(self, obj):
         """Display execution statistics"""

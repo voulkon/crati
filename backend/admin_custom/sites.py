@@ -44,6 +44,9 @@ class CustomAdminSite(admin.AdminSite):
             path("health/<int:pk>/reextract-entities/", self._wrap_view('health', 'reextract_entities'), name="health_reextract_entities"),
             path("health/<int:pk>/relink-relations/", self._wrap_view('health', 'relink_relations'), name="health_relink_relations"),
             path("health/<int:pk>/update-coverage/", self._wrap_view('health', 'update_coverage'), name="health_update_coverage"),
+            
+            # AI Job URLs
+            path("jobs/<int:job_id>/estimate/", self._wrap_view('ai_jobs', 'estimate_job_cost_view'), name="estimate_job_cost"),
         ]
         return custom_urls + urls
     

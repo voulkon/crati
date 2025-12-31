@@ -1,10 +1,11 @@
 from datetime import date, timedelta
 from typing import Dict, List, Any, Optional
-from django.db.models import Count, Q, Avg, Min, Max
-from django.db.models.functions import TruncHour, Extract
+from django.db.models import Count, Q, Avg, Min, Max, Sum, F, OuterRef, Subquery
+from django.db.models.functions import TruncHour, Extract, Coalesce
 from loguru import logger
 
 from core.models.decisions import Decision
+from core.models.entities import DecisionAmountField
 from core.models.organizations import Organization
 from core.models.types import ActType
 
@@ -85,9 +86,25 @@ class DecisionAnalysisService:
 
     def _analyze_by_type(self, decisions_qs) -> List[Dict[str, Any]]:
         """Analyze decisions by act type"""
+        # Subquery to get calculated amount for a decision
+        # We sum amounts from DecisionAmountField that are linked to relationships
+        calc_amt_subquery = Subquery(
+            DecisionAmountField.objects.filter(
+                decision=OuterRef('pk'),
+                associated_relationship__isnull=False
+            ).values('decision')
+            .annotate(total=Sum('amount'))
+            .values('total')
+        )
+
         return list(
-            decisions_qs.values('decision_type__label', 'decision_type__uid')
-            .annotate(count=Count('id'))
+            decisions_qs.annotate(
+                eff_amt=Coalesce('amount', calc_amt_subquery)
+            ).values('decision_type__label', 'decision_type__uid')
+            .annotate(
+                count=Count('id'),
+                total_amount=Sum('eff_amt')
+            )
             .order_by('-count')
         )
 
@@ -391,42 +408,60 @@ class DecisionAnalysisService:
                           sum(1 for c in comparisons if c['is_weekend']) if any(c['is_weekend'] for c in comparisons) else 0,
         }
 
-    def get_daily_decisions_with_details(self, target_date: date, offset: int = 0, limit: int = 10) -> Dict[str, Any]:
+    def get_daily_decisions_with_details(
+        self, 
+        target_date: date, 
+        offset: int = 0, 
+        limit: int = 10,
+        decision_type_uid: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Get paginated decisions for a specific day with detailed information including
-        title, signer, company, and OpenSearch content preview.
+        title, signer, company, and DocumentExtraction content.
         
         Args:
             target_date: Date to fetch decisions for
             offset: Pagination offset
             limit: Number of decisions to return
+            decision_type_uid: Optional filter by decision type UID
             
         Returns:
             Dictionary with decisions and pagination info
         """
-        from core.services.opensearch_service import OpenSearchService
-        
         from django.db.models import F
         
-        logger.info(f"Fetching detailed decisions for {target_date} (offset: {offset}, limit: {limit})")
+        logger.info(f"Fetching detailed decisions for {target_date} (offset: {offset}, limit: {limit}, type: {decision_type_uid})")
         
         # Base queryset for the target date with related data
         decisions_qs = Decision.objects.filter(
             issue_date__date=target_date
-        ).select_related(
-            'organization', 'decision_type'
+        )
+        
+        if decision_type_uid:
+            decisions_qs = decisions_qs.filter(decision_type__uid=decision_type_uid)
+            
+        # Annotate with calculated amount for sorting and display
+        decisions_qs = decisions_qs.annotate(
+            calculated_amount=Sum(
+                'amount_fields__amount',
+                filter=Q(amount_fields__associated_relationship__isnull=False)
+            )
+        ).annotate(
+            effective_amount=Coalesce('amount', 'calculated_amount')
+        )
+            
+        decisions_qs = decisions_qs.select_related(
+            'organization', 'decision_type', 'text_extraction'
         ).prefetch_related(
             'signers', 'units',
             'entity_relationships__entity'
-        ).order_by(F('amount').desc(nulls_last=True), '-issue_date')
+        ).order_by(F('effective_amount').desc(nulls_last=True), '-issue_date')
         
         total_count = decisions_qs.count()
         
         # Get paginated decisions
         decisions = decisions_qs[offset:offset + limit]
         
-        # Initialize OpenSearch service
-        # opensearch_service = OpenSearchService()
         from core.models.companies import Company
         
         # Prepare decision details
@@ -483,22 +518,16 @@ class DecisionAnalysisService:
                 
                 counterparts.append(counterpart)
             
-            # Get OpenSearch content preview if available
-            content_preview = None
-            # try:
-            #     # Search for this decision in OpenSearch
-            #     search_result = opensearch_service.search_documents(
-            #         query=decision.ada,
-            #         size=1
-            #     )
-            #     if search_result.get('results'):
-            #         content_preview = search_result['results'][0].get('content_preview', '')[:200]
-            # except Exception as e:
-            #     logger.warning(f"Could not fetch OpenSearch data for decision {decision.ada}: {e}")
+            # Get DocumentExtraction content
+            extraction_content = None
+            if hasattr(decision, 'text_extraction') and decision.text_extraction:
+                 extraction_content = decision.text_extraction.full_text
             
-            amount_val = float(decision.amount) if decision.amount else None
-            if amount_val:
-                logger.info(f"Decision {decision.ada} has amount: {amount_val}")
+            # Use effective amount from annotation if available, otherwise fallback
+            if hasattr(decision, 'effective_amount') and decision.effective_amount is not None:
+                amount_val = float(decision.effective_amount)
+            else:
+                amount_val = float(decision.amount) if decision.amount else None
             
             decision_details.append({
                 'ada': decision.ada,
@@ -511,7 +540,8 @@ class DecisionAnalysisService:
                 'decision_type': decision.decision_type.label if decision.decision_type else None,
                 'status': decision.status,
                 'document_url': decision.document_url,
-                'content_preview': content_preview,
+                'content_preview': extraction_content[:500] + "..." if extraction_content and len(extraction_content) > 500 else extraction_content,
+                'full_text': extraction_content,
                 'has_private_data': decision.has_private_data,
                 'financial_year': decision.financial_year,
                 'amount': amount_val,

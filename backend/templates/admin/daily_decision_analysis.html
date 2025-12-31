@@ -435,6 +435,12 @@
         font-size: 0.85em;
         color: #495057;
     }
+    
+    /* Type Badges */
+    .type-badge:hover { background-color: #f0f0f0; }
+    .type-badge.active { background-color: #007bff; color: white; border-color: #0056b3; }
+    .type-badge.active span[style*="background: #eee"] { background: rgba(255,255,255,0.2) !important; color: white; }
+    .type-badge.active span[style*="color: #28a745"] { color: #d4edda !important; }
 </style>
 {% endblock %}
 
@@ -693,6 +699,31 @@
     </div>
 </div>
 
+<!-- Decision Types Mixture -->
+<div class="analysis-card" style="margin-top: 20px;">
+    <h3>Decision Types Mixture</h3>
+    <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+        <a href="?date={{ target_date|date:'Y-m-d' }}" 
+           class="type-badge {% if not current_decision_type_uid %}active{% endif %}"
+           style="text-decoration: none; padding: 8px 12px; border-radius: 20px; border: 1px solid #ddd; color: #333; display: flex; align-items: center; gap: 8px;">
+            <span>All Types</span>
+            <span style="background: #eee; padding: 2px 6px; border-radius: 10px; font-size: 0.8em;">{{ analysis.total_count }}</span>
+        </a>
+        
+        {% for type in analysis.by_type %}
+        <a href="?date={{ target_date|date:'Y-m-d' }}&decision_type_uid={{ type.decision_type__uid }}" 
+           class="type-badge {% if current_decision_type_uid == type.decision_type__uid %}active{% endif %}"
+           style="text-decoration: none; padding: 8px 12px; border-radius: 20px; border: 1px solid #ddd; color: #333; display: flex; align-items: center; gap: 8px;">
+            <span>{{ type.decision_type__label|default:"Unknown" }}</span>
+            <span style="background: #eee; padding: 2px 6px; border-radius: 10px; font-size: 0.8em;">{{ type.count }}</span>
+            {% if type.total_amount %}
+            <span style="color: #28a745; font-size: 0.8em;">€{{ type.total_amount|floatformat:0 }}</span>
+            {% endif %}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+
 {% if analysis.is_weekend %}
 <div class="weekend-notice">
     <strong>📅 Weekend Activity:</strong> Found {{ analysis.total_count }} decisions on {{ analysis.day_of_week }}. This is unusual for weekend days.
@@ -702,7 +733,14 @@
 <!-- Decision Details Section -->
 {% if decision_details.decisions %}
 <div class="analysis-card" style="grid-column: 1 / -1;">
-    <h3>📋 Decision Details ({{ decision_details.offset|add:1 }} - {{ decision_details.offset|add:decision_details.decisions|length }} of {{ decision_details.total_count }})</h3>
+    <h3>
+        📋 Decision Details ({{ decision_details.offset|add:1 }} - {{ decision_details.offset|add:decision_details.decisions|length }} of {{ decision_details.total_count }})
+        {% if current_decision_type_uid %}
+            <span style="font-size: 0.7em; font-weight: normal; color: #666; margin-left: 10px;">
+                (Filtered by Type)
+            </span>
+        {% endif %}
+    </h3>
     
     <div class="decision-list">
         {% for decision in decision_details.decisions %}
@@ -795,12 +833,16 @@
                 </div>
             </div>
             
-            {% if decision.content_preview %}
             <div class="content-preview">
-                <strong>Content Preview:</strong>
-                <p class="preview-text">{{ decision.content_preview|truncatechars:300 }}</p>
+                <strong>Document Content:</strong>
+                {% if decision.full_text %}
+                    <div class="preview-text" style="white-space: pre-wrap; max-height: 300px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 0.9em; margin-top: 5px;">{{ decision.full_text }}</div>
+                {% elif decision.content_preview %}
+                    <p class="preview-text">{{ decision.content_preview }}</p>
+                {% else %}
+                    <p class="text-muted" style="font-style: italic; color: #999;">No content extracted yet.</p>
+                {% endif %}
             </div>
-            {% endif %}
             
             {% if decision.document_url %}
             <div class="document-link">
@@ -815,7 +857,7 @@
     {% if decision_details.has_previous or decision_details.has_next %}
     <div class="pagination">
         {% if decision_details.has_previous %}
-        <a href="?date={{ target_date|date:'Y-m-d' }}&offset={{ decision_details.previous_offset }}&limit={{ current_limit }}" class="pagination-btn prev-btn">← Previous</a>
+        <a href="?date={{ target_date|date:'Y-m-d' }}&offset={{ decision_details.previous_offset }}&limit={{ current_limit }}{% if current_decision_type_uid %}&decision_type_uid={{ current_decision_type_uid }}{% endif %}" class="pagination-btn prev-btn">← Previous</a>
         {% else %}
         <span class="pagination-btn disabled">← Previous</span>
         {% endif %}
@@ -825,7 +867,7 @@
         </span>
         
         {% if decision_details.has_next %}
-        <a href="?date={{ target_date|date:'Y-m-d' }}&offset={{ decision_details.next_offset }}&limit={{ current_limit }}" class="pagination-btn next-btn">Next →</a>
+        <a href="?date={{ target_date|date:'Y-m-d' }}&offset={{ decision_details.next_offset }}&limit={{ current_limit }}{% if current_decision_type_uid %}&decision_type_uid={{ current_decision_type_uid }}{% endif %}" class="pagination-btn next-btn">Next →</a>
         {% else %}
         <span class="pagination-btn disabled">Next →</span>
         {% endif %}
@@ -960,8 +1002,10 @@ if (!document.querySelector('meta[name=csrf-token]')) {
 
 // Function to change page size
 function changePageSize(newLimit) {
-    const currentDate = '{{ target_date|date:"Y-m-d" }}';
-    window.location.href = `?date=${currentDate}&offset=0&limit=${newLimit}`;
+    const urlParams = new URLSearchParams(window.location.search);
+    urlParams.set('limit', newLimit);
+    urlParams.set('offset', 0);
+    window.location.search = urlParams.toString();
 }
 </script>
 

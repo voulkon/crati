@@ -28,6 +28,9 @@ def daily_decision_analysis(request):
         offset = 0
         limit = 10
 
+    # Get filter parameters
+    decision_type_uid = request.GET.get("decision_type_uid")
+
     # Initialize analysis service
     analysis_service = DecisionAnalysisService()
 
@@ -35,7 +38,12 @@ def daily_decision_analysis(request):
     analysis_data = analysis_service.get_daily_decision_analysis(target_date)
     
     # Get paginated decision details
-    decision_details = analysis_service.get_daily_decisions_with_details(target_date, offset, limit)
+    decision_details = analysis_service.get_daily_decisions_with_details(
+        target_date, 
+        offset, 
+        limit,
+        decision_type_uid=decision_type_uid
+    )
 
     # Calculate navigation dates
     prev_date = target_date - timedelta(days=1)
@@ -53,6 +61,7 @@ def daily_decision_analysis(request):
         "decision_details": decision_details,
         "current_offset": offset,
         "current_limit": limit,
+        "current_decision_type_uid": decision_type_uid,
     }
 
     return render(request, "admin/daily_decision_analysis.html", context)

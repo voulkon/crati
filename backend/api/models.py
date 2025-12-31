@@ -48,36 +48,6 @@ class APIAnalytics(models.Model):
         """Return a string signature for this pattern"""
         return f"{self.total_requests}:{self.unique_ips}"
 
-    @property
-    def is_suspicious_pattern(self):
-        """Check if this represents a suspicious pattern"""
-        # 51/12 pattern
-        if self.total_requests == 51 and self.unique_ips == 12:
-            return True
-        # Perfect 1:1 ratio (each IP makes exactly 1 request)
-        if self.total_requests == self.unique_ips:
-            return True
-        # Exact integer ratios might be suspicious
-        if self.unique_ips > 0 and self.total_requests % self.unique_ips == 0:
-            ratio = self.total_requests // self.unique_ips
-            if ratio > 10:  # Each IP making more than 10 requests in exact numbers
-                return True
-        return False
-
-    @property
-    def pattern_analysis(self):
-        """Return human-readable pattern analysis"""
-        if self.total_requests == 51 and self.unique_ips == 12:
-            return "🔍 51/12 SUSPICIOUS PATTERN"
-        elif self.total_requests == self.unique_ips:
-            return "⚠️ 1:1 RATIO (each IP = 1 request)"
-        elif self.unique_ips > 0 and self.total_requests % self.unique_ips == 0:
-            ratio = self.total_requests // self.unique_ips
-            return f"📊 EXACT {ratio}:1 RATIO"
-        elif self.requests_per_ip_ratio > 20:
-            return "🔥 HIGH ACTIVITY PER IP"
-        else:
-            return "✅ Normal pattern"
 
     def get_top_endpoints(self, limit=5):
         """Get the top endpoints for this analytics record"""

@@ -13,7 +13,6 @@ class CustomAdminSite(admin.AdminSite):
             # Analytics URLs
             path("analytics/", self._wrap_view('analytics', 'redis_analytics'), name="redis_analytics"),
             path("analytics/export/", self._wrap_view('analytics', 'export_redis_analytics'), name="export_analytics"),
-            path("analytics/patterns/", self._wrap_view('analytics', 'pattern_analysis'), name="pattern_analysis"),
             path("analytics/endpoints/", self._wrap_view('analytics', 'endpoint_deep_dive'), name="endpoint_deep_dive"),
             
             # Decision URLs

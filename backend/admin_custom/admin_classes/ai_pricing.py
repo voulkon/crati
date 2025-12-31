@@ -10,6 +10,7 @@ class AIModelPricingAdmin(admin.ModelAdmin):
     
     list_display = [
         'provider',
+        'display_name',
         'model_name',
         'model_type',
         'input_price_display',
@@ -28,6 +29,7 @@ class AIModelPricingAdmin(admin.ModelAdmin):
     search_fields = [
         'provider',
         'model_name',
+        'display_name',
         'notes',
     ]
     
@@ -38,7 +40,8 @@ class AIModelPricingAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Model Information', {
-            'fields': ('provider', 'model_name', 'model_type', 'context_window')
+            'fields': ('provider', 'model_name', 'display_name', 'model_type', 'context_window'),
+            'description': 'model_name is the actual API identifier, display_name is human-friendly'
         }),
         ('Pricing', {
             'fields': ('pricing_unit', 'input_price', 'output_price'),
@@ -181,14 +184,20 @@ class AIJobDefinitionAdmin(admin.ModelAdmin):
         'created_at',
         'updated_at',
         'execution_summary',
+        'available_models_display',
     ]
     
     fieldsets = (
         ('Basic Information', {
             'fields': ('job_name', 'display_name', 'description', 'is_active')
         }),
+        ('Job Implementation', {
+            'fields': ('algorithm_module', 'algorithm_class'),
+            'description': 'Python module and class that implements this job (e.g., core.jobs.daily_summary, DailySummaryJob)'
+        }),
         ('Default AI Configuration', {
-            'fields': ('default_provider', 'default_model', 'analysis_type')
+            'fields': ('default_provider', 'default_model', 'analysis_type', 'available_models_display'),
+            'description': 'Select provider and model. Use the exact model_name from AI Model Pricing (not display_name).'
         }),
         ('Prompt Configuration', {
             'fields': ('system_prompt', 'prompt_overhead_tokens', 'prompt_overhead_percentage'),
@@ -261,6 +270,47 @@ class AIJobDefinitionAdmin(admin.ModelAdmin):
         """
         return format_html(html)
     execution_summary.short_description = 'Execution Summary'
+    
+    def available_models_display(self, obj):
+        """Display available models from AIModelPricing"""
+        from core.models.ai_pricing import AIModelPricing
+        
+        # Get active models grouped by provider
+        models = AIModelPricing.objects.filter(is_active=True).order_by('provider', 'model_name')
+        
+        if not models.exists():
+            return format_html('<em style="color: #999;">No active models found. Add models in AI Model Pricing first.</em>')
+        
+        html = '<div style="background: #f0f8ff; padding: 15px; border-radius: 5px; margin-top: 10px;">'
+        html += '<h4 style="margin-top: 0;">Available Models (from AI Model Pricing)</h4>'
+        html += '<p style="font-size: 11px; color: #666;">Copy the <strong>Model Name</strong> (not Display Name) to the "Default model" field above.</p>'
+        
+        current_provider = None
+        for model in models:
+            if model.provider != current_provider:
+                if current_provider:
+                    html += '</table>'
+                html += f'<h5 style="color: #0066cc; margin-top: 15px; margin-bottom: 5px;">{model.provider}</h5>'
+                html += '<table style="width: 100%; border-collapse: collapse; font-size: 12px;">'
+                html += '<tr style="background: #e8f4f8;"><th style="text-align: left; padding: 5px;">Display Name</th><th style="text-align: left; padding: 5px;">Model Name (use this)</th><th style="text-align: right; padding: 5px;">Input</th><th style="text-align: right; padding: 5px;">Output</th></tr>'
+                current_provider = model.provider
+            
+            display = model.display_name or model.model_name
+            unit = '/M' if model.pricing_unit == 'PER_MILLION' else '/K'
+            output_price = f'${float(model.output_price):.4f}{unit}' if model.output_price else 'N/A'
+            
+            html += f'''
+            <tr style="border-bottom: 1px solid #ddd;">
+                <td style="padding: 5px;">{display}</td>
+                <td style="padding: 5px; font-family: monospace; background: #fff3cd;">{model.model_name}</td>
+                <td style="padding: 5px; text-align: right;">${float(model.input_price):.4f}{unit}</td>
+                <td style="padding: 5px; text-align: right;">{output_price}</td>
+            </tr>
+            '''
+        
+        html += '</table></div>'
+        return format_html(html)
+    available_models_display.short_description = 'Available Models Reference'
     
     def activate_jobs(self, request, queryset):
         updated = queryset.update(is_active=True)

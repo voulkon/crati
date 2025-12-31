@@ -3,54 +3,203 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
-from users.models import SavedEntity, SavedDecision, SearchHistory, VisitedEntity
+from django.utils import timezone
+from users.models import Bookmark, BookmarkFolder, SavedDecision, SearchHistory
 
 class UserDataViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
     
+    # ============ BOOKMARK FOLDERS ============
+    
     @action(detail=False, methods=['get', 'post'])
-    def saved_entities(self, request):
+    def folders(self, request):
+        """List all folders or create a new one"""
         if request.method == 'GET':
-            entities = SavedEntity.objects.filter(user=request.user)
-            # Add pagination here
+            folders = BookmarkFolder.objects.filter(user=request.user).prefetch_related('bookmarks')
             return Response([{
-                'id': e.id,
-                'entity_type': e.entity_type,
-                'entity_id': e.entity_id,
-                'entity_name': e.entity_name,
-                'notes': e.notes,
-                'created_at': e.created_at,
-                'updated_at': e.updated_at
-            } for e in entities])
+                'id': f.id,
+                'name': f.name,
+                'description': f.description,
+                'color': f.color,
+                'icon': f.icon,
+                'parent_id': f.parent_id,
+                'bookmark_count': f.bookmarks.count(),
+                'created_at': f.created_at,
+                'updated_at': f.updated_at
+            } for f in folders])
+        
+        elif request.method == 'POST':
+            data = request.data
+            folder = BookmarkFolder.objects.create(
+                user=request.user,
+                name=data['name'],
+                description=data.get('description', ''),
+                color=data.get('color', '#3b82f6'),
+                icon=data.get('icon', ''),
+                parent_id=data.get('parent_id')
+            )
+            return Response({
+                'id': folder.id,
+                'name': folder.name,
+                'description': folder.description,
+                'color': folder.color,
+                'icon': folder.icon,
+                'parent_id': folder.parent_id
+            }, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['patch', 'delete'], url_path='folders')
+    def folder_detail(self, request, pk=None):
+        """Update or delete a specific folder"""
+        folder = get_object_or_404(BookmarkFolder, pk=pk, user=request.user)
+        
+        if request.method == 'PATCH':
+            data = request.data
+            if 'name' in data:
+                folder.name = data['name']
+            if 'description' in data:
+                folder.description = data['description']
+            if 'color' in data:
+                folder.color = data['color']
+            if 'icon' in data:
+                folder.icon = data['icon']
+            if 'parent_id' in data:
+                folder.parent_id = data['parent_id']
+            
+            folder.save()
+            return Response({'updated': True})
+        
+        elif request.method == 'DELETE':
+            # Move bookmarks to root (no folder) before deleting
+            folder.bookmarks.update(folder=None)
+            folder.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    # ============ BOOKMARKS ============
+    
+    @action(detail=False, methods=['get', 'post'])
+    def bookmarks(self, request):
+        """List all bookmarks or create a new one"""
+        if request.method == 'GET':
+            folder_id = request.query_params.get('folder')
+            favorites_only = request.query_params.get('favorites') == 'true'
+            
+            bookmarks = Bookmark.objects.filter(user=request.user)
+            
+            if folder_id:
+                bookmarks = bookmarks.filter(folder_id=folder_id)
+            elif folder_id == 'null':
+                bookmarks = bookmarks.filter(folder__isnull=True)
+            
+            if favorites_only:
+                bookmarks = bookmarks.filter(is_favorite=True)
+            
+            bookmarks = bookmarks.select_related('folder')[:100]
+            
+            return Response([{
+                'id': b.id,
+                'title': b.title,
+                'url': b.url,
+                'notes': b.notes,
+                'folder_id': b.folder_id,
+                'folder_name': b.folder.name if b.folder else None,
+                'view_type': b.view_type,
+                'preview_data': b.preview_data,
+                'is_favorite': b.is_favorite,
+                'visit_count': b.visit_count,
+                'last_visited': b.last_visited,
+                'created_at': b.created_at,
+                'updated_at': b.updated_at
+            } for b in bookmarks])
         
         elif request.method == 'POST':
             # Check user's limit
-            if request.user.saved_entities.count() >= request.user.max_saved_items:
+            if request.user.bookmarks.count() >= request.user.max_saved_items:
                 return Response({
-                    'error': 'Maximum saved entities limit reached'
+                    'error': 'Maximum bookmarks limit reached'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             data = request.data
-            entity, created = SavedEntity.objects.get_or_create(
+            bookmark = Bookmark.objects.create(
                 user=request.user,
-                entity_type=data['entity_type'],
-                entity_id=data['entity_id'],
-                defaults={
-                    'entity_name': data['entity_name'],
-                    'entity_data': data.get('entity_data'),
-                    'notes': data.get('notes', '')
-                }
+                title=data['title'],
+                url=data['url'],
+                notes=data.get('notes', ''),
+                folder_id=data.get('folder_id'),
+                view_type=data.get('view_type', ''),
+                preview_data=data.get('preview_data'),
+                is_favorite=data.get('is_favorite', False)
             )
             
-            if not created:
-                # Update existing
-                entity.notes = data.get('notes', entity.notes)
-                entity.save()
+            return Response({
+                'id': bookmark.id,
+                'title': bookmark.title,
+                'url': bookmark.url
+            }, status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=['get', 'patch', 'delete'], url_path='bookmarks')
+    def bookmark_detail(self, request, pk=None):
+        """Get, update, or delete a specific bookmark"""
+        bookmark = get_object_or_404(Bookmark, pk=pk, user=request.user)
+        
+        if request.method == 'GET':
+            # Track visit
+            bookmark.visit_count += 1
+            bookmark.last_visited = timezone.now()
+            bookmark.save(update_fields=['visit_count', 'last_visited'])
             
             return Response({
-                'id': entity.id,
-                'created': created
-            }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+                'id': bookmark.id,
+                'title': bookmark.title,
+                'url': bookmark.url,
+                'notes': bookmark.notes,
+                'folder_id': bookmark.folder_id,
+                'view_type': bookmark.view_type,
+                'preview_data': bookmark.preview_data,
+                'is_favorite': bookmark.is_favorite,
+                'visit_count': bookmark.visit_count,
+                'last_visited': bookmark.last_visited,
+                'created_at': bookmark.created_at,
+                'updated_at': bookmark.updated_at
+            })
+        
+        elif request.method == 'PATCH':
+            data = request.data
+            if 'title' in data:
+                bookmark.title = data['title']
+            if 'url' in data:
+                bookmark.url = data['url']
+            if 'notes' in data:
+                bookmark.notes = data['notes']
+            if 'folder_id' in data:
+                bookmark.folder_id = data['folder_id']
+            if 'view_type' in data:
+                bookmark.view_type = data['view_type']
+            if 'preview_data' in data:
+                bookmark.preview_data = data['preview_data']
+            if 'is_favorite' in data:
+                bookmark.is_favorite = data['is_favorite']
+            
+            bookmark.save()
+            return Response({'updated': True})
+        
+        elif request.method == 'DELETE':
+            bookmark.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    @action(detail=False, methods=['post'], url_path='bookmarks/bulk-move')
+    def bulk_move_bookmarks(self, request):
+        """Move multiple bookmarks to a folder"""
+        bookmark_ids = request.data.get('bookmark_ids', [])
+        folder_id = request.data.get('folder_id')
+        
+        Bookmark.objects.filter(
+            id__in=bookmark_ids,
+            user=request.user
+        ).update(folder_id=folder_id)
+        
+        return Response({'moved': len(bookmark_ids)})
+    
+    # ============ SEARCH HISTORY ============
     
     @action(detail=False, methods=['get'])
     def search_history(self, request):
@@ -63,24 +212,7 @@ class UserDataViewSet(viewsets.ViewSet):
             'created_at': h.created_at
         } for h in history])
     
-    @action(detail=False, methods=['post'])
-    def track_visit(self, request):
-        """Track when user visits an entity"""
-        data = request.data
-        entity, created = VisitedEntity.objects.get_or_create(
-            user=request.user,
-            entity_type=data['entity_type'],
-            entity_id=data['entity_id'],
-            defaults={
-                'entity_name': data['entity_name']
-            }
-        )
-        
-        if not created:
-            entity.visit_count += 1
-            entity.save()
-        
-        return Response({'tracked': True})
+    # ============ USER PREFERENCES ============
     
     @action(detail=False, methods=['get'])
     def user_preferences(self, request):
@@ -103,6 +235,4 @@ class UserDataViewSet(viewsets.ViewSet):
             user.preferred_layout = data['layout']
         
         user.save()
-        return Response({'updated': True})from django.shortcuts import render
-
-# Create your views here.
+        return Response({'updated': True})

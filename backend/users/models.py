@@ -61,28 +61,75 @@ class CustomUser(AbstractUser):
         return self.username
 
 # New: User activity tracking models
-class SavedEntity(models.Model):
-    ENTITY_TYPES = [
-        ('ministry', 'Ministry'),
-        ('organization', 'Organization'),
-        ('unit', 'Unit'),
-    ]
-    
-    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='saved_entities')
-    entity_type = models.CharField(max_length=20, choices=ENTITY_TYPES)
-    entity_id = models.CharField(max_length=50)
-    entity_name = models.CharField(max_length=255)
-    entity_data = models.JSONField(null=True, blank=True)  # Store additional entity info
-    notes = models.TextField(blank=True)  # User can add personal notes
+class BookmarkFolder(models.Model):
+    """Folders to organize bookmarks"""
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='bookmark_folders')
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    color = models.CharField(max_length=7, default='#3b82f6', help_text='Hex color code for folder')
+    icon = models.CharField(max_length=50, blank=True, help_text='Icon name or emoji')
+    parent = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='subfolders',
+        help_text='Parent folder for nested organization'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        unique_together = ['user', 'entity_type', 'entity_id']
-        ordering = ['-updated_at']
+        ordering = ['name']
+        unique_together = ['user', 'name', 'parent']
     
     def __str__(self):
-        return f"{self.user.username} - {self.entity_name}"
+        return f"{self.user.username} - {self.name}"
+
+
+class Bookmark(models.Model):
+    """URL-based bookmarks for any view/filter combination"""
+    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='bookmarks')
+    title = models.CharField(max_length=255, help_text='User-defined title for the bookmark')
+    url = models.TextField(help_text='Full URL path including query parameters')
+    notes = models.TextField(blank=True)
+    folder = models.ForeignKey(
+        BookmarkFolder,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bookmarks'
+    )
+    
+    # Metadata for better UX
+    view_type = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text='Type of view (e.g., temporal, entity, search, decision)'
+    )
+    preview_data = models.JSONField(
+        null=True,
+        blank=True,
+        help_text='Cached preview data (e.g., filter summary, result counts)'
+    )
+    
+    is_favorite = models.BooleanField(default=False)
+    visit_count = models.PositiveIntegerField(default=0)
+    last_visited = models.DateTimeField(null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-updated_at']
+        indexes = [
+            models.Index(fields=['user', 'is_favorite']),
+            models.Index(fields=['user', 'folder']),
+            models.Index(fields=['user', '-last_visited']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.title}"
 
 class SavedDecision(models.Model):
     user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='saved_decisions')
@@ -127,23 +174,6 @@ class SearchHistory(models.Model):
     
     def __str__(self):
         return f"{self.user.username} - {self.query[:50]}"
-
-class VisitedEntity(models.Model):
-    """Track entities user has visited for quick access"""
-    user = models.ForeignKey(CustomUser, on_delete=models.CASCADE, related_name='visited_entities')
-    entity_type = models.CharField(max_length=20)
-    entity_id = models.CharField(max_length=50)
-    entity_name = models.CharField(max_length=255)
-    visit_count = models.PositiveIntegerField(default=1)
-    last_visited = models.DateTimeField(auto_now=True)
-    first_visited = models.DateTimeField(auto_now_add=True)
-    
-    class Meta:
-        unique_together = ['user', 'entity_type', 'entity_id']
-        ordering = ['-last_visited']
-    
-    def __str__(self):
-        return f"{self.user.username} visited {self.entity_name} ({self.visit_count}x)"
 
 
 class AllowedUser(models.Model):

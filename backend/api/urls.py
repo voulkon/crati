@@ -13,10 +13,11 @@ from .views.companies.details import company_detail, company_decisions, company_
 from .views.summary import amounts as summary_amounts_views
 from .views.organy import details as details_between_companies_and_orgs
 from .views.tracing_test_views import tracing_test_views
+from users.views import UserDataViewSet
 
 router = DefaultRouter()
 # Register your viewsets
-# router.register('your-model', YourModelViewSet)
+router.register('user-data', UserDataViewSet, basename='user-data')
 
 urlpatterns = [
     path("", include(router.urls)),

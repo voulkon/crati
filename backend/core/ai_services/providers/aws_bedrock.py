@@ -45,7 +45,7 @@ class AWSBedrockProvider(BaseLLMProvider):
         Initialize AWS Bedrock provider.
         
         Supports two authentication methods:
-        1. API Key (newer): Pass api_key or set BEDROCK_API_KEY env var
+        1. API Key (newer): Pass api_key or set AWS_BEARER_TOKEN_BEDROCK env var
         2. IAM credentials (traditional): AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY
         
         Args:
@@ -59,7 +59,7 @@ class AWSBedrockProvider(BaseLLMProvider):
         import os
         
         self.region_name = region_name
-        self.api_key = api_key or os.getenv('BEDROCK_API_KEY')
+        self.api_key = api_key or os.getenv('AWS_BEARER_TOKEN_BEDROCK')
         
         # Create bedrock client with appropriate auth
         client_kwargs = {

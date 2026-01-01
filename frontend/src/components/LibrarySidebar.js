@@ -11,6 +11,7 @@ import {
 } from '../api/bookmarks';
 import { useTranslation } from '../contexts/TranslationContext';
 import './LibrarySidebar.css';
+import {LibraryIconInSidebar, LibraryFavoriteInSidebar, LibraryTimerInSidebar} from './Icons.js';
 
 /**
  * Library Sidebar - Collapsible bookmark manager (like ChatGPT sidebar)
@@ -197,7 +198,7 @@ export default function LibrarySidebar({ isOpen, onClose, onBookmarkCountChange 
         {/* Header */}
         <div className="library-header">
           <h2 className="library-title">
-            <span className="library-title-icon">📚</span>
+            <span className="library-title-icon"><LibraryIconInSidebar /></span>
             {t('library.myLibrary')}
           </h2>
           <button className="library-close" onClick={onClose} title={t('library.close')}>
@@ -216,9 +217,9 @@ export default function LibrarySidebar({ isOpen, onClose, onBookmarkCountChange 
                 setSelectedFolder(null);
               }}
             >
-              {mode === 'all' && `📚 ${t('library.all')}`}
-              {mode === 'favorites' && `⭐ ${t('library.favorites')}`}
-              {mode === 'recent' && `🕒 ${t('library.recent')}`}
+              {mode === 'all' && <><LibraryIconInSidebar /> {t('library.all')}</>}
+              {mode === 'favorites' && <><LibraryFavoriteInSidebar /> {t('library.favorites')}</>}
+              {mode === 'recent' && <><LibraryTimerInSidebar /> {t('library.recent')}</>}
             </button>
           ))}
         </div>

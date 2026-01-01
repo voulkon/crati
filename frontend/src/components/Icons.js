@@ -1,13 +1,19 @@
 import React from 'react';
 
 export { Building2 as OrganizationIcon, PenLine as PenIcon, Calendar as CalendarIcon } from 'lucide-react';
+export { 
+    LibraryBig as LibraryToggleIcon, 
+    BookMarked as LibraryIconInSidebar,
+    Star as LibraryFavoriteInSidebar,
+    Timer as LibraryTimerInSidebar,
+    } from 'lucide-react';
+
 
 // export const OrganizationIcon = () => (
 //   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="metadata-icon">
 //     <path d="M3 21h18M5 21V7l8-4 8 4v14M9 10a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v11H9V10z" />
 //   </svg>
 // );
-
 // export const PenIcon = () => (
 //   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="metadata-icon">
 //     <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>

@@ -4,6 +4,7 @@ from django.core.management import call_command
 from datetime import date, datetime, timedelta
 from loguru import logger
 from io import StringIO
+import re
 
 @staff_member_required
 def fetch_daily_decisions(request):
@@ -52,7 +53,6 @@ def fetch_daily_decisions(request):
             for line in command_output.split('\n'):
                 if 'Processed' in line or 'processed' in line:
                     # Try to extract count
-                    import re
                     match = re.search(r'(\d+)\s+decisions', line)
                     if match:
                         processed_count = match.group(1)

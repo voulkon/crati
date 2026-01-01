@@ -33,6 +33,7 @@ class Command(BaseCommand):
                 "settings": {
                     "number_of_shards": 1,
                     "number_of_replicas": 0,
+                    "index.max_result_window": 100000,  # Allow retrieving up to 100k results (default is 10k)
                     "analysis": {
                         "analyzer": {
                             "greek_text_analyzer": {

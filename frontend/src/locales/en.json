@@ -186,8 +186,8 @@
     "viewCompanyDetails": "View company details",
     "incorporated": "Incorporated",
     "noRelatedEntities": "No related entities found for this decision",
-    "entityRelationships" : "Εntity Relationships"
-
+    "entityRelationships" : "Εntity Relationships",
+    "showText" : "Show Decision's Text"
   },
   "entityDetail": {
     "loadingEntity": "Loading {entityType} details...",

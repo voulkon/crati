@@ -186,7 +186,8 @@
     "viewCompanyDetails": "Προβολή στοιχείων επιχείρησης",
     "incorporated": "Ιδρύθηκε",
     "noRelatedEntities": "Δεν βρέθηκαν σχετικές οντότητες για αυτή την απόφαση",
-    "entityRelationships" : "Σχετικές Οντότητες"
+    "entityRelationships" : "Σχετικές Οντότητες",
+    "showText" : "Κείμενο Απόφασης"
   },
   "entityDetail": {
     "loadingEntity": "Φόρτωση λεπτομερειών {entityType}...",

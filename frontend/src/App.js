@@ -8,8 +8,10 @@ import DecisionDetailPage from "./pages/DecisionDetailPage";
 import AFMEntityDetailPage from "./pages/AFMEntityDetailPage";
 import SearchResults from "./pages/SearchResults";
 import SuperSearchExample from "./pages/SuperSearchExample";
+import LibraryPage from "./pages/LibraryPage";
 import Clock from "./components/Clock";
 import AccessDenied from "./components/AccessDenied";
+import LibrarySidebar from "./components/LibrarySidebar";
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { TranslationProvider } from './contexts/TranslationContext';
@@ -19,12 +21,18 @@ import './index.css';
 import RateLimitIndicator from './components/RateLimitIndicator';
 import RateLimitModal from './components/RateLimitModal';
 import { setTokenGetter } from './api/client';
+import { useTranslation } from './contexts/TranslationContext';
 
 // Authentication wrapper component with allowlist check
 function AuthenticatedApp({ controlsLayout }) {
   const { getToken } = useAuth();
+  const { t } = useTranslation(); // OK here - this component is inside TranslationProvider
   const stealthAllowlist = process.env.REACT_APP_STEALTH_ALLOWLIST === 'true';
   const { isAllowed, isChecking } = useAllowlistCheck();
+  
+  // Library sidebar state
+  const [isLibraryOpen, setIsLibraryOpen] = React.useState(false);
+  const [bookmarkCount, setBookmarkCount] = React.useState(0);
   
   // Set up the token getter for API client
   useEffect(() => {
@@ -42,7 +50,7 @@ function AuthenticatedApp({ controlsLayout }) {
           minHeight: '100vh',
           backgroundColor: 'var(--bg-color)'
         }}>
-          <div>Checking access...</div>
+          <div>{t('library.checkingAccess')}</div>
         </div>
       );
     }
@@ -54,8 +62,20 @@ function AuthenticatedApp({ controlsLayout }) {
   
   return (
     <>
-      {/* Flexible top controls */}
-      <TopControls layout={controlsLayout} />
+      {/* Flexible top controls with library toggle and bookmark button */}
+      <TopControls 
+        layout={controlsLayout}
+        onLibraryToggle={() => setIsLibraryOpen(!isLibraryOpen)}
+        isLibraryOpen={isLibraryOpen}
+        bookmarkCount={bookmarkCount}
+      />
+      
+      {/* Library Sidebar */}
+      <LibrarySidebar 
+        isOpen={isLibraryOpen}
+        onClose={() => setIsLibraryOpen(false)}
+        onBookmarkCountChange={setBookmarkCount}
+      />
       
       <RateLimitIndicator />
       <RateLimitModal />
@@ -63,6 +83,9 @@ function AuthenticatedApp({ controlsLayout }) {
       <Routes>
         {/* NEW: Use HomePage as the main landing page */}
         <Route path="/" element={<HomePage />} />
+        
+        {/* Library - bookmark management */}
+        <Route path="/library" element={<LibraryPage />} />
         
         {/* RENAMED: Change from /dev to /organizations */}
         <Route path="/organizations" element={<DevPage />} />
@@ -91,8 +114,9 @@ function AuthenticatedApp({ controlsLayout }) {
 
 function App() {
   // Easy way to switch layouts - just change this value!
-  const controlsLayout = 'vertical-right'; // Options: 'horizontal-right', 'vertical-right', 'split-corners', 'horizontal-left'
+  const controlsLayout = 'horizontal-right'; // Options: 'horizontal-right', 'vertical-right', 'split-corners', 'horizontal-left'
   const { isLoaded } = useAuth();
+  // NOTE: Cannot use useTranslation here - this component creates the TranslationProvider
   
   // Stealth mode toggle - set REACT_APP_STEALTH_MODE=true to require authentication
   const stealthMode = process.env.REACT_APP_STEALTH_MODE === 'true';

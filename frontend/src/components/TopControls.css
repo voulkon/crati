@@ -1,12 +1,25 @@
-/* Logo container - always on the left */
-.logo-container {
+/* Left controls container - Logo + Library button */
+.left-controls {
   position: fixed;
   top: var(--spacing-md);
   left: var(--spacing-md);
-  z-index: 1000;
+  z-index: 1001; /* Above library sidebar */
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  transition: left var(--transition-normal);
 }
 
-/* Top controls - other UI elements */
+/* Shift right when sidebar is open */
+.left-controls.shifted {
+  left: 420px; /* sidebar width (400px) + spacing */
+}
+
+.logo-container {
+  /* No positioning needed, handled by parent */
+}
+
+/* Top controls - Right side UI elements */
 .top-controls {
   position: fixed;
   z-index: 1000;
@@ -48,16 +61,19 @@
 /* Responsive adjustments for different layouts */
 @media (max-width: 768px) {
   /* On mobile, maybe force vertical layout */
-  .top-controls-horizontal {
+  .left-controls.shifted {
+    left: calc(100vw - 80px); /* Move to right edge on mobile */
+  }
+  
+  .top-controls {
     flex-direction: column !important;
     align-items: flex-end !important;
-    gap: 8px !important;
   }
 }
 
 @media (max-width: 480px) {
-  /* On very small screens, maybe use split corners */
-  .top-controls-split-mobile {
-    /* Custom mobile layout */
+  /* On very small screens, ensure proper stacking */
+  .top-controls {
+    gap: var(--spacing-xs);
   }
 }

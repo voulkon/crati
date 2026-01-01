@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { SignInButton, SignOutButton } from '@clerk/clerk-react';
 import { useTranslation } from '../contexts/TranslationContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -6,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import './UserMenu.css';
 
 const UserMenu = () => {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const { t, language, switchLanguage, availableLanguages } = useTranslation();
   const { 
@@ -76,6 +78,28 @@ const UserMenu = () => {
                 <div className="sign-in-text">Not signed in</div>
               </div>
             )}
+          </div>
+
+          <div className="menu-divider"></div>
+
+          {/* Library Link */}
+          <div className="menu-section">
+            <button 
+              className="menu-action primary"
+              onClick={() => {
+                setIsOpen(false);
+                navigate('/library');
+              }}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <span>📚</span>
+              <span>{t('library.myLibrary')}</span>
+            </button>
           </div>
 
           <div className="menu-divider"></div>

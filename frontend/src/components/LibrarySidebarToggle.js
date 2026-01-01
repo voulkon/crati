@@ -1,0 +1,21 @@
+import React from 'react'
+import './LibrarySidebarToggle.css'
+
+/**
+ * Toggle button for Library sidebar (like ChatGPT/Claude)
+ * Shows in TopControls
+ */
+export default function LibrarySidebarToggle({ isOpen, onToggle, bookmarkCount }) {
+  return (
+    <button
+      className={`library-toggle ${isOpen ? 'active' : ''}`}
+      onClick={onToggle}
+      title={isOpen ? 'Close Library' : 'Open Library'}
+    >
+      <span className="library-icon">📚</span>
+      {bookmarkCount > 0 && (
+        <span className="library-badge">{bookmarkCount}</span>
+      )}
+    </button>
+  );
+}   

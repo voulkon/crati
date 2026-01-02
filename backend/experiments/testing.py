@@ -19,8 +19,9 @@ class SampleTestResult:
 class SampleTester:
     """Test strategies on exported samples directory"""
     
-    def __init__(self, samples_dir: str):
+    def __init__(self, samples_dir: str, decision_type_filter: str = None):
         self.samples_dir = samples_dir
+        self.decision_type_filter = decision_type_filter
         
     def test_strategy(self, strategy: DecompositionStrategy) -> Dict[str, Any]:
         """
@@ -33,6 +34,10 @@ class SampleTester:
         for type_folder in os.listdir(self.samples_dir):
             type_path = os.path.join(self.samples_dir, type_folder)
             if not os.path.isdir(type_path):
+                continue
+            
+            # Filter by decision type if specified
+            if self.decision_type_filter and self.decision_type_filter not in type_folder:
                 continue
                 
             # Find all .json files (decision data)

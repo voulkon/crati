@@ -1,5 +1,6 @@
 *todo
 logs/
+extraction_results/
 decision_samples/
 .env.coolify-config
 coolify/archive/

@@ -13,21 +13,33 @@ class Command(BaseCommand):
         parser.add_argument('--sample-size', type=int, default=5, help='Number of decisions per type')
         parser.add_argument('--output-dir', type=str, default='decision_samples', help='Output directory')
         parser.add_argument('--separate-files', action='store_true', help='Save text and metadata in separate files')
+        parser.add_argument('--include-txt', action='store_true', help='Also create .txt file for easier reading (in addition to JSON)')
+        parser.add_argument('--include-no-text', action='store_true', help='Include decisions without extracted text')
 
     def handle(self, *args, **options):
         sample_size = options['sample_size']
         output_dir = options['output_dir']
         separate_files = options['separate_files']
+        include_txt = options['include_txt']
+        include_no_text = options['include_no_text']
 
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
         types = ActType.objects.all()
         total_exported = 0
+        total_skipped = 0
         
         for act_type in types:
-            # Get random samples
-            decisions = Decision.objects.filter(decision_type=act_type).order_by('?')[:sample_size]
+            # Get random samples with extraction (filter first for efficiency)
+            if not include_no_text:
+                # Only get decisions that have extractions
+                decisions = Decision.objects.filter(
+                    decision_type=act_type,
+                    text_extraction__isnull=False  # Correct relation name
+                ).order_by('?')[:sample_size]
+            else:
+                decisions = Decision.objects.filter(decision_type=act_type).order_by('?')[:sample_size]
             
             if not decisions.exists():
                 continue
@@ -40,7 +52,7 @@ class Command(BaseCommand):
             if not os.path.exists(type_dir):
                 os.makedirs(type_dir)
             
-            self.stdout.write(f"Exporting {len(decisions)} samples for {act_type.label}...")
+            self.stdout.write(f"Exporting samples for {act_type.label}...")
             
             for decision in decisions:
                 # Get extraction text
@@ -51,7 +63,12 @@ class Command(BaseCommand):
                     text = extraction.raw_text or ""
                     extraction_status = extraction.extraction_status
                 except DocumentExtraction.DoesNotExist:
-                    text = "No extraction found."
+                    text = ""
+                
+                # Skip if no text and flag is not set
+                if not text and not include_no_text:
+                    total_skipped += 1
+                    continue
                 
                 # Calculate accurate amount using FinancialCalculationService
                 accurate_amount = financial_service.get_decision_total_amount(decision)
@@ -88,7 +105,7 @@ class Command(BaseCommand):
                     'extraction': {
                         'status': extraction_status,
                         'text_length': len(text),
-                        'has_text': bool(text and text != "No extraction found.")
+                        'has_text': bool(text)
                     },
                     'document_url': decision.document_url,
                     'status': decision.status
@@ -110,12 +127,22 @@ class Command(BaseCommand):
                     metadata['text'] = text
                     with open(os.path.join(type_dir, f"{decision.ada}.json"), 'w', encoding='utf-8') as f:
                         json.dump(metadata, f, ensure_ascii=False, indent=2)
+                    
+                    # Optionally also create .txt for easier reading in editors
+                    if include_txt:
+                        with open(os.path.join(type_dir, f"{decision.ada}.txt"), 'w', encoding='utf-8') as f:
+                            f.write(text)
                 
                 total_exported += 1
         
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Successfully exported {total_exported} decisions to {output_dir}\n"
-                f"Format: {'Separate .txt and .json files' if separate_files else 'Combined JSON files'}"
-            )
-        )
+        summary = f"Successfully exported {total_exported} decisions to {output_dir}"
+        if total_skipped > 0:
+            summary += f"\nSkipped {total_skipped} decisions without extracted text"
+        if separate_files:
+            summary += "\nFormat: Separate .txt and .json files"
+        elif include_txt:
+            summary += "\nFormat: Combined JSON files + companion .txt files"
+        else:
+            summary += "\nFormat: Combined JSON files"
+        
+        self.stdout.write(self.style.SUCCESS(summary))

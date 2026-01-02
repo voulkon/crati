@@ -353,6 +353,26 @@ python manage.py shell
 >>> Decision.objects.count()
 ```
 
+```bash
+# Test only on ΕΓΚΡΙΣΗ ΔΑΠΑΝΗΣ documents
+python manage.py test_on_samples \
+  --strategy expense_approval_decomposer \
+  --decision-type "Β.2.1_ΕΓΚΡΙΣΗ ΔΑΠΑΝΗΣ" \
+  --show-failures
+
+# Or use partial match (just the code)
+python manage.py test_on_samples \
+  --strategy expense_approval_decomposer \
+  --decision-type "Β.2.1" \
+  --show-failures
+
+# Or compare all strategies on just this type
+python manage.py test_on_samples \
+  --compare-all \
+  --decision-type "ΕΓΚΡΙΣΗ ΔΑΠΑΝΗΣ" \
+  --show-failures
+```
+
 **Import errors?**
 Ensure your strategy file:
 - Is in `experiments/strategies/`
@@ -370,3 +390,28 @@ Ensure your strategy file:
 5. **Track what works** - Use the database to compare approaches
 
 **Goal:** Find the strategy with the best success/effort tradeoff for each decision type.
+
+
+
+```bash
+python manage.py test_on_samples \
+  --strategy expense_approval_essence \
+  --decision-type "Β.2.1" \
+  --export-results \
+  --show-failures
+```
+
+# This will create:
+# extraction_results/expense_approval_essence_YYYYMMDD_HHMMSS/
+#   ├── summary.json          # Overall results
+#   ├── report.txt            # Human-readable report
+#   ├── 6ΑΛΚΩΕΝ-1ΛΠ.json      # Individual extraction details
+#   ├── 992Δ469Β7Κ-3ΨΤ.json
+#   └── ...
+
+# Compare both strategies
+```bash
+python manage.py test_on_samples \
+  --decision-type "Β.2.1" \
+  --compare-all
+```

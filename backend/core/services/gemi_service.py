@@ -174,7 +174,7 @@ class GemiService:
             return saved_companies
             
         except GemiAPIError as e:
-            logger.error(f"GEMI API error searching for AFM {afm}: {e}")
+            logger.debug(f"GEMI API error searching for AFM {afm}: {e}")
             
             # Still update the entity to mark that we attempted the lookup
             if update_entity:

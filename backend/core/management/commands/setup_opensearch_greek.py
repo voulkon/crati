@@ -1,5 +1,7 @@
 import requests
 import json
+import yaml
+from pathlib import Path
 from django.core.management.base import BaseCommand
 from django.conf import settings
 
@@ -23,17 +25,39 @@ class Command(BaseCommand):
         
         self.stdout.write(self.style.SUCCESS("=== OpenSearch Greek setup completed ==="))
 
-    def create_greek_index_template(self, opensearch_url):
-        self.stdout.write("\n--- Creating Greek Index Template ---")
+    def load_template_config(self):
+        """
+        Load index template configuration from YAML file.
+        Falls back to hardcoded config if file doesn't exist.
+        """
+        config_path = Path(__file__).parent.parent.parent.parent.parent / 'docker' / 'opensearch-config' / 'index-template-config.yml'
         
-        # Simplified template config to avoid errors
-        template_config = {
+        if config_path.exists():
+            self.stdout.write(f"📄 Loading template config from: {config_path}")
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = yaml.safe_load(f)
+                    return {
+                        "index_patterns": config.get('index_patterns', ["greek-*", "diavgeia-*"]),
+                        "template": {
+                            "settings": config.get('settings', {}),
+                            "mappings": config.get('mappings', {})
+                        }
+                    }
+            except Exception as e:
+                self.stdout.write(self.style.WARNING(f"⚠️  Failed to load YAML config: {e}"))
+                self.stdout.write("   Falling back to hardcoded configuration...")
+        else:
+            self.stdout.write("ℹ️  No YAML config found, using hardcoded configuration")
+        
+        # Fallback to hardcoded config
+        return {
             "index_patterns": ["greek-*", "diavgeia-*"],
             "template": {
                 "settings": {
                     "number_of_shards": 1,
                     "number_of_replicas": 0,
-                    "index.max_result_window": 100000,  # Allow retrieving up to 100k results (default is 10k)
+                    "index.max_result_window": 100000,
                     "analysis": {
                         "analyzer": {
                             "greek_text_analyzer": {
@@ -70,6 +94,12 @@ class Command(BaseCommand):
                 }
             }
         }
+
+    def create_greek_index_template(self, opensearch_url):
+        self.stdout.write("\n--- Creating Greek Index Template ---")
+        
+        # Load template configuration from YAML or use hardcoded fallback
+        template_config = self.load_template_config()
         
         try:
             response = requests.put(

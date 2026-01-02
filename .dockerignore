@@ -1,5 +1,6 @@
-# .dockerignore
+decision_samples/
 
+# .dockerignore
 # Version control
 **/.git
 **/.gitignore

@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     "admin_custom",
     "users",
     "api",
+    "experiments",  # Experimental decomposition strategies
     "drf_yasg",
     "corsheaders"
 ]

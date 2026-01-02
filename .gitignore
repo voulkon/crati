@@ -1,5 +1,6 @@
 *todo
 logs/
+decision_samples/
 .env.coolify-config
 coolify/archive/
 afm_exploration_*

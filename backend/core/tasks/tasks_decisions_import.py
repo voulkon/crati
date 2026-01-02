@@ -124,7 +124,6 @@ def fetch_daily_decisions_to_pickle(self, target_date_str: str,
             storage_task = store_decisions_from_pickle.apply_async(
                 args=[chunk_pickle],
                 kwargs={'batch_size': 1},  # Always start with sequential processing
-                countdown=delay_seconds
             )
             storage_tasks.append(storage_task.id)
             logger.info(f"Dispatched storage task {storage_task.id} for chunk {chunk_id} (delayed by {delay_seconds}s, sequential processing)")

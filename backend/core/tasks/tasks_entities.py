@@ -81,7 +81,7 @@ def fetch_company_data_for_entities(self, afm_list: List[str], parent_task_id: s
             # Use the extraction service to fetch company data
             service = EntityExtractionService()
             stats = service.fetch_company_data_for_entities(
-                entities_needing_fetch, max_requests_per_minute=6  # Respect API limits
+                entities_needing_fetch, max_requests_per_minute=10  # Conservative batch rate limit
             )
             
             stats['already_fetched'] = len(entities_already_fetched)
@@ -113,12 +113,12 @@ def fetch_company_data_for_single_afm(self, afm: str):
             logger.warning(f"AFMEntity {afm} not found in database")
             return {"status": "entity_not_found", "afm": afm}
 
-        # Use GemiService directly - no rate limiting needed here since Celery handles it
+        # Use GemiService directly - rate limit matches Celery's rate_limit decorator
         try: 
             companies = GemiService.fetch_companies_by_afm(
                 afm,
                 update_entity=True,
-                max_requests_per_minute=60, 
+                max_requests_per_minute=6,  # Matches task rate_limit="6/m"
             )
         except GemiNotFoundError:
             logger.info(f"No company data found for AFM {afm}")

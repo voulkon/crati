@@ -70,7 +70,7 @@ def task_failure_handler(sender=None, task_id=None, exception=None, traceback=No
 # Configure result backend to store task results
 app.conf.update(
     result_backend="django-db",  # Store results in Django's database
-    task_track_started=True,  # Track when tasks are started
+    task_track_started=False,  # DISABLED: Testing if DB write before task start causes hang
     result_expires=86400,  # Results expire after 1 day (in seconds)
     task_serializer="json",
     accept_content=["json"],

@@ -10,9 +10,6 @@ from gemi.exceptions import GemiNotFoundError
 def fetch_company_data_for_entities(self, afm_list: List[str], parent_task_id: str = None, parent_ada: str = None):
     """
     Celery task to fetch company data for a list of AFMs.
-    
-    This task is idempotent and race-condition safe - it re-checks which AFMs
-    actually need fetching at execution time, so duplicate tasks are harmless.
 
     Args:
         afm_list: List of AFM numbers to fetch company data for
@@ -40,51 +37,12 @@ def fetch_company_data_for_entities(self, afm_list: List[str], parent_task_id: s
                 logger.warning(f"No entities found for AFMs: {afm_list}")
                 return {"status": "no_entities_found", "afms": afm_list}
 
-            # RACE CONDITION PROTECTION: Re-check which AFMs actually need fetching
-            # This handles cases where:
-            # 1. Another task is running concurrently
-            # 2. Data was fetched between task queuing and execution
-            entities_needing_fetch = []
-            entities_already_fetched = []
-            
-            for entity in entities:
-                if entity.gemi_lookup_attempted and entity.gemi_lookup_success:
-                    entities_already_fetched.append(entity.afm)
-                    logger.info(
-                        f"AFM {entity.afm} already has company data (skipping)",
-                        companies_count=entity.gemi_companies_count,
-                        last_fetch=entity.gemi_lookup_attempted.isoformat()
-                    )
-                else:
-                    entities_needing_fetch.append(entity)
-            
-            # If all AFMs already have data, exit early
-            if not entities_needing_fetch:
-                logger.info(
-                    f"All AFMs already have company data, task exiting early",
-                    total_afms=len(afm_list),
-                    already_fetched=len(entities_already_fetched)
-                )
-                return {
-                    "status": "all_already_fetched",
-                    "total_afms": len(afm_list),
-                    "already_fetched": len(entities_already_fetched),
-                    "newly_fetched": 0
-                }
-
-            logger.info(
-                f"Fetching company data",
-                afms_to_fetch=len(entities_needing_fetch),
-                afms_skipped=len(entities_already_fetched)
-            )
-
             # Use the extraction service to fetch company data
             service = EntityExtractionService()
             stats = service.fetch_company_data_for_entities(
-                entities_needing_fetch, max_requests_per_minute=10  # Conservative batch rate limit
+                list(entities), max_requests_per_minute=6  # Respect API limits
             )
-            
-            stats['already_fetched'] = len(entities_already_fetched)
+
             logger.info(f"Company data fetch task completed", stats=stats)
             return stats
 

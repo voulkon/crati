@@ -87,11 +87,10 @@ class DecisionAnalysisService:
     def _analyze_by_type(self, decisions_qs) -> List[Dict[str, Any]]:
         """Analyze decisions by act type"""
         # Subquery to get calculated amount for a decision
-        # We sum amounts from DecisionAmountField that are linked to relationships
+        # Sum all amounts from DecisionAmountField (linked or not)
         calc_amt_subquery = Subquery(
             DecisionAmountField.objects.filter(
-                decision=OuterRef('pk'),
-                associated_relationship__isnull=False
+                decision=OuterRef('pk')
             ).values('decision')
             .annotate(total=Sum('amount'))
             .values('total')
@@ -270,36 +269,54 @@ class DecisionAnalysisService:
 
     def _get_financial_summary(self, decisions_qs) -> Dict[str, Any]:
         """Calculate financial summaries by various entities"""
-        from django.db.models import Sum
-        from core.models.entities import DecisionEntityRelationship, EntityRole
+        from django.db.models import Sum, OuterRef, Subquery
+        from django.db.models.functions import Coalesce
+        from core.models.entities import DecisionEntityRelationship, EntityRole, DecisionAmountField
+        
+        # Subquery to get calculated amount for a decision
+        calc_amt_subquery = Subquery(
+            DecisionAmountField.objects.filter(
+                decision=OuterRef('pk')
+            ).values('decision')
+            .annotate(total=Sum('amount'))
+            .values('total')
+        )
+        
+        # Annotate decisions with effective amount
+        decisions_with_amount = decisions_qs.annotate(
+            effective_amt=Coalesce('amount', calc_amt_subquery)
+        )
         
         # Total amount for the day
-        total_amount = decisions_qs.aggregate(total=Sum('amount'))['total'] or 0
+        total_amount = decisions_with_amount.aggregate(total=Sum('effective_amt'))['total'] or 0
         
         # Amounts by organization
         by_org = list(
-            decisions_qs.values('organization__label')
-            .annotate(total_amount=Sum('amount'))
+            decisions_with_amount.values('organization__label')
+            .annotate(total_amount=Sum('effective_amt'))
             .filter(total_amount__gt=0)
             .order_by('-total_amount')[:5]
         )
         
         # Amounts by signer
         by_signer = list(
-            decisions_qs.values('signers__first_name', 'signers__last_name')
-            .annotate(total_amount=Sum('amount'))
+            decisions_with_amount.values('signers__first_name', 'signers__last_name')
+            .annotate(total_amount=Sum('effective_amt'))
             .filter(total_amount__gt=0)
             .order_by('-total_amount')[:5]
         )
         
         # Amounts by sponsor (counterpart)
+        # Get the amounts from DecisionAmountField through relationships
         by_sponsor = list(
             DecisionEntityRelationship.objects.filter(
                 decision__in=decisions_qs,
                 role=EntityRole.SPONSOR
             )
             .values('entity__name', 'entity__afm')
-            .annotate(total_amount=Sum('decision__amount'))
+            .annotate(
+                total_amount=Sum('linked_amounts__amount')
+            )
             .filter(total_amount__gt=0)
             .order_by('-total_amount')[:5]
         )
@@ -441,11 +458,10 @@ class DecisionAnalysisService:
             decisions_qs = decisions_qs.filter(decision_type__uid=decision_type_uid)
             
         # Annotate with calculated amount for sorting and display
+        # Include all amount fields, not just those linked to relationships
+        # (linking is optional for decisions without entities)
         decisions_qs = decisions_qs.annotate(
-            calculated_amount=Sum(
-                'amount_fields__amount',
-                filter=Q(amount_fields__associated_relationship__isnull=False)
-            )
+            calculated_amount=Sum('amount_fields__amount')
         ).annotate(
             effective_amount=Coalesce('amount', 'calculated_amount')
         )

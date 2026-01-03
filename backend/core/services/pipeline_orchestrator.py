@@ -106,13 +106,13 @@ class DecisionPipelineOrchestrator:
             health_check = self.get_or_create_health_check(decision)
             self.update_health_status(health_check, 'ingestion', HealthStatus.HEALTHY)
 
-            # 1. Amount Extraction
-            logger.info(f"\n{self._separator()}\n💰 STAGE 1/6: AMOUNT EXTRACTION\n{self._separator()}")
-            self._step_extract_amounts(decision, health_check)
-
-            # 2. Entity Extraction
-            logger.info(f"\n{self._separator()}\n📝 STAGE 2/6: ENTITY EXTRACTION\n{self._separator()}")
+            # 1. Entity Extraction (must come before amounts so relationships exist for linking)
+            logger.info(f"\n{self._separator()}\n📝 STAGE 1/6: ENTITY EXTRACTION\n{self._separator()}")
             self._step_extract_entities(decision, health_check)
+
+            # 2. Amount Extraction (links to relationships created in step 1)
+            logger.info(f"\n{self._separator()}\n💰 STAGE 2/6: AMOUNT EXTRACTION\n{self._separator()}")
+            self._step_extract_amounts(decision, health_check)
 
             # 3. Company Data Enrichment
             logger.info(f"\n{self._separator()}\n🏢 STAGE 3/6: COMPANY ENRICHMENT\n{self._separator()}")
@@ -149,19 +149,23 @@ class DecisionPipelineOrchestrator:
             
             return health_check
 
-    def _step_extract_amounts(self, decision: Decision, health_check: DecisionHealthCheck):
+    def _step_extract_amounts(self, decision: Decision, health_check: DecisionHealthCheck, force: bool = False):
         """Extract and save DecisionAmountField records from extra field values."""
         try:
             from core.models.entities import DecisionAmountField
             
-            logger.info(f"Step 1: Extracting amounts for {decision.ada}")
+            logger.info(f"Step 2: Extracting amounts for {decision.ada}")
             
             # Check if amounts already extracted
             existing_count = DecisionAmountField.objects.filter(decision=decision).count()
             
-            if existing_count > 0:
-                logger.debug(f"Decision {decision.ada} already has {existing_count} amount fields")
+            if existing_count > 0 and not force:
+                logger.debug(f"Decision {decision.ada} already has {existing_count} amount fields, skipping extraction")
             else:
+                if force and existing_count > 0:
+                    logger.info(f"Force re-extraction: deleting {existing_count} existing amount fields")
+                    DecisionAmountField.objects.filter(decision=decision).delete()
+                
                 # Extract and save amounts
                 self.decision_importer.extract_and_save_amounts(decision)
                 
@@ -179,7 +183,7 @@ class DecisionPipelineOrchestrator:
         try:
             from core.models.entities import DecisionEntityRelationship
             
-            logger.info(f"Step 2: Extracting entities for {decision.ada}")
+            logger.info(f"Step 1: Extracting entities for {decision.ada}")
             
             # Check if entities already extracted
             existing_count = DecisionEntityRelationship.objects.filter(decision=decision).count()
@@ -562,7 +566,11 @@ class DecisionPipelineOrchestrator:
         logger.info(f"🔄 Retrying {component} for {decision_ada}")
         
         try:
-            step_map[component](decision, health_check, force=force)
+            # Steps that accept 'force' parameter
+            if component in ['amounts', 'document']:
+                step_map[component](decision, health_check, force=force)
+            else:
+                step_map[component](decision, health_check)
             logger.success(f"✅ Successfully retried {component} for {decision_ada}")
         except Exception as e:
             logger.error(f"❌ Failed to retry {component} for {decision_ada}: {e}")

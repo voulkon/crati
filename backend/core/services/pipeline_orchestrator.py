@@ -15,6 +15,7 @@ from core.services.entity_extraction_service import EntityExtractionService
 from core.services.document_processor import DocumentAnalysisService
 from core.services.opensearch_service import OpenSearchService
 from core.tasks.tasks_entities import fetch_company_data_for_entities
+from core.importers.decisions import DecisionImporter
 
 class DecisionPipelineOrchestrator:
     """
@@ -28,6 +29,7 @@ class DecisionPipelineOrchestrator:
         self.entity_service = EntityExtractionService()
         self.doc_service = DocumentAnalysisService()
         self.search_service = OpenSearchService()
+        self.decision_importer = DecisionImporter()
     
     def _separator(self, char: str = '=', width: int = 80) -> str:
         """Generate a separator line for logs."""
@@ -104,33 +106,37 @@ class DecisionPipelineOrchestrator:
             health_check = self.get_or_create_health_check(decision)
             self.update_health_status(health_check, 'ingestion', HealthStatus.HEALTHY)
 
-            # 1. Entity Extraction
-            logger.info(f"\n{self._separator()}\n📝 STAGE 1/5: ENTITY EXTRACTION\n{self._separator()}")
+            # 1. Amount Extraction
+            logger.info(f"\n{self._separator()}\n💰 STAGE 1/6: AMOUNT EXTRACTION\n{self._separator()}")
+            self._step_extract_amounts(decision, health_check)
+
+            # 2. Entity Extraction
+            logger.info(f"\n{self._separator()}\n📝 STAGE 2/6: ENTITY EXTRACTION\n{self._separator()}")
             self._step_extract_entities(decision, health_check)
 
-            # 2. Company Data Enrichment
-            logger.info(f"\n{self._separator()}\n🏢 STAGE 2/5: COMPANY ENRICHMENT\n{self._separator()}")
+            # 3. Company Data Enrichment
+            logger.info(f"\n{self._separator()}\n🏢 STAGE 3/6: COMPANY ENRICHMENT\n{self._separator()}")
             self._step_enrich_companies(decision, health_check)
 
-            # 3. Document Processing
-            logger.info(f"\n{self._separator()}\n📄 STAGE 3/5: DOCUMENT PROCESSING\n{self._separator()}")
+            # 4. Document Processing
+            logger.info(f"\n{self._separator()}\n📄 STAGE 4/6: DOCUMENT PROCESSING\n{self._separator()}")
             self._step_process_document(decision, health_check, force_reprocess)
 
-            # 4. OpenSearch Indexing
+            # 5. OpenSearch Indexing
             if skip_opensearch:
                 logger.info(
                     f"\n{self._separator()}\n"
-                    f"🔎 STAGE 4/5: OPENSEARCH INDEXING (SKIPPED)\n"
+                    f"🔎 STAGE 5/6: OPENSEARCH INDEXING (SKIPPED)\n"
                     f"{self._separator()}\n"
                     f"OpenSearch indexing disabled - skipping to save on infrastructure costs"
                 )
                 self.update_health_status(health_check, 'opensearch', HealthStatus.UNKNOWN)
             else:
-                logger.info(f"\n{self._separator()}\n🔎 STAGE 4/5: OPENSEARCH INDEXING\n{self._separator()}")
+                logger.info(f"\n{self._separator()}\n🔎 STAGE 5/6: OPENSEARCH INDEXING\n{self._separator()}")
                 self._step_index_opensearch(decision, health_check)
 
-            # 5. Coverage
-            logger.info(f"\n{self._separator()}\n📊 STAGE 5/5: COVERAGE METRICS\n{self._separator()}")
+            # 6. Coverage
+            logger.info(f"\n{self._separator()}\n📊 STAGE 6/6: COVERAGE METRICS\n{self._separator()}")
             self._step_verify_coverage(decision, health_check)
 
             logger.info(
@@ -143,11 +149,50 @@ class DecisionPipelineOrchestrator:
             
             return health_check
 
+    def _step_extract_amounts(self, decision: Decision, health_check: DecisionHealthCheck):
+        """Extract and save DecisionAmountField records from extra field values."""
+        try:
+            from core.models.entities import DecisionAmountField
+            
+            logger.info(f"Step 1: Extracting amounts for {decision.ada}")
+            
+            # Check if amounts already extracted
+            existing_count = DecisionAmountField.objects.filter(decision=decision).count()
+            
+            if existing_count > 0:
+                logger.debug(f"Decision {decision.ada} already has {existing_count} amount fields")
+            else:
+                # Extract and save amounts
+                self.decision_importer.extract_and_save_amounts(decision)
+                
+                new_count = DecisionAmountField.objects.filter(decision=decision).count()
+                logger.info(f"Extracted {new_count} amount fields for {decision.ada}")
+            
+            # Always mark as healthy - having no amounts is valid
+            self.update_health_status(health_check, 'entities', HealthStatus.HEALTHY)
+            
+        except Exception as e:
+            logger.error(f"Failed amount extraction: {e}", exc_info=True)
+            self.update_health_status(health_check, 'entities', HealthStatus.ERROR, str(e))
+
     def _step_extract_entities(self, decision: Decision, health_check: DecisionHealthCheck):
         try:
-            logger.info(f"Step 1: Extracting entities for {decision.ada}")
-            # Check if already extracted? For now, just re-run as it's idempotent-ish
-            self.afm_service.extract_afms_from_decision(decision, save_to_db=True)
+            from core.models.entities import DecisionEntityRelationship
+            
+            logger.info(f"Step 2: Extracting entities for {decision.ada}")
+            
+            # Check if entities already extracted
+            existing_count = DecisionEntityRelationship.objects.filter(decision=decision).count()
+            
+            if existing_count > 0:
+                logger.debug(f"Decision {decision.ada} already has {existing_count} entity relationships, skipping extraction")
+            else:
+                # Extract entities
+                self.afm_service.extract_afms_from_decision(decision, save_to_db=True)
+                
+                new_count = DecisionEntityRelationship.objects.filter(decision=decision).count()
+                logger.info(f"Extracted {new_count} entity relationships for {decision.ada}")
+            
             self.update_health_status(health_check, 'entities', HealthStatus.HEALTHY)
         except Exception as e:
             logger.error(f"Failed entity extraction: {e}")
@@ -155,24 +200,38 @@ class DecisionPipelineOrchestrator:
 
     def _step_enrich_companies(self, decision: Decision, health_check: DecisionHealthCheck):
         try:
-            logger.info(f"Step 2: Enriching company data for {decision.ada}")
+            logger.info(f"Step 3: Enriching company data for {decision.ada}")
+            
             # Find entities related to this decision
             relationships = decision.entity_relationships.all()
-            afms = [rel.entity.afm for rel in relationships]
             
-            if afms:
+            if not relationships.exists():
+                logger.debug(f"No entity relationships found for {decision.ada}, skipping company enrichment")
+                self.update_health_status(health_check, 'relations', HealthStatus.HEALTHY)
+                return
+            
+            # Check which entities need GEMI lookup (haven't been attempted yet)
+            entities_needing_lookup = []
+            for rel in relationships:
+                entity = rel.entity
+                if entity.gemi_lookup_attempted is None:
+                    entities_needing_lookup.append(entity.afm)
+            
+            if entities_needing_lookup:
+                logger.info(f"Triggering company enrichment for {len(entities_needing_lookup)} entities")
+                
                 # Extract parent context from logger for tracing child tasks
                 parent_task_id = logger._core.extra.get('task_id')
                 parent_ada = decision.ada
                 
                 # Trigger the task with parent context for complete traceability
                 fetch_company_data_for_entities.delay(
-                    afms, 
+                    entities_needing_lookup, 
                     parent_task_id=parent_task_id, 
                     parent_ada=parent_ada
                 )
-                # We mark as HEALTHY but technically it's "SCHEDULED". 
-                # A stricter check would verify data presence.
+            else:
+                logger.debug(f"All {relationships.count()} entities for {decision.ada} already have GEMI lookup attempted, skipping")
             
             self.update_health_status(health_check, 'relations', HealthStatus.HEALTHY)
         except Exception as e:
@@ -208,35 +267,53 @@ class DecisionPipelineOrchestrator:
 
     def _step_index_opensearch(self, decision: Decision, health_check: DecisionHealthCheck):
         try:
-            logger.info(f"Step 4: Indexing in OpenSearch for {decision.ada}")
+            logger.info(f"Step 5: Indexing in OpenSearch for {decision.ada}")
             
             extraction = DocumentExtraction.objects.filter(decision=decision).first()
-            if extraction and extraction.extraction_status == ProcessingStatus.COMPLETED and extraction.raw_text:
-                # Build document data dict for OpenSearch
-                document_data = {
-                    'decision_id': decision.id,
-                    'ada': decision.ada,
-                    'title': decision.subject or '',
-                    'content': extraction.raw_text,
-                    'organization': str(decision.organization) if decision.organization else '',
-                    'decision_type': str(decision.decision_type) if decision.decision_type else '',
-                    'issue_date': decision.issue_date.isoformat() if decision.issue_date else None,
-                    'extraction_date': extraction.extraction_date.isoformat() if extraction.extraction_date else None,
-                    'character_count': extraction.character_count,
-                    'page_count': extraction.page_count
-                }
-                
-                success = self.search_service.index_document(document_data)
-                if success:
-                    self.update_health_status(health_check, 'opensearch', HealthStatus.HEALTHY)
-                else:
-                    self.update_health_status(health_check, 'opensearch', HealthStatus.ERROR, "Indexing failed")
-            elif extraction and extraction.extraction_status != ProcessingStatus.COMPLETED:
-                self.update_health_status(health_check, 'opensearch', HealthStatus.WARNING, f"Extraction status: {extraction.extraction_status}")
-            elif extraction and not extraction.raw_text:
-                self.update_health_status(health_check, 'opensearch', HealthStatus.WARNING, "No text extracted")
-            else:
+            
+            if not extraction:
                 self.update_health_status(health_check, 'opensearch', HealthStatus.WARNING, "No extraction found")
+                return
+            
+            if extraction.extraction_status != ProcessingStatus.COMPLETED:
+                self.update_health_status(health_check, 'opensearch', HealthStatus.WARNING, f"Extraction status: {extraction.extraction_status}")
+                return
+            
+            if not extraction.raw_text:
+                self.update_health_status(health_check, 'opensearch', HealthStatus.WARNING, "No text extracted")
+                return
+            
+            # Check if already indexed by querying OpenSearch
+            try:
+                is_indexed = self.search_service.document_exists(decision.id)
+                if is_indexed:
+                    logger.debug(f"Document for {decision.ada} already indexed in OpenSearch, skipping")
+                    self.update_health_status(health_check, 'opensearch', HealthStatus.HEALTHY)
+                    return
+            except Exception as check_error:
+                logger.warning(f"Could not check if document exists in OpenSearch: {check_error}, proceeding with indexing")
+            
+            # Build document data dict for OpenSearch
+            document_data = {
+                'decision_id': decision.id,
+                'ada': decision.ada,
+                'title': decision.subject or '',
+                'content': extraction.raw_text,
+                'organization': str(decision.organization) if decision.organization else '',
+                'decision_type': str(decision.decision_type) if decision.decision_type else '',
+                'issue_date': decision.issue_date.isoformat() if decision.issue_date else None,
+                'extraction_date': extraction.extraction_date.isoformat() if extraction.extraction_date else None,
+                'character_count': extraction.character_count,
+                'page_count': extraction.page_count
+            }
+            
+            logger.info(f"Indexing document for {decision.ada} in OpenSearch")
+            success = self.search_service.index_document(document_data)
+            
+            if success:
+                self.update_health_status(health_check, 'opensearch', HealthStatus.HEALTHY)
+            else:
+                self.update_health_status(health_check, 'opensearch', HealthStatus.ERROR, "Indexing failed")
 
         except Exception as e:
             logger.error(f"Failed OpenSearch indexing: {e}")
@@ -471,6 +548,7 @@ class DecisionPipelineOrchestrator:
         health_check = self.get_or_create_health_check(decision)
         
         step_map = {
+            'amounts': self._step_extract_amounts,
             'entities': self._step_extract_entities,
             'companies': self._step_enrich_companies,
             'document': self._step_process_document,

@@ -1312,7 +1312,8 @@ class DecisionImporter(BaseImporter):
                 )
                 
                 # NEW: Link to entity relationship using the same logic as backfill
-                if amount_info['related_afms'] and not amount_field.associated_relationship:
+                # Always try to link, even if related_afms is empty (field-level amounts)
+                if not amount_field.associated_relationship:
                     # Get all relationships for this decision
                     relationships = DecisionEntityRelationship.objects.filter(decision=decision)
                     
@@ -1333,6 +1334,7 @@ class DecisionImporter(BaseImporter):
                     if matching_rel:
                         amount_field.associated_relationship = matching_rel
                         amount_field.save(update_fields=['associated_relationship'])
+                        logger.debug(f"Linked amount {amount_field.id} ({amount_field.amount}) to relationship {matching_rel.id} (entity {matching_rel.entity.afm})")
                 
                 # Keep the old logic for backward compatibility (can remove later)
                 if amount_info['related_afms']:

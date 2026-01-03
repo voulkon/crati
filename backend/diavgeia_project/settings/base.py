@@ -62,3 +62,21 @@ WSGI_APPLICATION = "diavgeia_project.wsgi.application"
 
 # Root URL configuration
 ROOT_URLCONF = "diavgeia_project.urls"
+
+# Let's document here which parts change:
+INDEX_THE_OPENSEARCH = os.getenv("INDEX_THE_OPENSEARCH", "True").lower() == "true"
+# If False: 
+#   the DecisionPipelineOrchestrator will skip indexing steps
+#   the search api view will be omitting to ask opensearch
+#   we need some task to be ensuring that all extracted documents will get indexed if we change this to True
+HAVE_AFM_FETCH_JOB = os.getenv("HAVE_AFM_FETCH_JOB", "True").lower() == "true"
+# If False: 
+#   the DecisionPipelineOrchestrator will skip registering afm tasks
+#   the decisions api view(s) will be omitting to return afm data
+#   we need some task to be ensuring that all companies extracted as Entities that DON'T have afm data will get it if we change this to True
+#   on this critical is the mechanism that keeps the afm data ASKED updated (either found or not found)
+EXTRACT_THE_DOCS_FROM_PDFS = os.getenv("EXTRACT_THE_DOCS_FROM_PDFS", "True").lower() == "true"
+# If False: 
+#   the DecisionPipelineOrchestrator will skip pdf text extraction steps
+#   the decisions api view(s) will be omitting to return afm data
+#   we need some task to be ensuring that all documents that DON'T have text extracted will start getting extracted (aka create the respective tasks)

@@ -57,9 +57,11 @@ class DecisionPipelineOrchestrator:
             health_check.findings = findings
             health_check.has_errors = True
         
-        # Recalculate overall status
+        # Recalculate overall status - include new import_status and organization_status
         statuses = [
-            health_check.ingestion_status,
+            health_check.import_status,
+            health_check.organization_status,
+            health_check.ingestion_status,  # Legacy field for backward compatibility
             health_check.relations_status,
             health_check.entities_status,
             health_check.document_extraction_status,
@@ -76,7 +78,7 @@ class DecisionPipelineOrchestrator:
         
         health_check.save()
 
-    def run_pipeline(self, decision_ada: str, force_reprocess: bool = False, skip_opensearch: bool = False) -> DecisionHealthCheck:
+    def run_pipeline(self, decision_ada: str, force_reprocess: bool = False, skip_opensearch: bool = False, decision_dto=None) -> DecisionHealthCheck:
         """
         Runs the full processing pipeline for a decision.
         
@@ -84,6 +86,7 @@ class DecisionPipelineOrchestrator:
             decision_ada: The ADA of the decision to process
             force_reprocess: Force reprocessing even if already processed
             skip_opensearch: Skip OpenSearch indexing (useful for reducing infra costs)
+            decision_dto: Optional DecisionDTO for import stage (if provided, skips import check)
         """
         # Generate unique ingestion ID for log tracing in Grafana
         ingestion_id = str(uuid.uuid4())[:8]
@@ -96,49 +99,72 @@ class DecisionPipelineOrchestrator:
                 f"   Ingestion ID: {ingestion_id} (use this to filter logs)\n"
                 f"   Force reprocess: {force_reprocess}\n"
                 f"   Skip OpenSearch: {skip_opensearch}\n"
+                f"   Has DTO: {decision_dto is not None}\n"
                 f"{self._separator()}\n"
             )
             
-            try:
-                decision = Decision.objects.get(ada=decision_ada)
-            except Decision.DoesNotExist:
-                logger.error(f"❌ Decision {decision_ada} not found")
-                return None
+            # Stage 0: Import Decision (if DTO provided)
+            if decision_dto:
+                logger.info(f"\n{self._separator()}\n📥 STAGE 0/8: IMPORT DECISION\n{self._separator()}")
+                decision = self._step_import_decision(decision_dto, health_check=None)
+                if not decision:
+                    logger.error(f"❌ Failed to import decision {decision_dto.ada}")
+                    return None
+            else:
+                # Get existing decision from database
+                try:
+                    decision = Decision.objects.get(ada=decision_ada)
+                except Decision.DoesNotExist:
+                    logger.error(f"❌ Decision {decision_ada} not found in database")
+                    return None
 
             health_check = self.get_or_create_health_check(decision)
+            
+            # If DTO was provided, mark import as healthy
+            if decision_dto:
+                self.update_health_status(health_check, 'import', HealthStatus.HEALTHY)
+            else:
+                # For existing decisions, mark import as healthy if decision exists
+                self.update_health_status(health_check, 'import', HealthStatus.HEALTHY)
+            
+            # Legacy: Keep ingestion_status for backward compatibility
             self.update_health_status(health_check, 'ingestion', HealthStatus.HEALTHY)
 
-            # 1. Entity Extraction (must come before amounts so relationships exist for linking)
-            logger.info(f"\n{self._separator()}\n📝 STAGE 1/6: ENTITY EXTRACTION\n{self._separator()}")
+            # 1. Organization Resolution (moved from DecisionImporter)
+            logger.info(f"\n{self._separator()}\n🏛️ STAGE 1/8: ORGANIZATION RESOLUTION\n{self._separator()}")
+            self._step_resolve_organizations(decision, health_check)
+
+            # 2. Entity Extraction (must come before amounts so relationships exist for linking)
+            logger.info(f"\n{self._separator()}\n📝 STAGE 2/8: ENTITY EXTRACTION\n{self._separator()}")
             self._step_extract_entities(decision, health_check)
 
-            # 2. Amount Extraction (links to relationships created in step 1)
-            logger.info(f"\n{self._separator()}\n💰 STAGE 2/6: AMOUNT EXTRACTION\n{self._separator()}")
+            # 3. Amount Extraction (links to relationships created in step 2)
+            logger.info(f"\n{self._separator()}\n💰 STAGE 3/8: AMOUNT EXTRACTION\n{self._separator()}")
             self._step_extract_amounts(decision, health_check)
 
-            # 3. Company Data Enrichment
-            logger.info(f"\n{self._separator()}\n🏢 STAGE 3/6: COMPANY ENRICHMENT\n{self._separator()}")
+            # 4. Company Data Enrichment
+            logger.info(f"\n{self._separator()}\n🏢 STAGE 4/8: COMPANY ENRICHMENT\n{self._separator()}")
             self._step_enrich_companies(decision, health_check)
 
-            # 4. Document Processing
-            logger.info(f"\n{self._separator()}\n📄 STAGE 4/6: DOCUMENT PROCESSING\n{self._separator()}")
+            # 5. Document Processing
+            logger.info(f"\n{self._separator()}\n📄 STAGE 5/8: DOCUMENT PROCESSING\n{self._separator()}")
             self._step_process_document(decision, health_check, force_reprocess)
 
-            # 5. OpenSearch Indexing
+            # 6. OpenSearch Indexing
             if skip_opensearch:
                 logger.info(
                     f"\n{self._separator()}\n"
-                    f"🔎 STAGE 5/6: OPENSEARCH INDEXING (SKIPPED)\n"
+                    f"🔎 STAGE 6/8: OPENSEARCH INDEXING (SKIPPED)\n"
                     f"{self._separator()}\n"
                     f"OpenSearch indexing disabled - skipping to save on infrastructure costs"
                 )
                 self.update_health_status(health_check, 'opensearch', HealthStatus.UNKNOWN)
             else:
-                logger.info(f"\n{self._separator()}\n🔎 STAGE 5/6: OPENSEARCH INDEXING\n{self._separator()}")
+                logger.info(f"\n{self._separator()}\n🔎 STAGE 6/8: OPENSEARCH INDEXING\n{self._separator()}")
                 self._step_index_opensearch(decision, health_check)
 
-            # 6. Coverage
-            logger.info(f"\n{self._separator()}\n📊 STAGE 6/6: COVERAGE METRICS\n{self._separator()}")
+            # 7. Coverage
+            logger.info(f"\n{self._separator()}\n📊 STAGE 7/8: COVERAGE METRICS\n{self._separator()}")
             self._step_verify_coverage(decision, health_check)
 
             logger.info(
@@ -150,6 +176,172 @@ class DecisionPipelineOrchestrator:
             )
             
             return health_check
+
+    def _step_import_decision(self, decision_dto, health_check: DecisionHealthCheck = None):
+        """
+        Stage 0: Import decision from DTO to database.
+        This replaces the direct call to DecisionImporter.import_many in store_decisions_from_pickle.
+        
+        Args:
+            decision_dto: DecisionDTO to import
+            health_check: Optional health check (created if not provided)
+            
+        Returns:
+            Decision instance or None if import failed
+        """
+        try:
+            logger.info(f"Importing decision {decision_dto.ada} from DTO")
+            
+            # Import using DecisionImporter
+            created_count = self.decision_importer.import_many([decision_dto])
+            
+            if created_count > 0:
+                logger.info(f"Created new decision {decision_dto.ada}")
+            else:
+                logger.info(f"Decision {decision_dto.ada} already exists (updated)")
+            
+            # Get the decision instance
+            decision = Decision.objects.get(ada=decision_dto.ada)
+            
+            # Create or update health check if provided
+            if health_check:
+                self.update_health_status(health_check, 'import', HealthStatus.HEALTHY)
+            
+            return decision
+            
+        except Exception as e:
+            logger.error(f"Failed to import decision {decision_dto.ada}: {e}")
+            if health_check:
+                self.update_health_status(health_check, 'import', HealthStatus.ERROR, str(e))
+            return None
+
+    def _step_resolve_organizations(self, decision: Decision, health_check: DecisionHealthCheck):
+        """
+        Stage 1: Resolve organizations for signers and units.
+        This method was moved from DecisionImporter to provide better health tracking.
+        
+        For each signer and unit associated with the decision, ensure their organization
+        is properly resolved. This involves:
+        1. Checking if organization is already set
+        2. If not, resolving through parent chain or API
+        3. Creating default organizations if resolution fails
+        
+        Args:
+            decision: Decision to resolve organizations for
+            health_check: Health check to update
+        """
+        try:
+            from core.fetchers.diavgeia_fetcher import DiavgeiaFetcher
+            from core.models import Signer, Unit
+            
+            logger.info(f"Resolving organizations for {decision.ada}")
+            
+            fetcher = DiavgeiaFetcher()
+            resolution_results = {
+                'signers_resolved': 0,
+                'signers_failed': 0,
+                'units_resolved': 0,
+                'units_failed': 0,
+                'details': []
+            }
+            
+            # Resolve organizations for signers
+            for signer in decision.signers.all():
+                if not signer.organization_id:
+                    logger.debug(f"Resolving organization for signer {signer.uid}")
+                    
+                    try:
+                        org_id, resolution_path = self.decision_importer._resolve_signer_organization(
+                            signer.uid, fetcher
+                        )
+                        
+                        if org_id:
+                            signer.organization_id = org_id
+                            signer.save(update_fields=['organization_id'])
+                            resolution_results['signers_resolved'] += 1
+                            resolution_results['details'].append({
+                                'type': 'signer',
+                                'uid': signer.uid,
+                                'resolved': True,
+                                'org_id': org_id,
+                                'path': resolution_path
+                            })
+                            logger.info(f"Resolved organization {org_id} for signer {signer.uid}")
+                        else:
+                            # Create default organization
+                            default_org = self.decision_importer._ensure_default_organization('signer', signer.uid)
+                            signer.organization_id = default_org
+                            signer.save(update_fields=['organization_id'])
+                            resolution_results['signers_failed'] += 1
+                            resolution_results['details'].append({
+                                'type': 'signer',
+                                'uid': signer.uid,
+                                'resolved': False,
+                                'default_org': default_org,
+                                'path': resolution_path
+                            })
+                            logger.warning(f"Using default organization {default_org} for signer {signer.uid}")
+                            
+                    except Exception as signer_error:
+                        resolution_results['signers_failed'] += 1
+                        logger.error(f"Failed to resolve organization for signer {signer.uid}: {signer_error}")
+            
+            # Resolve organizations for units
+            for unit in decision.units.all():
+                if not unit.organization_id:
+                    logger.debug(f"Resolving organization for unit {unit.uid}")
+                    
+                    try:
+                        org_id, resolution_path, units_to_import = self.decision_importer._resolve_unit_organization_through_parents(
+                            unit.uid, fetcher
+                        )
+                        
+                        if org_id:
+                            unit.organization_id = org_id
+                            unit.save(update_fields=['organization_id'])
+                            resolution_results['units_resolved'] += 1
+                            resolution_results['details'].append({
+                                'type': 'unit',
+                                'uid': unit.uid,
+                                'resolved': True,
+                                'org_id': org_id,
+                                'path': resolution_path
+                            })
+                            logger.info(f"Resolved organization {org_id} for unit {unit.uid}")
+                        else:
+                            # Create default organization
+                            default_org = self.decision_importer._ensure_default_organization('unit', unit.uid)
+                            unit.organization_id = default_org
+                            unit.save(update_fields=['organization_id'])
+                            resolution_results['units_failed'] += 1
+                            resolution_results['details'].append({
+                                'type': 'unit',
+                                'uid': unit.uid,
+                                'resolved': False,
+                                'default_org': default_org,
+                                'path': resolution_path
+                            })
+                            logger.warning(f"Using default organization {default_org} for unit {unit.uid}")
+                            
+                    except Exception as unit_error:
+                        resolution_results['units_failed'] += 1
+                        logger.error(f"Failed to resolve organization for unit {unit.uid}: {unit_error}")
+            
+            # Log summary
+            total_resolved = resolution_results['signers_resolved'] + resolution_results['units_resolved']
+            total_failed = resolution_results['signers_failed'] + resolution_results['units_failed']
+            
+            logger.info(
+                f"Organization resolution completed for {decision.ada}: "
+                f"{total_resolved} resolved, {total_failed} failed"
+            )
+            
+            # Mark as healthy even if some failed (we used defaults)
+            self.update_health_status(health_check, 'organization', HealthStatus.HEALTHY)
+            
+        except Exception as e:
+            logger.error(f"Failed organization resolution for {decision.ada}: {e}")
+            self.update_health_status(health_check, 'organization', HealthStatus.ERROR, str(e))
 
     def _step_extract_amounts(self, decision: Decision, health_check: DecisionHealthCheck, force: bool = False):
         """Extract and save DecisionAmountField records from extra field values."""

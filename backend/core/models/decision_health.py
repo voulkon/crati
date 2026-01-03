@@ -42,11 +42,25 @@ class DecisionHealthCheck(models.Model):
     )
     
     # Individual component statuses
+    import_status = models.CharField(
+        max_length=10,
+        choices=HealthStatus.choices,
+        default=HealthStatus.UNKNOWN,
+        help_text="Decision imported from DTO to database with all relations"
+    )
+    
+    organization_status = models.CharField(
+        max_length=10,
+        choices=HealthStatus.choices,
+        default=HealthStatus.UNKNOWN,
+        help_text="Organization resolution completed for signers and units"
+    )
+    
     ingestion_status = models.CharField(
         max_length=10,
         choices=HealthStatus.choices,
         default=HealthStatus.UNKNOWN,
-        help_text="Decision saved to database with basic data"
+        help_text="Decision exists in database (legacy field, use import_status)"
     )
     
     relations_status = models.CharField(

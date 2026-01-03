@@ -41,31 +41,32 @@ app.autodiscover_tasks()
 from .logging_utils import task_logger
 import time
 
-# Task execution tracking
-task_start_times = {}
+# Task execution tracking - DISABLED FOR TESTING HANG ISSUE
+# task_start_times = {}
 
-@task_prerun.connect
-def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, **kwds):
-    """Log task start and store start time"""
-    task_start_times[task_id] = time.time()
-    task_logger.log_task_start(sender.name, task_id, args, kwargs)
+# DISABLED: These signal handlers might be causing the worker hang
+# @task_prerun.connect
+# def task_prerun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, **kwds):
+#     """Log task start and store start time"""
+#     task_start_times[task_id] = time.time()
+#     task_logger.log_task_start(sender.name, task_id, args, kwargs)
 
-@task_postrun.connect  
-def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, retval=None, state=None, **kwds):
-    """Log task completion"""
-    start_time = task_start_times.pop(task_id, time.time())
-    duration_s = time.time() - start_time
-    
-    if state == 'SUCCESS':
-        task_logger.log_task_success(sender.name, task_id, duration_s, retval)
-    # Note: failures are handled by task_failure signal
+# @task_postrun.connect  
+# def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs=None, retval=None, state=None, **kwds):
+#     """Log task completion"""
+#     start_time = task_start_times.pop(task_id, time.time())
+#     duration_s = time.time() - start_time
+#     
+#     if state == 'SUCCESS':
+#         task_logger.log_task_success(sender.name, task_id, duration_s, retval)
+#     # Note: failures are handled by task_failure signal
 
-@task_failure.connect
-def task_failure_handler(sender=None, task_id=None, exception=None, traceback=None, einfo=None, **kwds):
-    """Log task failure"""
-    start_time = task_start_times.pop(task_id, time.time()) 
-    duration_s = time.time() - start_time
-    task_logger.log_task_failure(sender.name, task_id, duration_s, exception)
+# @task_failure.connect
+# def task_failure_handler(sender=None, task_id=None, exception=None, traceback=None, einfo=None, **kwds):
+#     """Log task failure"""
+#     start_time = task_start_times.pop(task_id, time.time()) 
+#     duration_s = time.time() - start_time
+#     task_logger.log_task_failure(sender.name, task_id, duration_s, exception)
 
 # Configure result backend to store task results
 app.conf.update(

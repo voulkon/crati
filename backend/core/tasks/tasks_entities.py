@@ -52,43 +52,45 @@ def fetch_company_data_for_entities(self, afm_list: List[str], parent_task_id: s
             raise self.retry(countdown=60 * (self.request.retries + 1))
 
 
-@shared_task(bind=True, max_retries=3, rate_limit="6/m")
+@shared_task(bind=True, max_retries=3)
 def fetch_company_data_for_single_afm(self, afm: str):
     """
     Celery task to fetch company data for a single AFM.
-    Rate limited to 6 per minute to respect API limits.
+    Rate limiting is handled by GemiService internally.
 
     Args:
         afm: AFM number to fetch company data for
     """
     try:
-        logger.info(f"Processing AFM: {afm}")
+        logger.info(f"Task {self.request.id}: Processing AFM: {afm}")
 
         # Try to get the entity
         try:
             entity = AFMEntity.objects.get(afm=afm)        
         except AFMEntity.DoesNotExist:
-            logger.warning(f"AFMEntity {afm} not found in database")
+            logger.warning(f"Task {self.request.id}: AFMEntity {afm} not found in database")
             return {"status": "entity_not_found", "afm": afm}
 
         # Use GemiService directly - rate limit matches Celery's rate_limit decorator
         try: 
+            logger.info(f"Task {self.request.id}: Calling GemiService for {afm}")
             companies = GemiService.fetch_companies_by_afm(
                 afm,
                 update_entity=True,
-                max_requests_per_minute=6,  # Matches task rate_limit="6/m"
+                max_requests_per_minute=6,
             )
+            logger.info(f"Task {self.request.id}: GemiService returned {len(companies)} companies for {afm}")
         except GemiNotFoundError:
-            logger.info(f"No company data found for AFM {afm}")
+            logger.info(f"Task {self.request.id}: No company data found for AFM {afm}")
             return {"status": "no_company_found", "afm": afm}
 
         result = {"status": "success", "afm": afm, "companies_found": len(companies)}
 
-        logger.info(f"Company data fetch completed for {afm}: {result}")
+        logger.info(f"Task {self.request.id}: Company data fetch completed for {afm}: {result}")
         return result
 
     except Exception as e:
-        logger.error(f"Error in company data fetch task for {afm}: {e}")
+        logger.error(f"Task {self.request.id}: Error in company data fetch task for {afm}: {e}")
         # Retry the task
         raise self.retry(countdown=60 * (self.request.retries + 1))
 

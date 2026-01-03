@@ -17,6 +17,7 @@ from .types import (
     ExtraField,
     ActTypeHelp,
 )
+from .afm_fetch_jobs import AFMFetchJob
 from .document_analysis import (
     DocumentExtraction,
     DocumentAnalysis,

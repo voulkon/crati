@@ -555,6 +555,12 @@ class DecisionPipelineOrchestrator:
             self.update_health_status(health_check, 'document_extraction', HealthStatus.ERROR, str(e))
 
     def _step_index_opensearch(self, decision: Decision, health_check: DecisionHealthCheck):
+        # Skip OpenSearch indexing if disabled
+        if not settings.INDEX_THE_OPENSEARCH:
+            logger.info(f"Skipping OpenSearch indexing for {decision.ada} (INDEX_THE_OPENSEARCH=False)")
+            self.update_health_status(health_check, 'opensearch', HealthStatus.UNKNOWN)
+            return
+        
         try:
             logger.info(f"Step 5: Indexing in OpenSearch for {decision.ada}")
             

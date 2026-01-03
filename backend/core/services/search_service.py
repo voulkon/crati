@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Optional, Union
 from django.db.models import Q, QuerySet
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.core.cache import cache
+from django.conf import settings
 from core.models.organizations import Organization, Unit, Signer
 from core.models.document_analysis import DocumentExtraction, ProcessingStatus
 from core.models.companies import Company, CompanyPerson
@@ -72,6 +73,13 @@ class SearchService:
         """
         if not query:
             return {'results': [], 'count': 0, 'source': 'none'}
+        
+        # Skip OpenSearch if disabled, use PostgreSQL directly
+        if not settings.INDEX_THE_OPENSEARCH:
+            logger.info("OpenSearch disabled (INDEX_THE_OPENSEARCH=False), using PostgreSQL fallback")
+            return self._search_documents_postgresql(
+                query, provider, status, is_scanned, limit
+            )
         
         # Try OpenSearch first
         try:

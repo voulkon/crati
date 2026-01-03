@@ -28,6 +28,10 @@ class DecisionPipelineOrchestrator:
         self.entity_service = EntityExtractionService()
         self.doc_service = DocumentAnalysisService()
         self.search_service = OpenSearchService()
+    
+    def _separator(self, char: str = '=', width: int = 80) -> str:
+        """Generate a separator line for logs."""
+        return char * width
 
     def get_or_create_health_check(self, decision: Decision) -> DecisionHealthCheck:
         health_check, created = DecisionHealthCheck.objects.get_or_create(
@@ -82,12 +86,14 @@ class DecisionPipelineOrchestrator:
         
         # Bind ingestion_id to all logs in this context
         with logger.contextualize(ingestion_id=ingestion_id, ada=decision_ada):
-            logger.info(f"\n{'='*80}")
-            logger.info(f"🚀 Starting pipeline for decision {decision_ada}")
-            logger.info(f"   Ingestion ID: {ingestion_id} (use this to filter logs)")
-            logger.info(f"   Force reprocess: {force_reprocess}")
-            logger.info(f"   Skip OpenSearch: {skip_opensearch}")
-            logger.info(f"{'='*80}\n")
+            logger.info(
+                f"\n{self._separator()}\n"
+                f"🚀 Starting pipeline for decision {decision_ada}\n"
+                f"   Ingestion ID: {ingestion_id} (use this to filter logs)\n"
+                f"   Force reprocess: {force_reprocess}\n"
+                f"   Skip OpenSearch: {skip_opensearch}\n"
+                f"{self._separator()}\n"
+            )
             
             try:
                 decision = Decision.objects.get(ada=decision_ada)
@@ -99,35 +105,41 @@ class DecisionPipelineOrchestrator:
             self.update_health_status(health_check, 'ingestion', HealthStatus.HEALTHY)
 
             # 1. Entity Extraction
-            logger.info(f"\n{'='*80}\n📝 STAGE 1/5: ENTITY EXTRACTION\n{'='*80}")
+            logger.info(f"\n{self._separator()}\n📝 STAGE 1/5: ENTITY EXTRACTION\n{self._separator()}")
             self._step_extract_entities(decision, health_check)
 
             # 2. Company Data Enrichment
-            logger.info(f"\n{'='*80}\n🏢 STAGE 2/5: COMPANY ENRICHMENT\n{'='*80}")
+            logger.info(f"\n{self._separator()}\n🏢 STAGE 2/5: COMPANY ENRICHMENT\n{self._separator()}")
             self._step_enrich_companies(decision, health_check)
 
             # 3. Document Processing
-            logger.info(f"\n{'='*80}\n📄 STAGE 3/5: DOCUMENT PROCESSING\n{'='*80}")
+            logger.info(f"\n{self._separator()}\n📄 STAGE 3/5: DOCUMENT PROCESSING\n{self._separator()}")
             self._step_process_document(decision, health_check, force_reprocess)
 
             # 4. OpenSearch Indexing
             if skip_opensearch:
-                logger.info(f"\n{'='*80}\n🔎 STAGE 4/5: OPENSEARCH INDEXING (SKIPPED)\n{'='*80}")
-                logger.info("OpenSearch indexing disabled - skipping to save on infrastructure costs")
+                logger.info(
+                    f"\n{self._separator()}\n"
+                    f"🔎 STAGE 4/5: OPENSEARCH INDEXING (SKIPPED)\n"
+                    f"{self._separator()}\n"
+                    f"OpenSearch indexing disabled - skipping to save on infrastructure costs"
+                )
                 self.update_health_status(health_check, 'opensearch', HealthStatus.UNKNOWN)
             else:
-                logger.info(f"\n{'='*80}\n🔎 STAGE 4/5: OPENSEARCH INDEXING\n{'='*80}")
+                logger.info(f"\n{self._separator()}\n🔎 STAGE 4/5: OPENSEARCH INDEXING\n{self._separator()}")
                 self._step_index_opensearch(decision, health_check)
 
             # 5. Coverage
-            logger.info(f"\n{'='*80}\n📊 STAGE 5/5: COVERAGE METRICS\n{'='*80}")
+            logger.info(f"\n{self._separator()}\n📊 STAGE 5/5: COVERAGE METRICS\n{self._separator()}")
             self._step_verify_coverage(decision, health_check)
 
-            logger.info(f"\n{'='*80}")
-            logger.info(f"✅ Pipeline completed for {decision_ada}")
-            logger.info(f"   Overall Status: {health_check.overall_status}")
-            logger.info(f"   Ingestion ID: {ingestion_id}")
-            logger.info(f"{'='*80}\n")
+            logger.info(
+                f"\n{self._separator()}\n"
+                f"✅ Pipeline completed for {decision_ada}\n"
+                f"   Overall Status: {health_check.overall_status}\n"
+                f"   Ingestion ID: {ingestion_id}\n"
+                f"{self._separator()}\n"
+            )
             
             return health_check
 

@@ -18,7 +18,7 @@ from core.services.document_processor import DocumentAnalysisService
 from core.services.opensearch_service import OpenSearchService
 from core.tasks.tasks_entities import fetch_company_data_for_entities
 from core.importers.decisions import DecisionImporter
-from api.redis_keys import AFM_FETCH_LOCK_PREFIX
+from api.redis_keys import AFM_FETCH_LOCK_PREFIX, AFM_FETCH_LOCK_TIMEOUT
 
 class DecisionPipelineOrchestrator:
     """
@@ -455,27 +455,42 @@ class DecisionPipelineOrchestrator:
             
             # Check which entities need GEMI lookup (haven't been attempted yet)
             entities_needing_lookup = []
+            entities_already_attempted = []
+            
             for rel in relationships:
                 entity = rel.entity
                 if entity.gemi_lookup_attempted is None:
                     entities_needing_lookup.append(entity.afm)
+                else:
+                    entities_already_attempted.append(entity.afm)
+            
+            if entities_already_attempted:
+                logger.debug(
+                    f"Skipping {len(entities_already_attempted)} entities with previous lookup attempts "
+                    f"(use force_refresh=True to retry): {entities_already_attempted[:3]}..."
+                )
             
             if entities_needing_lookup:
                 # Deduplicate AFMs within this decision
                 unique_afms = list(set(entities_needing_lookup))
                 
-                # Check Redis locks - only queue AFMs not already being processed
+                # Try to acquire Redis locks - only queue AFMs we successfully lock
                 redis_client = get_redis_connection("default")
                 afms_to_queue = []
                 afms_already_locked = []
                 
+                # Generate a unique lock owner ID for this orchestrator instance
+                lock_owner = f"orchestrator_{uuid.uuid4().hex[:8]}"
+                
                 for afm in unique_afms:
-                    # Check if already locked (being processed by another task)
+                    # Try to atomically acquire lock (SET with NX + EX)
                     key = f"{AFM_FETCH_LOCK_PREFIX}{afm}"
-                    if redis_client.exists(key):
-                        afms_already_locked.append(afm)
-                    else:
+                    acquired = redis_client.set(key, lock_owner, nx=True, ex=AFM_FETCH_LOCK_TIMEOUT)
+                    
+                    if acquired:
                         afms_to_queue.append(afm)
+                    else:
+                        afms_already_locked.append(afm)
                 
                 if afms_already_locked:
                     logger.info(
@@ -493,11 +508,12 @@ class DecisionPipelineOrchestrator:
                     parent_task_id = logger._core.extra.get('task_id')
                     parent_ada = decision.ada
                     
-                    # Queue only AFMs that aren't already being processed
+                    # Queue with lock_owner so task knows these locks belong to it
                     fetch_company_data_for_entities.delay(
                         afms_to_queue, 
                         parent_task_id=parent_task_id, 
-                        parent_ada=parent_ada
+                        parent_ada=parent_ada,
+                        lock_owner=lock_owner
                     )
                 else:
                     logger.info(

@@ -291,10 +291,16 @@ class EntityExtractionService:
     def fetch_company_data_for_entities(
         self, 
         entities: List[AFMEntity], 
-        max_requests_per_minute: int = 6
+        max_requests_per_minute: int = 6,
+        retry_failed_after_days: int = 7
     ) -> Dict[str, Any]:
         """
         Fetch company data for a list of AFM entities.
+        
+        Args:
+            entities: List of AFMEntity objects to fetch
+            max_requests_per_minute: Rate limit for API calls
+            retry_failed_after_days: Days before retrying a failed lookup (default: 7)
         
         Returns:
             Statistics about the operation
@@ -304,6 +310,7 @@ class EntityExtractionService:
             'successful': 0,
             'failed': 0,
             'companies_found': 0,
+            'skipped_cached': 0,  # New: track cached failures
             'errors': []
         }
         
@@ -314,10 +321,22 @@ class EntityExtractionService:
                 companies = GemiService.fetch_companies_by_afm(
                     entity.afm,
                     update_entity=True,
-                    max_requests_per_minute=max_requests_per_minute
+                    max_requests_per_minute=max_requests_per_minute,
+                    retry_failed_after_days=retry_failed_after_days
                 )
                 
                 stats['processed'] += 1
+                
+                # Check if this was a cached skip (no companies + already attempted)
+                if not companies and entity.gemi_lookup_attempted and not entity.gemi_lookup_success:
+                    from django.utils import timezone
+                    time_since = timezone.now() - entity.gemi_lookup_attempted
+                    days_since = time_since.total_seconds() / (60 * 60 * 24)
+                    if days_since < retry_failed_after_days:
+                        stats['skipped_cached'] += 1
+                        logger.debug(f"Skipped cached failure for AFM {entity.afm} ({days_since:.1f} days old)")
+                        continue
+                
                 stats['companies_found'] += len(companies)
                 
                 if companies:

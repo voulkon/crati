@@ -80,3 +80,6 @@ EXTRACT_THE_DOCS_FROM_PDFS = os.getenv("EXTRACT_THE_DOCS_FROM_PDFS", "True").low
 #   the DecisionPipelineOrchestrator will skip pdf text extraction steps
 #   the decisions api view(s) will be omitting to return afm data
 #   we need some task to be ensuring that all documents that DON'T have text extracted will start getting extracted (aka create the respective tasks)
+
+
+RETRY_AFM_FETCHES_AFTER_NUMBER_OF_DAYS = int(os.getenv("RETRY_AFM_FETCHES_AFTER_NUMBER_OF_DAYS", "60"))

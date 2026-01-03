@@ -102,7 +102,8 @@ class GemiService:
         afm: str, 
         update_entity: bool = True,
         max_requests_per_minute: int = 6,
-        force_refresh: bool = False
+        force_refresh: bool = False,
+        retry_failed_after_days: int = 60
     ) -> List[Company]:
         """
         Search for companies by AFM and save all results to database.
@@ -111,20 +112,45 @@ class GemiService:
             afm: The AFM to search for
             update_entity: Whether to update the AFMEntity record
             max_requests_per_minute: Rate limit for API calls
+            force_refresh: If True, ignore cached failures and retry
+            retry_failed_after_days: Days to wait before retrying a failed lookup (default: 7)
         
         Returns:
             List of Company objects found and saved
         """
         logger.info(f"Fetching companies for AFM: {afm}")
-        # Check if we already have companies for this AFM (unless forced)
         
         if not force_refresh:
+            # First check if we already have companies for this AFM
             existing_companies = Company.objects.filter(afm=afm)
             if existing_companies.exists():
                 logger.info(f"Found {existing_companies.count()} existing companies for AFM {afm}, skipping API call")
                 if update_entity:
                     cls._update_afm_entity_after_search(afm, list(existing_companies))
                 return list(existing_companies)
+            
+            # Check if we've recently tried and failed to find this AFM
+            try:
+                afm_entity = AFMEntity.objects.get(afm=afm)
+                if afm_entity.gemi_lookup_attempted and not afm_entity.gemi_lookup_success:
+                    # Calculate time since last failed attempt
+                    time_since_attempt = timezone.now() - afm_entity.gemi_lookup_attempted
+                    days_since_attempt = time_since_attempt.total_seconds() / (60 * 60 * 24)
+                    
+                    if days_since_attempt < retry_failed_after_days:
+                        logger.info(
+                            f"AFM {afm} was unsuccessfully looked up {days_since_attempt:.1f} days ago. "
+                            f"Skipping API call (retry after {retry_failed_after_days} days)"
+                        )
+                        return []
+                    else:
+                        logger.info(
+                            f"AFM {afm} failed lookup was {days_since_attempt:.1f} days ago. "
+                            f"Retrying (threshold: {retry_failed_after_days} days)"
+                        )
+            except AFMEntity.DoesNotExist:
+                # No entity yet, proceed with lookup
+                pass
 
         try:
             # Wait for rate limit before search

@@ -1,6 +1,7 @@
 from celery import shared_task
 from typing import List
 from loguru import logger
+from django.conf import settings
 from django_redis import get_redis_connection
 from core.services.entity_extraction_service import EntityExtractionService
 from core.models.entities import AFMEntity
@@ -10,17 +11,18 @@ from api.redis_keys import AFM_FETCH_LOCK_PREFIX, AFM_FETCH_LOCK_TIMEOUT
 
 
 @shared_task(bind=True, max_retries=3)
-def fetch_company_data_for_entities(self, afm_list: List[str], parent_task_id: str = None, parent_ada: str = None):
+def fetch_company_data_for_entities(self, afm_list: List[str], parent_task_id: str = None, parent_ada: str = None, lock_owner: str = None):
     """
     Celery task to fetch company data for a list of AFMs.
     
-    This task receives only AFMs that were checked to be unlocked by the orchestrator.
-    It acquires locks, processes the AFMs, and releases locks when done.
+    The orchestrator has already acquired locks for these AFMs before queuing this task.
+    This task processes the AFMs and releases the locks when done.
 
     Args:
-        afm_list: List of AFM numbers to fetch (already filtered by orchestrator)
+        afm_list: List of AFM numbers to fetch (already locked by orchestrator)
         parent_task_id: Optional parent task ID for tracing
         parent_ada: Optional parent decision ADA for context
+        lock_owner: Lock owner ID used by orchestrator (for verification)
     """
     task_id = self.request.id if hasattr(self, 'request') else 'sync'
     redis_client = get_redis_connection("default")
@@ -28,23 +30,50 @@ def fetch_company_data_for_entities(self, afm_list: List[str], parent_task_id: s
     # Deduplicate input (safety check, orchestrator should have done this)
     unique_afms = list(set(afm_list))
     
-    # Acquire locks for all AFMs we're about to process
-    for afm in unique_afms:
-        key = f"{AFM_FETCH_LOCK_PREFIX}{afm}"
-        redis_client.set(key, task_id, nx=True, ex=AFM_FETCH_LOCK_TIMEOUT)
-    
     with logger.contextualize(
         task_id=task_id,
         task_name="fetch_company_data_for_entities",
         parent_task_id=parent_task_id,
         parent_ada=parent_ada,
-        afm_count=len(unique_afms)
+        afm_count=len(unique_afms),
+        lock_owner=lock_owner
     ):
         try:
             if len(unique_afms) != len(afm_list):
                 logger.warning(
                     f"Input deduplication: {len(afm_list)} → {len(unique_afms)} unique AFMs"
                 )
+            
+            # Extend/refresh locks (they may have expired while task was queued)
+            if lock_owner:
+                locks_extended = 0
+                locks_missing = []
+                
+                for afm in unique_afms:
+                    key = f"{AFM_FETCH_LOCK_PREFIX}{afm}"
+                    current_owner = redis_client.get(key)
+                    
+                    # Check if lock expired or owned by someone else
+                    if current_owner is None:
+                        # Lock expired while in queue - re-acquire it with our owner
+                        logger.warning(f"Lock for AFM {afm} expired, re-acquiring")
+                        redis_client.set(key, lock_owner, ex=AFM_FETCH_LOCK_TIMEOUT)
+                        locks_extended += 1
+                    elif (current_owner.decode('utf-8') if isinstance(current_owner, bytes) else current_owner) == lock_owner:
+                        # We own it, extend the TTL
+                        redis_client.expire(key, AFM_FETCH_LOCK_TIMEOUT)
+                        locks_extended += 1
+                    else:
+                        # Someone else owns it - should not happen!
+                        locks_missing.append(afm)
+                
+                if locks_missing:
+                    logger.error(
+                        f"Lock verification failed! {len(locks_missing)} AFMs locked by others: {locks_missing}"
+                    )
+                    return {"status": "lock_verification_failed", "missing_locks": locks_missing}
+                
+                logger.info(f"Extended/verified {locks_extended}/{len(unique_afms)} locks")
             
             logger.info(f"Starting company data fetch for {len(unique_afms)} AFMs")
             
@@ -58,7 +87,9 @@ def fetch_company_data_for_entities(self, afm_list: List[str], parent_task_id: s
             # Fetch company data
             service = EntityExtractionService()
             stats = service.fetch_company_data_for_entities(
-                list(entities), max_requests_per_minute=6
+                list(entities), 
+                max_requests_per_minute=6,
+                retry_failed_after_days=getattr(settings, "RETRY_AFM_FETCHES_AFTER_NUMBER_OF_DAYS", 60)
             )
 
             logger.info(f"Company data fetch completed", stats=stats)
@@ -69,12 +100,22 @@ def fetch_company_data_for_entities(self, afm_list: List[str], parent_task_id: s
             raise self.retry(countdown=60 * (self.request.retries + 1))
         
         finally:
-            # Always release locks
+            # Release locks only if we own them (defensive delete)
+            released = 0
             for afm in unique_afms:
                 key = f"{AFM_FETCH_LOCK_PREFIX}{afm}"
-                redis_client.delete(key)
+                if lock_owner:
+                    # Only delete if we own the lock
+                    current_owner = redis_client.get(key)
+                    if current_owner and (current_owner == lock_owner.encode('utf-8') if isinstance(current_owner, bytes) else current_owner == lock_owner):
+                        redis_client.delete(key)
+                        released += 1
+                else:
+                    # Fallback: delete unconditionally (for backward compatibility)
+                    redis_client.delete(key)
+                    released += 1
             
-            logger.debug(f"Released locks for {len(unique_afms)} AFMs")
+            logger.debug(f"Released {released}/{len(unique_afms)} locks")
 
 
 @shared_task(bind=True, max_retries=3)

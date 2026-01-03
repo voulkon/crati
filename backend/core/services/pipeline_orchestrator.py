@@ -68,9 +68,14 @@ class DecisionPipelineOrchestrator:
         
         health_check.save()
 
-    def run_pipeline(self, decision_ada: str, force_reprocess: bool = False) -> DecisionHealthCheck:
+    def run_pipeline(self, decision_ada: str, force_reprocess: bool = False, skip_opensearch: bool = False) -> DecisionHealthCheck:
         """
         Runs the full processing pipeline for a decision.
+        
+        Args:
+            decision_ada: The ADA of the decision to process
+            force_reprocess: Force reprocessing even if already processed
+            skip_opensearch: Skip OpenSearch indexing (useful for reducing infra costs)
         """
         # Generate unique ingestion ID for log tracing in Grafana
         ingestion_id = str(uuid.uuid4())[:8]
@@ -81,6 +86,7 @@ class DecisionPipelineOrchestrator:
             logger.info(f"🚀 Starting pipeline for decision {decision_ada}")
             logger.info(f"   Ingestion ID: {ingestion_id} (use this to filter logs)")
             logger.info(f"   Force reprocess: {force_reprocess}")
+            logger.info(f"   Skip OpenSearch: {skip_opensearch}")
             logger.info(f"{'='*80}\n")
             
             try:
@@ -105,8 +111,13 @@ class DecisionPipelineOrchestrator:
             self._step_process_document(decision, health_check, force_reprocess)
 
             # 4. OpenSearch Indexing
-            logger.info(f"\n{'='*80}\n🔎 STAGE 4/5: OPENSEARCH INDEXING\n{'='*80}")
-            self._step_index_opensearch(decision, health_check)
+            if skip_opensearch:
+                logger.info(f"\n{'='*80}\n🔎 STAGE 4/5: OPENSEARCH INDEXING (SKIPPED)\n{'='*80}")
+                logger.info("OpenSearch indexing disabled - skipping to save on infrastructure costs")
+                self.update_health_status(health_check, 'opensearch', HealthStatus.UNKNOWN)
+            else:
+                logger.info(f"\n{'='*80}\n🔎 STAGE 4/5: OPENSEARCH INDEXING\n{'='*80}")
+                self._step_index_opensearch(decision, health_check)
 
             # 5. Coverage
             logger.info(f"\n{'='*80}\n📊 STAGE 5/5: COVERAGE METRICS\n{'='*80}")
@@ -229,7 +240,8 @@ class DecisionPipelineOrchestrator:
         import_job_id: int,
         max_workers: int = 10,
         stop_on_error: bool = False,
-        force_reprocess: bool = False
+        force_reprocess: bool = False,
+        skip_opensearch: bool = False
     ) -> Dict[str, Any]:
         """
         Process all decisions in a batch with parallel execution.
@@ -239,6 +251,7 @@ class DecisionPipelineOrchestrator:
             max_workers: Maximum parallel workers for processing
             stop_on_error: If True, stop processing on first error
             force_reprocess: If True, reprocess even if already processed
+            skip_opensearch: If True, skip OpenSearch indexing to save costs
             
         Returns:
             Dictionary with processing results and statistics
@@ -287,7 +300,8 @@ class DecisionPipelineOrchestrator:
                 executor.submit(
                     self._process_single_decision_safe, 
                     d.ada, 
-                    force_reprocess
+                    force_reprocess,
+                    skip_opensearch
                 ): d.ada 
                 for d in decisions
             }
@@ -363,7 +377,8 @@ class DecisionPipelineOrchestrator:
     def _process_single_decision_safe(
         self, 
         decision_ada: str, 
-        force_reprocess: bool = False
+        force_reprocess: bool = False,
+        skip_opensearch: bool = False
     ) -> Dict[str, Any]:
         """
         Safely process a single decision with error handling.
@@ -390,7 +405,11 @@ class DecisionPipelineOrchestrator:
                     pass  # Will process
             
             # Run the pipeline
-            health_check = self.run_pipeline(decision_ada, force_reprocess=force_reprocess)
+            health_check = self.run_pipeline(
+                decision_ada, 
+                force_reprocess=force_reprocess,
+                skip_opensearch=skip_opensearch
+            )
             
             end_time = timezone.now()
             processing_time_ms = int((end_time - start_time).total_seconds() * 1000)

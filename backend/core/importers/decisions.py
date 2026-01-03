@@ -19,6 +19,22 @@ from core.services.entity_extraction_service import EntityExtractionService
 from core.constants.decision_import_constants import PICKLE_DIR
 
 class DecisionImporter(BaseImporter):
+    """
+    Imports Decision objects from Diavgeia API DTOs to the database.
+    
+    ARCHITECTURAL NOTE (2026-01-03):
+    This importer now focuses ONLY on importing decision data (basic fields, relations, attachments).
+    Entity extraction, company enrichment, document processing, and indexing are handled by
+    DecisionPipelineOrchestrator to prevent task bursts and provide better control.
+    
+    For full processing pipeline, use:
+        orchestrator = DecisionPipelineOrchestrator()
+        orchestrator.run_pipeline(decision_ada, skip_opensearch=True)
+    
+    Legacy methods like extract_and_save_amounts() and _trigger_company_data_fetching() 
+    are kept for backward compatibility with management commands but are NOT called 
+    from import_many() anymore.
+    """
     model = Decision
     uid_field = "ada"
 
@@ -657,7 +673,6 @@ class DecisionImporter(BaseImporter):
         created_count = 0
         processed_count = 0
         skipped_count = 0
-        extracted_entities = []
 
         for dto in dtos:
             processed_count += 1
@@ -712,39 +727,9 @@ class DecisionImporter(BaseImporter):
                 self._sync_attachments(decision_instance, dto)
                 self._sync_kae_amounts(decision_instance, dto)
 
-                # 6. *** NEW: Extract AFM entities from the decision ***
-                try:
-                    from core.services.afm_extractor import extract_afms_from_decision
-                    created_relationships = extract_afms_from_decision(decision_instance, save_to_db=True)
-                    logger.debug(f"Extracted {len(created_relationships)} relationships from decision {dto.ada}")
-                    
-                    # Extract the actual AFMEntity objects for company data fetching
-                    if created_relationships:
-                        from core.models.entities import AFMEntity
-                        # Get unique AFMs from the created relationships
-                        afms_in_decision = set()
-                        for rel_data in created_relationships:
-                            if 'afm' in rel_data:
-                                afms_in_decision.add(rel_data['afm'])
-                        
-                        # Get the actual entity objects
-                        entities = AFMEntity.objects.filter(afm__in=afms_in_decision)
-                        extracted_entities.extend(list(entities))
-                except Exception as e:
-                    logger.error(f"Error extracting entities from decision {dto.ada}: {e}")
-                
-                # 7. *** NEW: Extract amounts from the decision ***
-                try:
-                    self.extract_and_save_amounts(decision_instance)
-                    logger.debug(f"Extracted amounts for decision {dto.ada}")
-                except Exception as e:
-                    logger.error(f"Error extracting amounts for decision {dto.ada}: {e}")
-
-                # 8. *** NEW: Link amounts to entity relationships ***
-                try:
-                    self._link_amounts_to_relationships(decision_instance)
-                except Exception as e:
-                    logger.error(f"Error linking amounts to relationships for decision {dto.ada}: {e}")
+                # NOTE: Entity extraction, amounts, and company data fetching
+                # are now handled by DecisionPipelineOrchestrator for better control
+                # and to prevent task bursts. See orchestrator.run_pipeline()
 
             except Exception as e:
                 logger.exception(f"Failed to import decision ADA '{dto.ada}': {e}")
@@ -753,12 +738,8 @@ class DecisionImporter(BaseImporter):
 
         logger.info(
             f"Import finished. Processed: {processed_count}. Created: {created_count}. "
-            f"Skipped: {skipped_count}. Extracted entities: {len(extracted_entities)}."
+            f"Skipped: {skipped_count}."
         )
-
-        # 9. *** NEW: Trigger company data fetching for new entities ***
-        if extracted_entities:
-            self._trigger_company_data_fetching(extracted_entities)
 
         return created_count
 

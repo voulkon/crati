@@ -11,7 +11,7 @@ from diavgeia_project.logging_helpers import log_document_processing
 # ============================================================================
 
 @shared_task(bind=True, max_retries=3)
-def run_decision_pipeline_task(self, ada: str, force_reprocess: bool = False):
+def run_decision_pipeline_task(self, ada: str, force_reprocess: bool = False, skip_opensearch: bool = False):
     """
     🎯 SINGLE SOURCE OF TRUTH for processing one decision through the full pipeline.
     
@@ -31,6 +31,7 @@ def run_decision_pipeline_task(self, ada: str, force_reprocess: bool = False):
     Args:
         ada: Decision ADA to process
         force_reprocess: If True, reprocess even if already completed
+        skip_opensearch: If True, skip OpenSearch indexing to reduce infra costs
         
     Returns:
         DecisionHealthCheck status with component-level results
@@ -55,7 +56,8 @@ def run_decision_pipeline_task(self, ada: str, force_reprocess: bool = False):
             orchestrator = DecisionPipelineOrchestrator()
             health_check = orchestrator.run_pipeline(
                 decision_ada=ada,
-                force_reprocess=force_reprocess
+                force_reprocess=force_reprocess,
+                skip_opensearch=skip_opensearch
             )
             
             logger.info(

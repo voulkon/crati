@@ -150,9 +150,15 @@ def fetch_daily_decisions_to_pickle(self, target_date_str: str,
 
 
 @shared_task(bind=True, max_retries=5)
-def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25):
+def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25, skip_opensearch: bool = False):
     """
-    Phase 2: Load decisions from pickle and store to database with deadlock prevention
+    Phase 2: Load decisions from pickle, import to database, and run through full pipeline.
+    Now uses DecisionPipelineOrchestrator for controlled, sequential processing.
+    
+    Args:
+        pickle_file: Path to the pickle file containing decisions
+        batch_size: Deprecated - kept for compatibility but now processes one-by-one
+        skip_opensearch: Skip OpenSearch indexing to reduce infrastructure costs
     """
     try:
         logger.info(f"Task {self.request.id}: Loading decisions from {pickle_file}")
@@ -167,25 +173,29 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25):
         decisions = pickle_data['decisions']
         logger.info(f"Task {self.request.id}: Loaded {len(decisions)} decisions from pickle")
         
-        # ULTRA-SAFE: Process decisions ONE BY ONE with proper isolation
+        # PHASE 1: Import all decisions to database (fast, synchronous)
+        from core.importers.decisions import DecisionImporter
+        from core.tasks.tasks_documents import run_decision_pipeline_task
+        
         decision_importer = DecisionImporter()
         created_count = 0
-        failed_decisions = []
+        failed_imports = []
+        successfully_imported_adas = []
+        
+        logger.info(f"Task {self.request.id}: Phase 1 - Importing {len(decisions)} decisions to database")
         
         for i, decision in enumerate(decisions, 1):
             try:
-                # Add small random delay to prevent timing-based deadlocks
-                if i > 1:  # Skip delay for first decision
-                    delay = random.uniform(0.1, 0.3)  # 100-300ms random delay
-                    time.sleep(delay)
-                
-                # Process single decision in isolated transaction
+                # Import decision data only (no entity extraction, no pipeline)
                 with transaction.atomic():
                     single_result = decision_importer.import_many([decision])
                     created_count += single_result
                     
-                    if i % 10 == 0:  # Log progress every 10 decisions
-                        logger.info(f"Task {self.request.id}: Processed {i}/{len(decisions)} decisions, created {created_count} so far")
+                # Track successfully imported decisions for pipeline processing
+                successfully_imported_adas.append(decision.ada)
+                
+                if i % 10 == 0:
+                    logger.info(f"Task {self.request.id}: Imported {i}/{len(decisions)} decisions")
                         
             except Exception as decision_error:
                 error_msg = str(decision_error).lower()
@@ -202,14 +212,40 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25):
                     raise decision_error
                 else:
                     # For non-critical errors, log and continue
-                    logger.warning(f"Task {self.request.id}: Failed decision {decision_ada}: {decision_error}")
-                    failed_decisions.append({
+                    logger.warning(f"Task {self.request.id}: Failed to import decision {decision_ada}: {decision_error}")
+                    failed_imports.append({
                         'ada': decision_ada,
                         'error': str(decision_error)
                     })
         
+        # PHASE 2: Dispatch async pipeline tasks for all successfully imported decisions
+        logger.info(
+            f"Task {self.request.id}: Phase 2 - Dispatching {len(successfully_imported_adas)} pipeline tasks "
+            f"(skip_opensearch={skip_opensearch})"
+        )
+        
+        dispatched_tasks = []
+        for ada in successfully_imported_adas:
+            try:
+                # Dispatch async task for full pipeline processing
+                pipeline_task = run_decision_pipeline_task.delay(
+                    ada=ada,
+                    force_reprocess=False,
+                    skip_opensearch=skip_opensearch
+                )
+                dispatched_tasks.append({
+                    'ada': ada,
+                    'task_id': pipeline_task.id
+                })
+            except Exception as dispatch_error:
+                logger.error(f"Task {self.request.id}: Failed to dispatch pipeline task for {ada}: {dispatch_error}")
+        
+        logger.success(
+            f"Task {self.request.id}: Dispatched {len(dispatched_tasks)} pipeline tasks for parallel processing"
+        )
+        
         # Check results
-        if len(decisions) > 0 and created_count == 0 and not failed_decisions:
+        if len(decisions) > 0 and created_count == 0 and not failed_imports:
             logger.warning(f"Task {self.request.id}: No decisions were created from {len(decisions)} decisions (likely duplicates)")
         
         # Move pickle to completed folder
@@ -218,12 +254,15 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25):
         completed_file = os.path.join(completed_dir, os.path.basename(pickle_file))
         os.rename(pickle_file, completed_file)
         
-        # Log results
-        if failed_decisions:
-            logger.warning(f"Task {self.request.id}: {len(failed_decisions)} decisions failed out of {len(decisions)}")
+        # Log final results
+        if failed_imports:
+            logger.warning(f"Task {self.request.id}: {len(failed_imports)} import failures out of {len(decisions)}")
         
         if created_count > 0:
-            logger.success(f"Task {self.request.id}: Stored {created_count}/{len(decisions)} decisions, moved pickle to {completed_file}")
+            logger.success(
+                f"Task {self.request.id}: Imported {created_count}/{len(decisions)} decisions, "
+                f"dispatched {len(dispatched_tasks)} pipeline tasks, moved pickle to {completed_file}"
+            )
         else:
             logger.info(f"Task {self.request.id}: No new decisions created (possibly duplicates), moved pickle to {completed_file}")
         
@@ -233,8 +272,10 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25):
             'completed_file': completed_file,
             'decisions_loaded': len(decisions),
             'decisions_created': created_count,
-            'decisions_failed': len(failed_decisions),
-            'failed_decisions': failed_decisions[:10],  # Only first 10 failures for logging
+            'decisions_failed': len(failed_imports),
+            'failed_imports': failed_imports[:10],  # Only first 10 failures for logging
+            'pipeline_tasks_dispatched': len(dispatched_tasks),
+            'dispatched_task_ids': [t['task_id'] for t in dispatched_tasks[:10]],  # First 10 task IDs
             'task_id': self.request.id,
         }
         

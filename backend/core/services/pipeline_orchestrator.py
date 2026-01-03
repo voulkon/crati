@@ -5,6 +5,7 @@ from django.db import transaction
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import uuid
+from django_redis import get_redis_connection
 
 from core.models.decisions import Decision
 from core.models.decision_health import DecisionHealthCheck, HealthStatus
@@ -16,6 +17,7 @@ from core.services.document_processor import DocumentAnalysisService
 from core.services.opensearch_service import OpenSearchService
 from core.tasks.tasks_entities import fetch_company_data_for_entities
 from core.importers.decisions import DecisionImporter
+from api.redis_keys import AFM_FETCH_LOCK_PREFIX
 
 class DecisionPipelineOrchestrator:
     """
@@ -222,18 +224,48 @@ class DecisionPipelineOrchestrator:
                     entities_needing_lookup.append(entity.afm)
             
             if entities_needing_lookup:
-                logger.info(f"Triggering company enrichment for {len(entities_needing_lookup)} entities")
+                # Deduplicate AFMs within this decision
+                unique_afms = list(set(entities_needing_lookup))
                 
-                # Extract parent context from logger for tracing child tasks
-                parent_task_id = logger._core.extra.get('task_id')
-                parent_ada = decision.ada
+                # Check Redis locks - only queue AFMs not already being processed
+                redis_client = get_redis_connection("default")
+                afms_to_queue = []
+                afms_already_locked = []
                 
-                # Trigger the task with parent context for complete traceability
-                fetch_company_data_for_entities.delay(
-                    entities_needing_lookup, 
-                    parent_task_id=parent_task_id, 
-                    parent_ada=parent_ada
-                )
+                for afm in unique_afms:
+                    # Check if already locked (being processed by another task)
+                    key = f"{AFM_FETCH_LOCK_PREFIX}{afm}"
+                    if redis_client.exists(key):
+                        afms_already_locked.append(afm)
+                    else:
+                        afms_to_queue.append(afm)
+                
+                if afms_already_locked:
+                    logger.info(
+                        f"Skipping {len(afms_already_locked)} AFMs already being processed: "
+                        f"{afms_already_locked[:5]}{'...' if len(afms_already_locked) > 5 else ''}"
+                    )
+                
+                if afms_to_queue:
+                    logger.info(
+                        f"Queueing company enrichment for {len(afms_to_queue)} unique AFMs "
+                        f"(from {len(entities_needing_lookup)} total, {len(afms_already_locked)} already locked)"
+                    )
+                    
+                    # Extract parent context from logger for tracing child tasks
+                    parent_task_id = logger._core.extra.get('task_id')
+                    parent_ada = decision.ada
+                    
+                    # Queue only AFMs that aren't already being processed
+                    fetch_company_data_for_entities.delay(
+                        afms_to_queue, 
+                        parent_task_id=parent_task_id, 
+                        parent_ada=parent_ada
+                    )
+                else:
+                    logger.info(
+                        f"All {len(unique_afms)} unique AFMs already being processed - nothing to queue"
+                    )
             else:
                 logger.debug(f"All {relationships.count()} entities for {decision.ada} already have GEMI lookup attempted, skipping")
             

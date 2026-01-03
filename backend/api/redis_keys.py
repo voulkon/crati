@@ -19,6 +19,10 @@ USER_AGENTS = f"{STATS_NS}:user_agents"
 IP_ENDPOINTS_PREFIX = f"{STATS_NS}:ip:"  # stats:ip:<ip>:endpoints
 ENDPOINT_IPS_PREFIX = f"{STATS_NS}:endpoint_ips:"  # stats:endpoint_ips:<endpoint>
 
+# AFM Fetch Locking (distributed lock for company data fetching)
+AFM_FETCH_LOCK_PREFIX = "lock:afm_fetch:"
+AFM_FETCH_LOCK_TIMEOUT = 60 * 5  # 5 minutes lock timeout
+
 # Rate limit keys
 USER_RATELIMIT_PREFIX = f"{RATELIMIT_NS}:user:"
 IP_RATELIMIT_PREFIX = f"{RATELIMIT_NS}:ip:"
@@ -27,6 +31,8 @@ IP_RATELIMIT_PREFIX = f"{RATELIMIT_NS}:ip:"
 STATS_EXPIRE = 60 * 60 * 24 * 30  # 30 days
 RATELIMIT_EXPIRE = 60 * 60 * 24  # 24 hours
 
+AFM_FETCH_LOCK_PREFIX = "afm_fetch_lock:"
+AFM_FETCH_LOCK_TIMEOUT = 300
 
 def get_endpoint_key(endpoint):
     """Get the Redis key for endpoint stats"""

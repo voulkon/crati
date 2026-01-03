@@ -167,10 +167,10 @@ def queue_document_processing(sender, instance, created, **kwargs):
     """
     # Skip if orchestrator mode is enabled
     if getattr(settings, 'USE_ORCHESTRATOR_MODE', False):
-        logger.debug(
-            f"⏭️ Skipping legacy document queue for {instance.ada} "
-            f"(orchestrator mode enabled - use run_decision_pipeline_task instead)"
-        )
+        # logger.debug(
+        #     f"⏭️ Skipping legacy document queue for {instance.ada} "
+        #     f"(orchestrator mode enabled - use run_decision_pipeline_task instead)"
+        # )
         return
     
     if created and instance.document_url:
@@ -189,10 +189,10 @@ def index_document_in_opensearch(sender, instance, created, **kwargs):
     """
     # Skip if orchestrator mode is enabled
     if getattr(settings, 'USE_ORCHESTRATOR_MODE', False):
-        logger.debug(
-            f"⏭️ Skipping legacy OpenSearch indexing for {instance.decision.ada} "
-            f"(orchestrator mode enabled - orchestrator handles indexing)"
-        )
+        # logger.debug(
+        #     f"⏭️ Skipping legacy OpenSearch indexing for {instance.decision.ada} "
+        #     f"(orchestrator mode enabled - orchestrator handles indexing)"
+        # )
         return
     
     # Add comprehensive logging to understand signal behavior

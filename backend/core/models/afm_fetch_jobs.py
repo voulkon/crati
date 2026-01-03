@@ -42,6 +42,13 @@ class AFMFetchJob(models.Model):
             models.Index(fields=['afm', 'status']),
             models.Index(fields=['status', 'created_at']),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['afm'],
+                condition=models.Q(status__in=['pending', 'in_progress']),
+                name='unique_active_afm_fetch'
+            )
+        ]
         ordering = ['-created_at']
     
     def __str__(self):
@@ -59,9 +66,31 @@ class AFMFetchJob(models.Model):
         ).exists()
     
     @classmethod
-    def mark_in_progress(cls, afm: str, task_id: str):
-        """Mark a job as in progress."""
-        cls.objects.filter(afm=afm, task_id=task_id).update(
+    def try_create_job(cls, afm: str, task_id: str, parent_task_id: str = None, parent_ada: str = None):
+        """
+        Atomically try to create a job for this AFM.
+        Returns (job, created) tuple.
+        If another job is already active, returns (None, False).
+        Uses database constraint to prevent race conditions.
+        """
+        from django.db import IntegrityError
+        try:
+            job = cls.objects.create(
+                afm=afm,
+                task_id=task_id,
+                parent_task_id=parent_task_id,
+                parent_ada=parent_ada,
+                status=cls.Status.PENDING
+            )
+            return (job, True)
+        except IntegrityError:
+            # Another task already created a job for this AFM
+            return (None, False)
+    
+    @classmethod
+    def mark_in_progress(cls, task_id: str):
+        """Mark job(s) for this task as in progress."""
+        cls.objects.filter(task_id=task_id, status=cls.Status.PENDING).update(
             status=cls.Status.IN_PROGRESS,
             updated_at=timezone.now()
         )

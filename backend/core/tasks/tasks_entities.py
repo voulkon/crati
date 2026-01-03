@@ -22,15 +22,21 @@ def fetch_company_data_for_entities(self, afm_list: List[str], parent_task_id: s
     """
     task_id = self.request.id if hasattr(self, 'request') else 'sync'
     
-    # Filter out AFMs that are already being fetched
+    # Atomically try to create job records for each AFM
     afms_to_fetch = []
     afms_skipped = []
     
     for afm in afm_list:
-        if AFMFetchJob.is_afm_being_fetched(afm):
-            afms_skipped.append(afm)
-        else:
+        job, created = AFMFetchJob.try_create_job(
+            afm=afm,
+            task_id=task_id,
+            parent_task_id=parent_task_id,
+            parent_ada=parent_ada
+        )
+        if created:
             afms_to_fetch.append(afm)
+        else:
+            afms_skipped.append(afm)
     
     with logger.contextualize(
         task_id=task_id,
@@ -56,21 +62,8 @@ def fetch_company_data_for_entities(self, afm_list: List[str], parent_task_id: s
                     "skipped": len(afms_skipped)
                 }
             
-            # Create job records for AFMs we'll fetch
-            for afm in afms_to_fetch:
-                AFMFetchJob.objects.create(
-                    afm=afm,
-                    task_id=task_id,
-                    parent_task_id=parent_task_id,
-                    parent_ada=parent_ada,
-                    status=AFMFetchJob.Status.PENDING
-                )
-            
-            # Mark as in progress
-            AFMFetchJob.mark_in_progress(None, task_id)  # Mark all for this task
-            AFMFetchJob.objects.filter(task_id=task_id).update(
-                status=AFMFetchJob.Status.IN_PROGRESS
-            )
+            # Mark all jobs for this task as in progress
+            AFMFetchJob.mark_in_progress(task_id)
             
             # Get entities
             entities = AFMEntity.objects.filter(afm__in=afms_to_fetch)
@@ -124,22 +117,20 @@ def fetch_company_data_for_single_afm(self, afm: str):
     task_id = self.request.id if hasattr(self, 'request') else 'sync'
     
     try:
-        # Check if this AFM is already being fetched
-        if AFMFetchJob.is_afm_being_fetched(afm):
+        # Atomically try to create job record - prevents race condition
+        job, created = AFMFetchJob.try_create_job(
+            afm=afm,
+            task_id=task_id
+        )
+        
+        if not created:
             logger.info(f"Task {task_id}: AFM {afm} already being fetched by another task - skipping")
             return {"status": "already_in_flight", "afm": afm}
-        
-        # Create job record
-        AFMFetchJob.objects.create(
-            afm=afm,
-            task_id=task_id,
-            status=AFMFetchJob.Status.PENDING
-        )
         
         logger.info(f"Task {task_id}: Processing AFM: {afm}")
         
         # Mark as in progress
-        AFMFetchJob.mark_in_progress(afm, task_id)
+        AFMFetchJob.mark_in_progress(task_id)
         
         # Try to get the entity
         try:

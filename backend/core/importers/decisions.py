@@ -936,6 +936,8 @@ class DecisionImporter(BaseImporter):
         if visited is None:
             visited = set()
         
+        logger.info(f"[UNIT RESOLUTION] Starting resolution for unit {unit_id}")
+        
         # Track the full resolution path
         resolution_path = {
             "unit_id": unit_id,
@@ -945,13 +947,14 @@ class DecisionImporter(BaseImporter):
         }
         
         if unit_id in visited:
-            logger.warning(f"Detected cycle in parent chain for unit {unit_id}")
+            logger.warning(f"[UNIT RESOLUTION] ✗ Detected cycle in parent chain for unit {unit_id}")
             resolution_path["result"] = "cycle_detected"
             return None, resolution_path
         
         visited.add(unit_id)
         current_id = unit_id
         depth = 0
+        logger.debug(f"[UNIT RESOLUTION] Starting traversal at depth {depth}, max_depth={max_depth}")
         
         while depth < max_depth:
             path_step = {
@@ -969,6 +972,7 @@ class DecisionImporter(BaseImporter):
                     existing_unit = Unit.objects.get(uid=current_id)
                     path_step["checked_db_unit"] = True
                     path_step["found_in_db_as_unit"] = True
+                    logger.debug(f"[UNIT RESOLUTION] Found {current_id} as unit in DB")
                     
                     if existing_unit.organization_id:
                         path_step["resolved_org_id"] = existing_unit.organization_id
@@ -977,7 +981,7 @@ class DecisionImporter(BaseImporter):
                         resolution_path["organization_id"] = existing_unit.organization_id
                         resolution_path["resolved_through_unit"] = current_id
                         
-                        logger.info(f"Found unit {current_id} in DB with organization {existing_unit.organization_id}")
+                        logger.info(f"[UNIT RESOLUTION] ✓ Found unit {current_id} in DB with organization {existing_unit.organization_id}")
                         return existing_unit.organization_id, resolution_path, units_to_import
                     
                     # Unit exists in DB but has no organization - check parent
@@ -986,14 +990,14 @@ class DecisionImporter(BaseImporter):
                             path_step["cycle_detected"] = True
                             resolution_path["path"].append(path_step)
                             resolution_path["result"] = "cycle_detected"
-                            logger.warning(f"Would create cycle with parent {existing_unit.parent_id}, stopping")
+                            logger.warning(f"[UNIT RESOLUTION] ✗ Would create cycle with parent {existing_unit.parent_id}, stopping")
                             return None, resolution_path, units_to_import
                         
                         path_step["parent_id"] = existing_unit.parent_id
                         path_step["has_parent"] = True
                         resolution_path["path"].append(path_step)
                         
-                        logger.info(f"Unit {current_id} in DB has no organization, checking parent {existing_unit.parent_id}")
+                        logger.debug(f"[UNIT RESOLUTION] Unit {current_id} in DB has no organization, checking parent {existing_unit.parent_id}")
                         current_id = existing_unit.parent_id
                         visited.add(current_id)
                         depth += 1
@@ -1003,12 +1007,13 @@ class DecisionImporter(BaseImporter):
                         path_step["has_parent"] = False
                         resolution_path["path"].append(path_step)
                         resolution_path["result"] = "no_parent_in_db"
-                        logger.warning(f"Unit {current_id} in DB has no parent, cannot resolve further")
+                        logger.warning(f"[UNIT RESOLUTION] ✗ Unit {current_id} in DB has no parent, cannot resolve further")
                         return None, resolution_path, units_to_import
                         
                 except Unit.DoesNotExist:
                     path_step["checked_db_unit"] = True
                     path_step["found_in_db_as_unit"] = False
+                    logger.debug(f"[UNIT RESOLUTION] {current_id} not found as unit in DB, trying API")
                     
                     # 2. Not in DB as unit, try API as unit
                     try:
@@ -1020,6 +1025,7 @@ class DecisionImporter(BaseImporter):
                             path_step["found_in_api_as_unit"] = True
                             path_step["has_org_id"] = hasattr(unit_dto, 'organizationId') and bool(unit_dto.organizationId)
                             path_step["has_parent_id"] = hasattr(unit_dto, 'parentId') and bool(unit_dto.parentId)
+                            logger.debug(f"[UNIT RESOLUTION] Found {current_id} as unit in API")
                             
                             # If there's an organizationId, we found what we're looking for
                             if hasattr(unit_dto, 'organizationId') and unit_dto.organizationId:
@@ -1029,8 +1035,8 @@ class DecisionImporter(BaseImporter):
                                 resolution_path["resolved_through_unit"] = current_id
                                 resolution_path["organization_id"] = unit_dto.organizationId
                                 
-                                logger.info(f"Found unit {current_id} in API with organization {unit_dto.organizationId}")
-                                return unit_dto.organizationId, resolution_path, units_to_import
+                                logger.info(f"[UNIT RESOLUTION] ✓ Found unit {current_id} in API with organization {unit_dto.organizationId}")
+                                return unit_dto.organization_id, resolution_path, units_to_import
                             
                             # No organization ID - check if there's a parent
                             if hasattr(unit_dto, 'parentId') and unit_dto.parentId:
@@ -1038,13 +1044,13 @@ class DecisionImporter(BaseImporter):
                                     path_step["cycle_detected"] = True
                                     resolution_path["path"].append(path_step)
                                     resolution_path["result"] = "cycle_detected"
-                                    logger.warning(f"Would create cycle with parent {unit_dto.parentId}, stopping")
+                                    logger.warning(f"[UNIT RESOLUTION] ✗ Would create cycle with parent {unit_dto.parentId}, stopping")
                                     return None, resolution_path, units_to_import
                                 
                                 path_step["parent_id"] = unit_dto.parentId
                                 resolution_path["path"].append(path_step)
                                 
-                                # logger.info(f"Unit {current_id} in API has no organization ID, checking parent {unit_dto.parentId}")
+                                logger.debug(f"[UNIT RESOLUTION] Unit {current_id} in API has no organization ID, checking parent {unit_dto.parentId}")
                                 current_id = unit_dto.parentId
                                 visited.add(current_id)
                                 depth += 1
@@ -1054,33 +1060,35 @@ class DecisionImporter(BaseImporter):
                             path_step["has_parent_id"] = False
                             resolution_path["path"].append(path_step)
                             resolution_path["result"] = "no_parent_in_api"
-                            logger.warning(f"Unit {current_id} in API has no parent ID, cannot resolve further")
+                            logger.warning(f"[UNIT RESOLUTION] ✗ Unit {current_id} in API has no parent ID, cannot resolve further")
                             return None, resolution_path, units_to_import
                         else:
                             path_step["found_in_api_as_unit"] = False
-                            logger.info(f"ID {current_id} not found as unit in API, trying as organization")
+                            logger.debug(f"[UNIT RESOLUTION] ID {current_id} not found as unit in API, trying as organization")
                             
                     except Exception as unit_api_error:
                         path_step["checked_api_unit"] = True
                         path_step["api_unit_error"] = str(unit_api_error)
-                        logger.warning(f"Error fetching {current_id} as unit from API: {unit_api_error}")
+                        logger.warning(f"[UNIT RESOLUTION] Error fetching {current_id} as unit from API: {unit_api_error}")
                     
                     # 3. Not found as unit, check if it exists as organization in DB
                     try:
                         existing_org = Organization.objects.get(uid=current_id)
                         path_step["checked_db_org"] = True
                         path_step["found_in_db_as_org"] = True
+                        logger.debug(f"[UNIT RESOLUTION] Found {current_id} as organization in DB")
                         
                         resolution_path["path"].append(path_step)
                         resolution_path["result"] = "found_in_db_as_organization"
                         resolution_path["organization_id"] = current_id
                         
-                        logger.info(f"Found {current_id} as organization in DB")
+                        logger.info(f"[UNIT RESOLUTION] ✓ Found {current_id} as organization in DB")
                         return current_id, resolution_path, units_to_import
                         
                     except Organization.DoesNotExist:
                         path_step["checked_db_org"] = True
                         path_step["found_in_db_as_org"] = False
+                        logger.debug(f"[UNIT RESOLUTION] {current_id} not found as organization in DB, trying API")
                         
                         # 4. Not in DB as org, try API as organization
                         try:
@@ -1096,7 +1104,7 @@ class DecisionImporter(BaseImporter):
                                 # Import the organization if found
                                 self._ensure_organization_exists(current_id, org_dto)
                                 
-                                logger.info(f"Found {current_id} as organization in API")
+                                logger.info(f"[UNIT RESOLUTION] ✓ Found {current_id} as organization in API")
                                 return current_id, resolution_path, units_to_import
                             else:
                                 path_step["found_in_api_as_org"] = False
@@ -1109,7 +1117,7 @@ class DecisionImporter(BaseImporter):
                     # 5. Not found anywhere - probably bad data
                     resolution_path["path"].append(path_step)
                     resolution_path["result"] = "not_found_anywhere"
-                    logger.warning(f"ID {current_id} not found as unit or organization in DB or API - probably bad data")
+                    logger.warning(f"[UNIT RESOLUTION] ✗ ID {current_id} not found as unit or organization in DB or API - probably bad data")
                     return None, resolution_path, units_to_import
                     
             except Exception as e:
@@ -1117,11 +1125,11 @@ class DecisionImporter(BaseImporter):
                 resolution_path["path"].append(path_step)
                 resolution_path["result"] = "unexpected_error"
                 resolution_path["error"] = str(e)
-                logger.error(f"Unexpected error resolving ID {current_id}: {e}")
+                logger.error(f"[UNIT RESOLUTION] ✗ Unexpected error resolving ID {current_id}: {e}", exc_info=True)
                 return None, resolution_path, units_to_import
 
         resolution_path["result"] = "max_depth_reached"
-        logger.warning(f"Reached max depth ({max_depth}) while resolving organization for unit {unit_id}")
+        logger.warning(f"[UNIT RESOLUTION] ✗ Reached max depth ({max_depth}) while resolving organization for unit {unit_id}")
         return None, resolution_path, units_to_import
 
     def _ensure_organization_exists(self, org_id, org_dto):
@@ -1179,24 +1187,38 @@ class DecisionImporter(BaseImporter):
         }
         
         try:
+            logger.info(f"[SIGNER RESOLUTION] Starting resolution for signer {signer_id}")
+            
             # 1. Fetch the signer
+            logger.debug(f"[SIGNER RESOLUTION] Fetching signer {signer_id} from API")
             signer_dto = fetcher.fetch_a_signer(signer_id)
             
             if not signer_dto:
+                logger.warning(f"[SIGNER RESOLUTION] Signer {signer_id} not found in API")
                 resolution_path["result"] = "signer_not_found"
                 return None, resolution_path
+            
+            logger.debug(f"[SIGNER RESOLUTION] Successfully fetched signer {signer_id}")
                 
             # 2. Check if the signer has units
             if not hasattr(signer_dto, 'units') or not signer_dto.units:
+                logger.warning(f"[SIGNER RESOLUTION] Signer {signer_id} has no units attribute or empty units list")
                 resolution_path["result"] = "no_units"
                 return None, resolution_path
+            
+            logger.info(f"[SIGNER RESOLUTION] Signer {signer_id} has {len(signer_dto.units)} units")
                 
             # 3. For each unit associated with the signer, try to find its organization
-            for signer_unit in signer_dto.units:
+            for idx, signer_unit in enumerate(signer_dto.units):
+                logger.debug(f"[SIGNER RESOLUTION] Processing unit {idx+1}/{len(signer_dto.units)} for signer {signer_id}")
+                
                 if not hasattr(signer_unit, 'uid') or not signer_unit.uid:
+                    logger.debug(f"[SIGNER RESOLUTION] Skipping unit {idx+1} - no uid attribute")
                     continue
                     
                 unit_id = signer_unit.uid
+                logger.debug(f"[SIGNER RESOLUTION] Trying unit {unit_id} for signer {signer_id}")
+                
                 resolution_path["path"].append({
                     "tried_unit_id": unit_id,
                     "position_id": getattr(signer_unit, 'positionId', None),
@@ -1204,23 +1226,28 @@ class DecisionImporter(BaseImporter):
                 })
                 
                 # Try to find this unit's organization (either directly or through parent chain)
+                logger.debug(f"[SIGNER RESOLUTION] Fetching unit {unit_id} from API")
                 unit_dto = fetcher.fetch_a_unit(unit_id)
                 
                 if not unit_dto:
+                    logger.warning(f"[SIGNER RESOLUTION] Unit {unit_id} not found in API")
                     resolution_path["path"][-1]["unit_found"] = False
                     continue
                     
                 resolution_path["path"][-1]["unit_found"] = True
+                logger.debug(f"[SIGNER RESOLUTION] Successfully fetched unit {unit_id}")
                 
                 # If this unit has an organization, use it
                 if hasattr(unit_dto, 'organizationId') and unit_dto.organizationId:
                     org_id = unit_dto.organizationId
+                    logger.info(f"[SIGNER RESOLUTION] ✓ Found organization {org_id} directly on unit {unit_id}")
                     resolution_path["path"][-1]["has_org_id"] = True
                     resolution_path["result"] = "found_through_unit"
                     resolution_path["resolved_through_unit"] = unit_id
                     resolution_path["organization_id"] = org_id
                     return org_id, resolution_path
                     
+                logger.debug(f"[SIGNER RESOLUTION] Unit {unit_id} has no organizationId, trying parent chain")
                 resolution_path["path"][-1]["has_org_id"] = False
                 
                 # If the unit doesn't have an org, try to resolve through its parent chain
@@ -1228,11 +1255,13 @@ class DecisionImporter(BaseImporter):
                     visited = set()
                     
                 # Don't include current signer ID in visited units - it's not a unit
+                logger.debug(f"[SIGNER RESOLUTION] Resolving unit {unit_id} through parent chain")
                 org_id, unit_resolution_path = self._resolve_unit_organization_through_parents(
                     unit_id, fetcher, max_depth, visited
                 )
                 
                 if org_id:
+                    logger.info(f"[SIGNER RESOLUTION] ✓ Found organization {org_id} through parent chain of unit {unit_id}")
                     resolution_path["path"][-1]["resolved_through_parent_chain"] = True
                     resolution_path["path"][-1]["unit_resolution_path"] = unit_resolution_path
                     resolution_path["result"] = "found_through_unit_parent_chain"
@@ -1240,16 +1269,21 @@ class DecisionImporter(BaseImporter):
                     resolution_path["resolved_through_unit"] = unit_id
                     return org_id, resolution_path
                     
+                logger.debug(f"[SIGNER RESOLUTION] Could not resolve organization through parent chain of unit {unit_id}")
                 resolution_path["path"][-1]["resolved_through_parent_chain"] = False
                 
             # 4. If no organization found through any unit, return None
+            logger.warning(
+                f"[SIGNER RESOLUTION] ✗ No organization found for signer {signer_id} "
+                f"after checking {len(signer_dto.units)} units"
+            )
             resolution_path["result"] = "no_org_found_through_units"
             return None, resolution_path
                 
         except Exception as e:
+            logger.error(f"[SIGNER RESOLUTION] ✗ Error resolving organization for signer {signer_id}: {e}", exc_info=True)
             resolution_path["result"] = "error"
             resolution_path["error"] = str(e)
-            logger.error(f"Error resolving organization for signer {signer_id}: {e}")
             return None, resolution_path
 
     def _ensure_default_organization(self, entity_type, entity_id):

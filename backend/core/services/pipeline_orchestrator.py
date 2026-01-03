@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import uuid
 from django_redis import get_redis_connection
+from django.conf import settings
 
 from core.models.decisions import Decision
 from core.models.decision_health import DecisionHealthCheck, HealthStatus
@@ -245,10 +246,19 @@ class DecisionPipelineOrchestrator:
                 'details': []
             }
             
+            # Log initial state
+            total_signers = decision.signers.count()
+            signers_without_org = decision.signers.filter(organization_id__isnull=True).count()
+            logger.info(
+                f"Signers for {decision.ada}: {total_signers} total, "
+                f"{signers_without_org} without organization, "
+                f"{total_signers - signers_without_org} already have organization"
+            )
+            
             # Resolve organizations for signers
             for signer in decision.signers.all():
                 if not signer.organization_id:
-                    logger.debug(f"Resolving organization for signer {signer.uid}")
+                    logger.info(f"Attempting to resolve organization for signer {signer.uid}")
                     
                     try:
                         org_id, resolution_path = self.decision_importer._resolve_signer_organization(
@@ -286,10 +296,29 @@ class DecisionPipelineOrchestrator:
                         resolution_results['signers_failed'] += 1
                         logger.error(f"Failed to resolve organization for signer {signer.uid}: {signer_error}")
             
+            # Log signer resolution summary
+            if signers_without_org > 0:
+                logger.info(
+                    f"Signer resolution summary for {decision.ada}: "
+                    f"{resolution_results['signers_resolved']} resolved, "
+                    f"{resolution_results['signers_failed']} used default org"
+                )
+            else:
+                logger.info(f"All signers for {decision.ada} already have organizations")
+            
+            # Log initial state for units
+            total_units = decision.units.count()
+            units_without_org = decision.units.filter(organization_id__isnull=True).count()
+            logger.info(
+                f"Units for {decision.ada}: {total_units} total, "
+                f"{units_without_org} without organization, "
+                f"{total_units - units_without_org} already have organization"
+            )
+            
             # Resolve organizations for units
             for unit in decision.units.all():
                 if not unit.organization_id:
-                    logger.debug(f"Resolving organization for unit {unit.uid}")
+                    logger.info(f"Attempting to resolve organization for unit {unit.uid}")
                     
                     try:
                         org_id, resolution_path, units_to_import = self.decision_importer._resolve_unit_organization_through_parents(
@@ -327,6 +356,16 @@ class DecisionPipelineOrchestrator:
                         resolution_results['units_failed'] += 1
                         logger.error(f"Failed to resolve organization for unit {unit.uid}: {unit_error}")
             
+            # Log unit resolution summary
+            if units_without_org > 0:
+                logger.info(
+                    f"Unit resolution summary for {decision.ada}: "
+                    f"{resolution_results['units_resolved']} resolved, "
+                    f"{resolution_results['units_failed']} used default org"
+                )
+            else:
+                logger.info(f"All units for {decision.ada} already have organizations")
+            
             # Log summary
             total_resolved = resolution_results['signers_resolved'] + resolution_results['units_resolved']
             total_failed = resolution_results['signers_failed'] + resolution_results['units_failed']
@@ -335,6 +374,12 @@ class DecisionPipelineOrchestrator:
                 f"Organization resolution completed for {decision.ada}: "
                 f"{total_resolved} resolved, {total_failed} failed"
             )
+            
+            # Log detailed results if there were any attempts
+            if resolution_results['details']:
+                logger.debug(f"Resolution details for {decision.ada}: {resolution_results['details']}")
+            else:
+                logger.info(f"No resolution attempts made for {decision.ada} - all entities already have organizations")
             
             # Mark as healthy even if some failed (we used defaults)
             self.update_health_status(health_check, 'organization', HealthStatus.HEALTHY)

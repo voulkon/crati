@@ -111,7 +111,7 @@ def log_with_user_context(user_id: Optional[int] = None, username: Optional[str]
 """
 EXAMPLE 1: Document Processing Task with full context
 ------------------------------------------------------
-from diavgeia_project.logging_helpers import log_document_processing
+from diavgeia_project.logging.logging_helpers import log_document_processing
 
 @shared_task(bind=True, max_retries=3)
 def process_document_task(self, ada, provider=None):
@@ -137,7 +137,7 @@ def process_document_task(self, ada, provider=None):
 
 EXAMPLE 2: Batch Import with batch tracking
 --------------------------------------------
-from diavgeia_project.logging_helpers import log_decision_import
+from diavgeia_project.logging.logging_helpers import log_decision_import
 import uuid
 
 @shared_task
@@ -167,7 +167,7 @@ logger.bind(document_ada=ada, step="complete").info("Processing finished")
 EXAMPLE 4: Combining with OpenTelemetry traces
 -----------------------------------------------
 from opentelemetry import trace
-from diavgeia_project.logging_helpers import log_document_processing, log_with_trace
+from diavgeia_project.logging.logging_helpers import log_document_processing, log_with_trace
 
 @shared_task(bind=True)
 def process_document_task(self, ada, provider=None):

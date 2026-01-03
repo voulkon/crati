@@ -5,7 +5,7 @@ This module configures Loguru to output JSON logs when USE_JSON_LOGGING=true.
 It should be imported early in the application lifecycle (e.g., in celery.py, wsgi.py).
 
 Usage:
-    from diavgeia_project.loguru_config import configure_loguru
+    from diavgeia_project.logging.loguru_config import configure_loguru
     configure_loguru()  # Call once at app startup
 """
 

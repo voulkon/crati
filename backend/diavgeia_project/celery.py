@@ -12,7 +12,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "diavgeia_project.settings")
 tracer = initialize_otel("diavgeia-celery")
 
 # Configure Loguru for JSON logging BEFORE any Loguru imports
-from .loguru_config import configure_loguru
+from diavgeia_project.logging.loguru_config import configure_loguru
 configure_loguru()
 
 # Create Celery app
@@ -38,7 +38,7 @@ CeleryInstrumentor().instrument(
 app.autodiscover_tasks()
 
 # Import logging utilities after Django setup
-from .logging_utils import task_logger
+from diavgeia_project.logging.logging_utils import task_logger
 import time
 
 # Task execution tracking - DISABLED FOR TESTING HANG ISSUE

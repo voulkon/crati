@@ -10,7 +10,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.http import JsonResponse
-from diavgeia_project.logging_utils import api_logger, log_api_calls
+from diavgeia_project.logging.logging_utils import api_logger, log_api_calls
 import time
 
 
@@ -157,7 +157,7 @@ def user_analytics(request):
 
 # Example of Celery task logging integration
 from celery import shared_task
-from diavgeia_project.logging_utils import task_logger, log_task_execution
+from diavgeia_project.logging.logging_utils import task_logger, log_task_execution
 
 @shared_task
 @log_task_execution()

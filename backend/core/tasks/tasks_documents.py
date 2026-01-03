@@ -4,7 +4,7 @@ from loguru import logger
 from core.models.import_jobs import DateCoverage
 from core.services.opensearch_service import OpenSearchService
 from .tasks_opensearch import index_recent_documents
-from diavgeia_project.logging_helpers import log_document_processing
+from diavgeia_project.logging.logging_helpers import log_document_processing
 
 # ============================================================================
 # SINGLE SOURCE OF TRUTH: Use this for processing individual decisions

@@ -88,7 +88,7 @@ Each service is automatically labeled for easy filtering:
 ### 1. API Logging (Django)
 
 ```python
-from diavgeia_project.logging_utils import api_logger, log_api_calls
+from diavgeia_project.logging.logging_utils import api_logger, log_api_calls
 
 # Method 1: Decorator (automatic)
 @log_api_calls()
@@ -107,7 +107,7 @@ def my_view(request):
 ### 2. Task Logging (Celery)
 
 ```python
-from diavgeia_project.logging_utils import task_logger, log_task_execution
+from diavgeia_project.logging.logging_utils import task_logger, log_task_execution
 
 # Method 1: Decorator (automatic)
 @log_task_execution()
@@ -129,7 +129,7 @@ def my_task(param1, param2):
 ### 3. Custom Context Logging
 
 ```python
-from diavgeia_project.logging_utils import get_logger
+from diavgeia_project.logging.logging_utils import get_logger
 
 logger = get_logger(__name__)
 

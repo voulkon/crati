@@ -10,7 +10,7 @@ This module provides a production-ready logging configuration that:
 Usage:
     In settings.py, replace the LOGGING dict with:
     
-    from diavgeia_project.logging_config_json import get_json_logging_config
+    from diavgeia_project.logging.logging_config_json import get_json_logging_config
     LOGGING = get_json_logging_config(DEBUG)
 """
 
@@ -47,24 +47,25 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
             log_record['line'] = log_record.pop('lineno')
 
 
-def get_json_logging_config(debug_mode=False):
+def get_json_logging_config(debug_mode=False, logging_level='INFO'):
     """
     Get logging configuration with JSON formatting.
-    
+
     Args:
         debug_mode: If True, adds verbose console output for debugging
-        
+        logging_level: The logging level to use (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+
     Returns:
         dict: Django LOGGING configuration
     """
-    
+
     config = {
         'version': 1,
         'disable_existing_loggers': False,
-        
+
         'formatters': {
             'json': {
-                '()': 'diavgeia_project.logging_config_json.CustomJsonFormatter',
+                '()': 'diavgeia_project.logging.logging_config_json.CustomJsonFormatter',
                 'format': '%(asctime)s %(name)s %(levelname)s %(message)s %(funcName)s %(pathname)s %(lineno)d',
             },
             'verbose': {
@@ -72,7 +73,7 @@ def get_json_logging_config(debug_mode=False):
                 'style': '{',
             },
         },
-        
+
         'filters': {
             'require_debug_false': {
                 '()': 'django.utils.log.RequireDebugFalse',
@@ -81,10 +82,10 @@ def get_json_logging_config(debug_mode=False):
                 '()': 'django.utils.log.RequireDebugTrue',
             },
         },
-        
+
         'handlers': {
             'console_json': {
-                'level': 'INFO',
+                'level': logging_level,
                 'class': 'logging.StreamHandler',
                 'formatter': 'json',
                 'stream': 'ext://sys.stdout',
@@ -97,16 +98,16 @@ def get_json_logging_config(debug_mode=False):
                 'stream': 'ext://sys.stderr',
             },
         },
-        
+
         'root': {
-            'level': 'INFO',
+            'level': logging_level,
             'handlers': ['console_json'],
         },
         
         'loggers': {
             'django': {
                 'handlers': ['console_json'],
-                'level': 'INFO',
+                'level': logging_level,
                 'propagate': False,
             },
             'django.request': {
@@ -116,32 +117,32 @@ def get_json_logging_config(debug_mode=False):
             },
             'django.security': {
                 'handlers': ['console_json'],
-                'level': 'INFO',
+                'level': logging_level,
                 'propagate': False,
             },
             'api': {
                 'handlers': ['console_json'],
-                'level': 'INFO',
+                'level': logging_level,
                 'propagate': False,
             },
             'core': {
                 'handlers': ['console_json'],
-                'level': 'INFO',
+                'level': logging_level,
                 'propagate': False,
             },
             'users': {
                 'handlers': ['console_json'],
-                'level': 'INFO',
+                'level': logging_level,
                 'propagate': False,
             },
             'celery': {
                 'handlers': ['console_json'],
-                'level': 'INFO',
+                'level': logging_level,
                 'propagate': False,
             },
             'celery.task': {
                 'handlers': ['console_json'],
-                'level': 'INFO',
+                'level': logging_level,
                 'propagate': False,
             },
             # Suppress noisy libraries
@@ -208,7 +209,7 @@ class StructuredLogger:
 
 # Example usage in pipeline
 """
-from diavgeia_project.logging_config_json import StructuredLogger
+from diavgeia_project.logging.logging_config_json import StructuredLogger
 
 class DecisionPipelineOrchestrator:
     def __init__(self):

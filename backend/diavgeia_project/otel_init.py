@@ -5,6 +5,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 import os
 import sys
+from loguru import logger
 
 # Global flag to prevent excessive initialization
 _global_initialized = False
@@ -18,29 +19,30 @@ def initialize_otel(service_name):
         command = sys.argv[1]
         # For server commands, use the original service name
         if command in ['runserver', 'test', 'shell']:
-            print(f"🖥️ Server command detected: {command}, using service: {service_name}")
+            ...
+            # logger.debug(f"🖥️ Server command detected: {command}, using service: {service_name}")
             # IMPORTANT: Don't change the service name for server commands!
         else:
             # For utility commands, create a separate "commands" service
             command_service_name = f"diavgeia-commands"
-            print(f"🔧 Management command detected: {command}, using service: {command_service_name}")
+            # logger.debug(f"🔧 Management command detected: {command}, using service: {command_service_name}")
             service_name = command_service_name
     
-    print(f"🔍 initialize_otel called with service_name: {service_name}")
-    print(f"🔍 Global initialized: {_global_initialized}, Services: {_services_initialized}")
+    # logger.debug(f"🔍 initialize_otel called with service_name: {service_name}")
+    # logger.debug(f"🔍 Global initialized: {_global_initialized}, Services: {_services_initialized}")
     
     # For runserver command, FORCE reset if we're trying to set Django
     if 'runserver' in sys.argv and service_name == "diavgeia-django":
-        print("🔄 RUNSERVER: Forcing Django service name override")
+        # logger.debug("🔄 RUNSERVER: Forcing Django service name override")
         _global_initialized = False
         _services_initialized.clear()
     
     # If we already have a global provider set up, just return a tracer
     if _global_initialized and service_name in _services_initialized:
-        print(f"⚠️ Service {service_name} already initialized, returning existing tracer")
+        # logger.debug(f"⚠️ Service {service_name} already initialized, returning existing tracer")
         return trace.get_tracer(__name__)
 
-    print(f"🚀 Setting up OpenTelemetry for {service_name}...")
+    # logger.debug(f"🚀 Setting up OpenTelemetry for {service_name}...")
     
     # Configure resource for this specific service
     resource = Resource.create({
@@ -48,29 +50,29 @@ def initialize_otel(service_name):
         "environment": os.getenv("DJANGO_SETTINGS_MODULE", "development"),
         "service.version": "1.0.0"
     })
-    print(f"📋 Resource created: {resource.attributes}")
+    # logger.debug(f"📋 Resource created: {resource.attributes}")
 
     # Create provider
     provider = TracerProvider(resource=resource)
     
     # Set as global provider (last one wins, which is fine)
     trace.set_tracer_provider(provider)
-    print(f"🏭 Set TracerProvider: {provider}")
+    # logger.debug(f"🏭 Set TracerProvider: {provider}")
     
     # Configure exporter
     jaeger_host = os.getenv("JAEGER_HOST", "jaeger")
     jaeger_port = os.getenv("JAEGER_PORT", "4317")
     endpoint = f"http://{jaeger_host}:{jaeger_port}"
-    print(f"🎯 OTLP endpoint: {endpoint}")
+    # logger.debug(f"🎯 OTLP endpoint: {endpoint}")
     
     try:
         otlp_exporter = OTLPSpanExporter(
             endpoint=endpoint,
             timeout=10  # Add timeout for debugging
         )
-        print("✅ OTLP exporter created")
+        # logger.debug("✅ OTLP exporter created")
     except Exception as e:
-        print(f"❌ OTLP exporter creation failed: {e}")
+        # logger.debug(f"❌ OTLP exporter creation failed: {e}")
         raise
     
     # Use BatchSpanProcessor with shorter intervals for testing
@@ -81,7 +83,7 @@ def initialize_otel(service_name):
         export_timeout_millis=10000  # 10 second timeout
     )
     provider.add_span_processor(processor)
-    print("✅ Span processor added with fast export settings")
+    # logger.debug("✅ Span processor added with fast export settings")
 
     # Mark as initialized
     _global_initialized = True
@@ -89,5 +91,5 @@ def initialize_otel(service_name):
     
     # Return a tracer
     tracer = trace.get_tracer(__name__)
-    print(f"✅ OpenTelemetry initialization complete for {service_name}. Tracer: {tracer}")
+    # logger.debug(f"✅ OpenTelemetry initialization complete for {service_name}. Tracer: {tracer}")
     return tracer

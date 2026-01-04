@@ -38,7 +38,29 @@ def afm_entity_detail(request, afm):
             "total_appearances": entity.total_appearances,
             "first_seen": entity.first_seen,
             "last_seen": entity.last_seen,
+            "gemi_lookup_attempted": entity.gemi_lookup_attempted,
+            "gemi_lookup_success": entity.gemi_lookup_success,
+            "gemi_companies_count": entity.gemi_companies_count,
         }
+        
+        # Add company information if available
+        company_data = None
+        if settings.HAVE_AFM_FETCH_JOB and entity.gemi_lookup_success:
+            from core.models.companies import Company
+            companies = Company.objects.filter(afm=entity.afm)
+            if companies.exists():
+                company = companies.first()
+                company_data = {
+                    "id": company.id,
+                    "ar_gemi": company.ar_gemi,
+                    "co_name_el": company.co_name_el,
+                    "legal_type_name": company.legal_type_name,
+                    "status_name": company.status_name,
+                    "municipality_name": company.municipality_name,
+                }
+        
+        entity_data["company"] = company_data
+        entity_data["company_enrichment_enabled"] = settings.HAVE_AFM_FETCH_JOB
 
         # Use financial service data for statistics
         statistics = {

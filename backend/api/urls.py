@@ -9,6 +9,7 @@ from .views.organization_views import organization_chart_api, organization_chart
 from .views import search
 from .views import decisions as decisions_views
 from .views import entities as entities_views
+from .views import system as system_views
 from .views.companies.details import company_detail, company_decisions, company_decision_stats
 from .views.summary import amounts as summary_amounts_views
 from .views.organy import details as details_between_companies_and_orgs
@@ -24,6 +25,10 @@ urlpatterns = [
     path("public/", public_endpoint, name="public"),
     path("protected/", protected_endpoint, name="protected"),
     path("usage/", check_api_usage, name="check_api_usage"),
+    
+    # System configuration
+    path("system/config/", system_views.system_config, name="system_config"),
+    
     path('tasks/process/', ProcessDocumentsView.as_view(), name='process-documents'),
     path('tasks/import-decisions/', calendar_bulk_import, name='admin_import_decisions'),
     path('tasks/status/<str:task_id>/', TaskStatusView.as_view(), name='task-status'),

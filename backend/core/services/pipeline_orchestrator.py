@@ -443,6 +443,12 @@ class DecisionPipelineOrchestrator:
 
     def _step_enrich_companies(self, decision: Decision, health_check: DecisionHealthCheck):
         try:
+            # Skip company enrichment if disabled
+            if not settings.HAVE_AFM_FETCH_JOB:
+                logger.info(f"Skipping company enrichment for {decision.ada} (HAVE_AFM_FETCH_JOB=False)")
+                self.update_health_status(health_check, 'relations', HealthStatus.UNKNOWN)
+                return
+            
             logger.info(f"Step 3: Enriching company data for {decision.ada}")
             
             # Find entities related to this decision

@@ -16,6 +16,14 @@ from core.utils.performance_monitoring import monitor_query_performance
 @permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
 def company_detail(request, company_id):
     """Get detailed company information."""
+    # Check if company enrichment is enabled
+    if not settings.HAVE_AFM_FETCH_JOB:
+        return Response({
+            "error": "Company data enrichment is currently disabled",
+            "feature_disabled": True,
+            "message": "Company details are not available. Only AFM entity information is maintained."
+        }, status=503)
+    
     try:
         company = Company.objects.prefetch_related(
             "activities", "persons", "capital", "stocks"
@@ -98,6 +106,14 @@ def company_detail(request, company_id):
 @monitor_query_performance(include_context=True)
 def company_decisions(request, company_id):
     """Get all decisions related to a specific company."""
+    # Check if company enrichment is enabled
+    if not settings.HAVE_AFM_FETCH_JOB:
+        return Response({
+            "error": "Company data enrichment is currently disabled",
+            "feature_disabled": True,
+            "message": "Company details are not available. Only AFM entity information is maintained."
+        }, status=503)
+    
     try:
         company = Company.objects.get(id=company_id)
 
@@ -206,6 +222,14 @@ def company_decisions(request, company_id):
 @monitor_query_performance(include_context=True)
 def company_decision_stats(request, company_id):
     """Get comprehensive decision statistics for a company using the financial service."""
+    # Check if company enrichment is enabled
+    if not settings.HAVE_AFM_FETCH_JOB:
+        return Response({
+            "error": "Company data enrichment is currently disabled",
+            "feature_disabled": True,
+            "message": "Company statistics are not available. Only AFM entity information is maintained."
+        }, status=503)
+    
     try:
         company = Company.objects.get(id=company_id)
 
@@ -282,6 +306,14 @@ def company_decision_stats(request, company_id):
 @monitor_query_performance(include_context=True)
 def company_financial_timeline(request, company_id):
     """Get financial timeline for a company using the financial service."""
+    # Check if company enrichment is enabled
+    if not settings.HAVE_AFM_FETCH_JOB:
+        return Response({
+            "error": "Company data enrichment is currently disabled",
+            "feature_disabled": True,
+            "message": "Company financial timeline is not available. Only AFM entity information is maintained."
+        }, status=503)
+    
     try:
         company = Company.objects.get(id=company_id)
 

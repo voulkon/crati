@@ -76,6 +76,18 @@ apiClient.interceptors.response.use(
       return Promise.reject(rateLimitError);
     }
     
+    if (error.response?.status === 401) {
+      // Unauthorized - user needs to sign in
+      // Dispatch event for global handling
+      window.dispatchEvent(new CustomEvent('authRequired', { 
+        detail: { 
+          message: 'Please sign in to access this feature'
+        }
+      }));
+      
+      return Promise.reject(error);
+    }
+    
     return Promise.reject(error);
   }
 );

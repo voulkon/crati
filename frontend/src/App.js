@@ -20,6 +20,7 @@ import TopControls from './components/TopControls';
 import './index.css';
 import RateLimitIndicator from './components/RateLimitIndicator';
 import RateLimitModal from './components/RateLimitModal';
+import AuthPromptModal from './components/AuthPromptModal';
 import { setTokenGetter } from './api/client';
 import { useTranslation } from './contexts/TranslationContext';
 
@@ -79,6 +80,7 @@ function AuthenticatedApp({ controlsLayout }) {
       
       <RateLimitIndicator />
       <RateLimitModal />
+      <AuthPromptModal />
       
       <Routes>
         {/* NEW: Use HomePage as the main landing page */}

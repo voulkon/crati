@@ -385,5 +385,11 @@
     "folder": "Folder",
     "title": "Title",
     "noFolder": "No folder"
+  },
+  "auth": {
+    "signInRequired": "Please sign in to access this feature",
+    "signInTitle": "Sign In Required",
+    "signIn": "Sign In",
+    "cancel": "Cancel"
   }
 }

@@ -77,14 +77,33 @@ def update_organization_coverage(sender, instance, **kwargs):
             issue_date__date=date_obj
         ).count()
         
-        # Update coverage
-        DateCoverage.objects.update_or_create(
-            date=date_obj,
-            organization=instance.organization,
-            unit=None,
-            signer=None,
-            defaults={'decision_count': current_count}
-        )
+        # Handle race condition: multiple workers may try to create simultaneously
+        try:
+            coverage, created = DateCoverage.objects.get_or_create(
+                date=date_obj,
+                organization=instance.organization,
+                unit=None,
+                signer=None,
+                defaults={'decision_count': current_count}
+            )
+            if not created and coverage.decision_count != current_count:
+                coverage.decision_count = current_count
+                coverage.save(update_fields=['decision_count', 'last_updated'])
+        except DateCoverage.MultipleObjectsReturned:
+            # Race condition created duplicates - clean them up
+            logger.warning(f"Multiple DateCoverage found for org {instance.organization.uid} on {date_obj}, cleaning up duplicates")
+            duplicates = DateCoverage.objects.filter(
+                date=date_obj,
+                organization=instance.organization,
+                unit=None,
+                signer=None
+            ).order_by('id')
+            # Keep the first one, update its count
+            keeper = duplicates.first()
+            keeper.decision_count = current_count
+            keeper.save(update_fields=['decision_count', 'last_updated'])
+            # Delete the rest
+            duplicates.exclude(id=keeper.id).delete()
     
     # Detailed logging only at debug level
     # logger.debug(f"Updated org coverage for {instance.organization.uid} on {date_obj}: {current_count}")
@@ -112,12 +131,30 @@ def update_signer_coverage(sender, instance, action, pk_set, **kwargs):
                     issue_date__date=date_obj
                 ).count()
                 
-                DateCoverage.objects.update_or_create(
-                    date=date_obj,
-                    organization=None,
-                    signer_id=signer_id,
-                    defaults={'decision_count': current_count}
-                )
+                try:
+                    coverage, created = DateCoverage.objects.get_or_create(
+                        date=date_obj,
+                        organization=None,
+                        unit=None,
+                        signer_id=signer_id,
+                        defaults={'decision_count': current_count}
+                    )
+                    if not created and coverage.decision_count != current_count:
+                        coverage.decision_count = current_count
+                        coverage.save(update_fields=['decision_count', 'last_updated'])
+                except DateCoverage.MultipleObjectsReturned:
+                    # Race condition created duplicates - clean them up
+                    logger.warning(f"Multiple DateCoverage found for signer {signer_id} on {date_obj}, cleaning up duplicates")
+                    duplicates = DateCoverage.objects.filter(
+                        date=date_obj,
+                        organization=None,
+                        unit=None,
+                        signer_id=signer_id
+                    ).order_by('id')
+                    keeper = duplicates.first()
+                    keeper.decision_count = current_count
+                    keeper.save(update_fields=['decision_count', 'last_updated'])
+                    duplicates.exclude(id=keeper.id).delete()
                 # logger.debug(f"Updated signer coverage for {signer_id} on {date_obj}: {current_count}")
 
 
@@ -140,13 +177,30 @@ def update_coverage_on_delete(sender, instance, **kwargs):
             ).count()
             
             if current_count > 0:
-                DateCoverage.objects.update_or_create(
-                    date=date_obj,
-                    organization=instance.organization,
-                    unit=None,
-                    signer=None,
-                    defaults={'decision_count': current_count}
-                )
+                try:
+                    coverage, created = DateCoverage.objects.get_or_create(
+                        date=date_obj,
+                        organization=instance.organization,
+                        unit=None,
+                        signer=None,
+                        defaults={'decision_count': current_count}
+                    )
+                    if not created and coverage.decision_count != current_count:
+                        coverage.decision_count = current_count
+                        coverage.save(update_fields=['decision_count', 'last_updated'])
+                except DateCoverage.MultipleObjectsReturned:
+                    # Race condition created duplicates - clean them up
+                    logger.warning(f"Multiple DateCoverage found for org {instance.organization.uid} on {date_obj}, cleaning up duplicates")
+                    duplicates = DateCoverage.objects.filter(
+                        date=date_obj,
+                        organization=instance.organization,
+                        unit=None,
+                        signer=None
+                    ).order_by('id')
+                    keeper = duplicates.first()
+                    keeper.decision_count = current_count
+                    keeper.save(update_fields=['decision_count', 'last_updated'])
+                    duplicates.exclude(id=keeper.id).delete()
                 # logger.debug(f"Updated org coverage for {instance.organization.uid} on {date_obj}: {current_count}")
             else:
                 DateCoverage.objects.filter(

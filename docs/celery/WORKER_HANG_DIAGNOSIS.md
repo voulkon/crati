@@ -195,6 +195,110 @@ docker restart diavgeia_worker
 
 **This is speculation. We need proof.**
 
+## Update: Additional Issues Discovered (2026-01-04)
+
+### Issue 2: Tasks Showing STARTED but Not Producing Logs
+
+**Symptoms:**
+- 3 workers, 3 tasks showing as "STARTED"
+- No logs from these tasks
+- Empty queue in RabbitMQ
+- No database locks detected
+
+**Root Causes Found:**
+
+#### 1. **DateCoverage Race Condition** (Primary Issue)
+```python
+core.models.import_jobs.DateCoverage.MultipleObjectsReturned: 
+get() returned more than one DateCoverage -- it returned 2!
+```
+
+**What Happened:**
+- Multiple workers processing decisions simultaneously
+- Each triggers `update_organization_coverage` signal
+- Signal uses `update_or_create()` which internally does:
+  1. Try `get()` → DoesNotExist
+  2. Try to `create()` 
+- **Race condition:** Both workers pass step 1, both try to create
+- One succeeds, one hits unique constraint, retries `get()`
+- Now `get()` finds 2 records → `MultipleObjectsReturned`
+- Task crashes without clear logs
+
+**Fix:** Changed from `update_or_create()` to `get_or_create()` with explicit duplicate cleanup:
+```python
+try:
+    coverage, created = DateCoverage.objects.get_or_create(...)
+    if not created:
+        coverage.decision_count = current_count
+        coverage.save()
+except DateCoverage.MultipleObjectsReturned:
+    # Clean up duplicates
+    duplicates = DateCoverage.objects.filter(...).order_by('id')
+    keeper = duplicates.first()
+    keeper.decision_count = current_count
+    keeper.save()
+    duplicates.exclude(id=keeper.id).delete()
+```
+
+#### 2. **Celery Retry Bug**
+```python
+TypeError: store_decisions_from_pickle() got multiple values for argument 'pickle_file'
+```
+
+**What Happened:**
+- Task fails (e.g., FileNotFoundError)
+- Retry logic does: `self.retry(kwargs={'pickle_file': pickle_file, 'batch_size': 1})`
+- But `pickle_file` is already in `args` from original call
+- Celery passes it both ways → TypeError
+- Task is rejected, not requeued
+
+**Fix:** Removed `pickle_file` from retry kwargs (it's already in args):
+```python
+raise self.retry(
+    countdown=delay,
+    kwargs={'batch_size': new_batch_size},  # Only pass batch_size
+    exc=e
+)
+```
+
+#### 3. **Pickle Path Bug**
+```python
+FileNotFoundError: '/code/logs/pickles/pickles/chunk_2025-06-28_2_165539.pkl'
+```
+
+**What Happened:**
+- `PICKLE_DIR` constant already includes `/logs/pickles`
+- Code adds another `/pickles`: `f"{PICKLE_DIR}/pickles"`
+- Results in `/code/logs/pickles/pickles/...`
+
+**Fix:** Use `PICKLE_DIR` directly without appending `/pickles`.
+
+#### 4. **Missing Countdown in apply_async**
+```python
+delay_seconds = (i // chunk_size) * 3  # Calculated but never used!
+storage_task = store_decisions_from_pickle.apply_async(
+    args=[chunk_pickle],
+    kwargs={'batch_size': 1},
+    # countdown=delay_seconds  # <-- Missing!
+)
+```
+
+**What Happened:**
+- All storage tasks dispatched immediately
+- All 3 workers grab tasks simultaneously
+- Race conditions ensue
+
+**Fix:** Added `countdown=delay_seconds` to `apply_async()`.
+
+### Key Takeaway
+
+The tasks were **not hanging**. They were:
+1. **Crashing** due to DateCoverage race condition
+2. **Failing to retry** due to retry signature bug
+3. **Competing for resources** due to missing task delays
+
+After the crashes, the workers were idle (no tasks in queue), which appeared like a "hang" but was actually "all tasks failed and there's nothing left to do."
+
 ## Resolution & Root Cause Analysis (2026-01-03)
 
 ### The "Greedy Worker" Trap

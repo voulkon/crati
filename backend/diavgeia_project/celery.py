@@ -71,12 +71,12 @@ import time
 # Configure result backend to store task results
 app.conf.update(
     result_backend="django-db",  # Store results in Django's database
-    task_track_started=False,  # DISABLED: Testing if DB write before task start causes hang
+    task_track_started=False,  # Track when task starts (stored in result backend)
     result_expires=86400,  # Results expire after 1 day (in seconds)
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",
-    worker_prefetch_multiplier=1,  # Don't let workers grab too many tasks at once
+    worker_prefetch_multiplier=1,  # Fetch 1 task per worker process (concurrency * 1)
 )
 
 app.conf.beat_schedule = {

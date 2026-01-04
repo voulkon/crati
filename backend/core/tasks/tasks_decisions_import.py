@@ -1,3 +1,18 @@
+"""
+Decision Import Tasks - Distributed Pipeline for Daily Decision Ingestion
+
+⚠️ CRITICAL BUG FIX (2026-01-04):
+   Removed apply_async(countdown=X) due to Celery 5.6.1 bug with RabbitMQ without 
+   delayed message exchange plugin. Tasks with countdown were silently lost.
+   
+   Solution: Moved delay inside tasks using time.sleep() to prevent race conditions.
+   See: /docs/celery-countdown-bug-research.md for full investigation.
+
+Architecture:
+    1. fetch_daily_decisions_to_pickle: Fetches full day from API
+    2. Splits into chunks, dispatches store_decisions_from_pickle for each
+    3. Each storage task sleeps before processing (prevents DB deadlocks)
+"""
 from celery import shared_task
 from datetime import date, datetime
 from typing import List, Dict, Any, Optional
@@ -75,8 +90,8 @@ def fetch_daily_decisions_to_pickle(self, target_date_str: str,
                 logger.warning(f"Task {self.request.id}: No response for page {page}")
                 break
         
-        # Create pickle directory
-        pickle_dir = f"{PICKLE_DIR}/pickles"
+        # Create pickle directory (PICKLE_DIR already includes 'pickles', don't double it)
+        pickle_dir = PICKLE_DIR
         os.makedirs(pickle_dir, exist_ok=True)
         
         # Generate pickle file for the full day
@@ -119,14 +134,19 @@ def fetch_daily_decisions_to_pickle(self, target_date_str: str,
             with open(chunk_pickle, 'wb') as f:
                 pickle.dump(chunk_data, f)
             
-            # Dispatch storage task with significant delay and batch_size=1
-            delay_seconds = (i // chunk_size) * 3  # 3 second delay between each task
+            # Dispatch storage task without countdown parameter
+            # ⚠️ DO NOT use apply_async(countdown=X) - causes silent task loss in Celery 5.6.1
+            # Instead, delay happens INSIDE the task via time.sleep() - see delay_seconds kwarg
+            delay_seconds = (i // chunk_size) * 3  # 3s stagger to prevent DB race conditions
             storage_task = store_decisions_from_pickle.apply_async(
                 args=[chunk_pickle],
-                kwargs={'batch_size': 1},  # Always start with sequential processing
+                kwargs={
+                    'batch_size': 1,  # Always start with sequential processing
+                    'delay_seconds': delay_seconds  # Task will sleep before processing
+                }
             )
             storage_tasks.append(storage_task.id)
-            logger.info(f"Dispatched storage task {storage_task.id} for chunk {chunk_id} (delayed by {delay_seconds}s, sequential processing)")
+            logger.info(f"Dispatched storage task {storage_task.id} for chunk {chunk_id} (will delay {delay_seconds}s inside task)")
         
         logger.success(f"Task {self.request.id}: Split into {len(storage_tasks)} storage tasks")
         
@@ -150,11 +170,14 @@ def fetch_daily_decisions_to_pickle(self, target_date_str: str,
 
 
 @shared_task(bind=True, max_retries=5)
-def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25, skip_opensearch: bool = False):
+def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25, skip_opensearch: bool = False, delay_seconds: int = 0):
     """
-    Phase 2: Load decisions from pickle and run through full pipeline using DecisionPipelineOrchestrator.
+    Phase 2: Load decisions from pickle and run through full pipeline.
     
-    The orchestrator now handles the complete lifecycle:
+    ⚠️ CRITICAL: Implements internal delay via time.sleep() to prevent DB race conditions.
+    This is safer than apply_async(countdown=X) which causes task loss in Celery 5.6.1.
+    
+    The orchestrator handles the complete lifecycle:
     - Stage 0: Import decision from DTO to database
     - Stage 1: Resolve organizations for signers and units
     - Stage 2-7: Entity extraction, amounts, companies, documents, opensearch, coverage
@@ -163,7 +186,16 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25, sk
         pickle_file: Path to the pickle file containing decisions
         batch_size: Deprecated - kept for compatibility but now processes one-by-one
         skip_opensearch: Skip OpenSearch indexing to reduce infrastructure costs
+        delay_seconds: Sleep this many seconds before processing (prevents race conditions)
     """
+    # ⚠️ BUG FIX (2026-01-04): Delay INSIDE task instead of countdown parameter
+    # Reason: apply_async(countdown=X) silently loses tasks in Celery 5.6.1 without
+    #         RabbitMQ delayed message exchange plugin installed
+    if delay_seconds > 0:
+        import time
+        logger.info(f"Task {self.request.id}: Sleeping {delay_seconds}s to prevent race conditions")
+        time.sleep(delay_seconds)
+    
     try:
         logger.info(f"Task {self.request.id}: Loading decisions from {pickle_file}")
         
@@ -242,17 +274,19 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25, sk
         if len(decisions) > 0 and len(dispatched_tasks) == 0 and not failed_imports:
             logger.warning(f"Task {self.request.id}: No decisions were processed from {len(decisions)} decisions (likely duplicates)")
         
-        # Move pickle to completed folder
+        # Move pickle to completed folder (only if file exists - may have been moved by retry)
         completed_dir = f"{PICKLE_DIR}/completed"
         os.makedirs(completed_dir, exist_ok=True)
         completed_file = os.path.join(completed_dir, os.path.basename(pickle_file))
-        os.rename(pickle_file, completed_file)
-        
-        # Move pickle to completed folder
-        completed_dir = f"{PICKLE_DIR}/completed"
-        os.makedirs(completed_dir, exist_ok=True)
-        completed_file = os.path.join(completed_dir, os.path.basename(pickle_file))
-        os.rename(pickle_file, completed_file)
+        if os.path.exists(pickle_file):
+            os.rename(pickle_file, completed_file)
+        else:
+            logger.warning(f"Task {self.request.id}: Pickle file {pickle_file} not found (may have been moved already)")
+            # Check if it's already in completed
+            if os.path.exists(completed_file):
+                logger.info(f"Task {self.request.id}: File already in completed folder")
+            else:
+                logger.error(f"Task {self.request.id}: File missing from both locations")
         
         # Log final results
         if failed_imports:
@@ -306,7 +340,7 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25, sk
             
             raise self.retry(
                 countdown=delay,
-                kwargs={'pickle_file': pickle_file, 'batch_size': new_batch_size},
+                kwargs={'batch_size': new_batch_size, 'skip_opensearch': skip_opensearch},  # Don't pass pickle_file here (it's in args)
                 exc=e
             )
         elif self.request.retries < self.max_retries:
@@ -316,7 +350,7 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25, sk
             
             raise self.retry(
                 countdown=30 * (2 ** self.request.retries),
-                kwargs={'pickle_file': pickle_file, 'batch_size': new_batch_size},
+                kwargs={'batch_size': new_batch_size, 'skip_opensearch': skip_opensearch},  # Don't pass pickle_file here (it's in args)
                 exc=e
             )
         else:

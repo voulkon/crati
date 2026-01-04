@@ -47,13 +47,15 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
             log_record['line'] = log_record.pop('lineno')
 
 
-def get_json_logging_config(debug_mode=False, logging_level='INFO'):
+def get_json_logging_config(debug_mode=False, logging_level='INFO', celery_level='INFO', db_level='WARNING'):
     """
     Get logging configuration with JSON formatting.
 
     Args:
         debug_mode: If True, adds verbose console output for debugging
         logging_level: The logging level to use (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        celery_level: The Celery-specific log level
+        db_level: The Django DB log level (set to DEBUG to see SQL queries)
 
     Returns:
         dict: Django LOGGING configuration
@@ -120,6 +122,12 @@ def get_json_logging_config(debug_mode=False, logging_level='INFO'):
                 'level': logging_level,
                 'propagate': False,
             },
+            # Suppress Django DB query logs unless explicitly enabled
+            'django.db.backends': {
+                'handlers': ['console_json'],
+                'level': db_level,  # WARNING by default, set DB_LOG_LEVEL=DEBUG to see SQL
+                'propagate': False,
+            },
             'api': {
                 'handlers': ['console_json'],
                 'level': logging_level,
@@ -135,17 +143,38 @@ def get_json_logging_config(debug_mode=False, logging_level='INFO'):
                 'level': logging_level,
                 'propagate': False,
             },
+            # Celery loggers - use separate level
             'celery': {
                 'handlers': ['console_json'],
-                'level': logging_level,
+                'level': celery_level,
                 'propagate': False,
             },
             'celery.task': {
                 'handlers': ['console_json'],
-                'level': logging_level,
+                'level': celery_level,
                 'propagate': False,
             },
-            # Suppress noisy libraries
+            'celery.worker': {
+                'handlers': ['console_json'],
+                'level': celery_level,  # Suppress DEBUG logs from worker.strategy
+                'propagate': False,
+            },
+            'celery.worker.strategy': {
+                'handlers': ['console_json'],
+                'level': 'WARNING',  # Very noisy at INFO/DEBUG
+                'propagate': False,
+            },
+            'celery.app.trace': {
+                'handlers': ['console_json'],
+                'level': 'WARNING',  # Suppress "TaskPool: Apply" logs
+                'propagate': False,
+            },
+            # Suppress noisy third-party libraries
+            'opentelemetry.instrumentation.celery': {
+                'handlers': ['console_json'],
+                'level': 'WARNING',  # Suppress "prerun signal" logs
+                'propagate': False,
+            },
             'requests': {
                 'handlers': ['console_json'],
                 'level': 'WARNING',

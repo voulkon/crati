@@ -95,8 +95,11 @@ def configure_loguru():
     When USE_JSON_LOGGING=false or not set:
         - Uses default Loguru text format
         - Better for local development
+    
+    Log level controlled by DJANGO_LOG_LEVEL env var (default: INFO)
     """
     use_json_logging = os.getenv("USE_JSON_LOGGING", "false").lower() in ("true", "1", "t")
+    log_level = os.getenv("DJANGO_LOG_LEVEL", "INFO")  # Respect DJANGO_LOG_LEVEL
     
     # Remove default handler
     logger.remove()
@@ -107,7 +110,7 @@ def configure_loguru():
         logger.add(
             sys.stdout,
             serialize=True,  # Built-in JSON serialization
-            level="DEBUG",
+            level=log_level,  # Use env var instead of hardcoded DEBUG
             colorize=False,
             backtrace=True,
             diagnose=False,  # Don't include variable values in production
@@ -117,14 +120,14 @@ def configure_loguru():
         logger.add(
             sys.stderr,
             format=text_formatter,
-            level="DEBUG",
+            level=log_level,  # Use env var instead of hardcoded DEBUG
             colorize=True,
             backtrace=True,
             diagnose=True,
         )
     
     # Log the configuration (this will use the newly configured format)
-    logger.info(f"Loguru configured with {'JSON' if use_json_logging else 'TEXT'} format")
+    logger.info(f"Loguru configured with {'JSON' if use_json_logging else 'TEXT'} format at {log_level} level")
 
 
 # Optional: Context manager for adding structured context to Loguru logs

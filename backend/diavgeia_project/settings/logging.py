@@ -13,13 +13,28 @@ from .base import BASE_DIR, DEBUG
 # Control logging format via environment variable:
 # USE_JSON_LOGGING=true  -> JSON structured logging (for Loki/Grafana)
 # USE_JSON_LOGGING=false -> Regular text logging (default)
+# 
+# Control log levels:
+# DJANGO_LOG_LEVEL     -> Overall log level (default: INFO)
+# CELERY_LOG_LEVEL     -> Celery-specific log level (default: INFO)
+# DB_LOG_LEVEL         -> Django DB query logs (default: WARNING, set to DEBUG to see SQL)
 USE_JSON_LOGGING = os.getenv('USE_JSON_LOGGING', 'false').lower() in ('true', '1', 't')
-JSON_LOGGING_LEVEL = os.getenv('JSON_LOGGING_LEVEL', 'DEBUG' if DEBUG else 'INFO')
+DJANGO_LOG_LEVEL = os.getenv('DJANGO_LOG_LEVEL', 'INFO')  # Changed default from DEBUG to INFO
+CELERY_LOG_LEVEL = os.getenv('CELERY_LOG_LEVEL', 'INFO')
+DB_LOG_LEVEL = os.getenv('DB_LOG_LEVEL', 'WARNING')  # Only show DB queries on WARNING+ unless explicitly enabled
+
+# Backward compatibility: Keep JSON_LOGGING_LEVEL for now
+JSON_LOGGING_LEVEL = os.getenv('JSON_LOGGING_LEVEL', DJANGO_LOG_LEVEL)
 
 if USE_JSON_LOGGING:
     # JSON structured logging for Grafana/Loki
     from diavgeia_project.logging.logging_config_json import get_json_logging_config
-    LOGGING = get_json_logging_config(DEBUG, JSON_LOGGING_LEVEL)
+    LOGGING = get_json_logging_config(
+        debug_mode=DEBUG,
+        logging_level=DJANGO_LOG_LEVEL,
+        celery_level=CELERY_LOG_LEVEL,
+        db_level=DB_LOG_LEVEL
+    )
 else:
     # Traditional text logging (default)
     LOGGING = {

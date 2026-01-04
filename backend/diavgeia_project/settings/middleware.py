@@ -6,6 +6,7 @@ Contains MIDDLEWARE settings.
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",  # Must be placed as high as possible to handle CORS on all responses
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -15,6 +16,5 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "api.middleware.rate_limit.RateLimitMiddleware",
     "api.middleware.security.SecurityMonitoringMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
     "csp.middleware.CSPMiddleware"
 ]

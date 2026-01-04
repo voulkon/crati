@@ -137,7 +137,10 @@ def fetch_daily_decisions_to_pickle(self, target_date_str: str,
             # Dispatch storage task without countdown parameter
             # ⚠️ DO NOT use apply_async(countdown=X) - causes silent task loss in Celery 5.6.1
             # Instead, delay happens INSIDE the task via time.sleep() - see delay_seconds kwarg
-            delay_seconds = random.randint(2, 8)
+            # TODO: NUMBER_OF_WORKERS instead of 4
+            delay_seconds = random.uniform(0.1, 2)
+            # TODO: NUMBER_OF_WORKERS instead of 4
+
             storage_task = store_decisions_from_pickle.apply_async(
                 args=[chunk_pickle],
                 kwargs={

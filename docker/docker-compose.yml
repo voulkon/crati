@@ -177,6 +177,7 @@ services:
         LIGHT_WORKER: ${LIGHT_WORKER:-false}
     container_name: diavgeia_worker
     command: ["/code/worker_entrypoint.sh"]
+    restart: unless-stopped
     networks:
       - diavgeia-net
     volumes:

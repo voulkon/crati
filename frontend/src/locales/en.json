@@ -64,6 +64,7 @@
     "searchPlaceholder": "Search decisions...",
     "sortBy": "Sort by",
     "recent": "Recent",
+    "oldest": "Oldest",
     "amountDesc": "Amount (High to Low)",
     "amountAsc": "Amount (Low to High)",
     "loadMore": "Load More",
@@ -187,7 +188,8 @@
     "incorporated": "Incorporated",
     "noRelatedEntities": "No related entities found for this decision",
     "entityRelationships" : "Εntity Relationships",
-    "showText" : "Show Decision's Text"
+    "showText" : "Show Decision's Text",
+    "hideText" : "Hide Decision's Text"
   },
   "entityDetail": {
     "loadingEntity": "Loading {entityType} details...",

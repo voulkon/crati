@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import apiClient from '../api/client';
 import { useTranslation } from '../contexts/TranslationContext';
 import DecisionCard from '../components/DecisionCard';
+import SortControl from '../components/SortControl';
 import './AFMEntityDetailPage.css';
 
 const AFMEntityDetailPage = () => {
@@ -18,7 +19,7 @@ const AFMEntityDetailPage = () => {
   const [error, setError] = useState(null);
   
   // Get initial values from URL params
-  const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'recent');
+  const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'amount_desc');
   const [pagination, setPagination] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
   
@@ -28,26 +29,8 @@ const AFMEntityDetailPage = () => {
     searchParams.get('roles') ? searchParams.get('roles').split(',') : []
   );
   const [showRoleFilter, setShowRoleFilter] = useState(false);
-  
-  useEffect(() => {
-    fetchEntityData();
-  }, [afm, sortBy, selectedRoles]);
 
-  // Sync state with URL parameters when they change
-  useEffect(() => {
-    const urlSort = searchParams.get('sort') || 'recent';
-    const urlRoles = searchParams.get('roles') ? searchParams.get('roles').split(',') : [];
-    
-    if (urlSort !== sortBy) {
-      setSortBy(urlSort);
-    }
-    
-    if (JSON.stringify(urlRoles) !== JSON.stringify(selectedRoles)) {
-      setSelectedRoles(urlRoles);
-    }
-  }, [searchParams]);
-
-  const fetchEntityData = async (loadMore = false) => {
+  const fetchEntityData = useCallback(async (loadMore = false) => {
     try {
       if (!loadMore) {
         setLoading(true);
@@ -85,7 +68,25 @@ const AFMEntityDetailPage = () => {
       setLoading(false);
       setLoadingMore(false);
     }
-  };
+  }, [afm, sortBy, selectedRoles, pagination]);
+
+  useEffect(() => {
+    fetchEntityData();
+  }, [fetchEntityData]);
+
+  // Sync state with URL parameters when they change
+  useEffect(() => {
+    const urlSort = searchParams.get('sort');
+    const urlRoles = searchParams.get('roles') ? searchParams.get('roles').split(',') : [];
+    
+    if (urlSort && urlSort !== sortBy) {
+      setSortBy(urlSort);
+    }
+    
+    if (JSON.stringify(urlRoles) !== JSON.stringify(selectedRoles)) {
+      setSelectedRoles(urlRoles);
+    }
+  }, [searchParams, sortBy, selectedRoles]);
 
   const handleLoadMore = () => {
     if (pagination?.has_next && !loadingMore) {
@@ -317,20 +318,7 @@ const AFMEntityDetailPage = () => {
           </h3>
           
           <div className="controls-container">
-            {/* Sort Controls */}
-            <div className="sort-container">
-              <label className="sort-label">{t('common.sortBy')}:</label>
-              <select 
-                value={sortBy} 
-                onChange={(e) => handleSortChange(e.target.value)}
-                className="sort-select"
-              >
-                <option value="recent">{t('common.sortOptions.recent')}</option>
-                <option value="oldest">{t('common.sortOptions.oldest')}</option>
-                <option value="amount_desc">{t('common.sortOptions.amountDesc')}</option>
-                <option value="amount_asc">{t('common.sortOptions.amountAsc')}</option>
-              </select>
-            </div>
+            <SortControl sortBy={sortBy} onSortChange={handleSortChange} />
           </div>
         </div>
 

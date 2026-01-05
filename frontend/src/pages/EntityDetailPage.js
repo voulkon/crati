@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation, useSearchParams } from 'react-rout
 import apiClient from '../api/client';
 import DualRangeSlider from '../components/DualRangeSlider';
 import DecisionCard from '../components/DecisionCard';
+import SortControl from '../components/SortControl';
 import { createDynamicDateRangeUtils, formatAmount } from '../utils/dateUtils';
 import { useTranslation } from '../contexts/TranslationContext';
 import './EntityDetailPage.css';
@@ -23,7 +24,7 @@ const EntityDetailPage = () => {
   const [decisions, setDecisions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'recent');
+  const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'amount_desc');
   const [pagination, setPagination] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
@@ -56,7 +57,6 @@ const EntityDetailPage = () => {
   const [organizationFilters, setOrganizationFilters] = useState(
     searchParams.get('orgs') ? searchParams.get('orgs').split(',') : []
   );
-  const [availableOrganizations, setAvailableOrganizations] = useState([]);
   const [temporalSummary, setTemporalSummary] = useState(null);
 
   // Parse temporal parameters into date range
@@ -118,7 +118,7 @@ const EntityDetailPage = () => {
 
   // Sync state with URL parameters when they change
   useEffect(() => {
-    const urlSort = searchParams.get('sort') || 'recent';
+    const urlSort = searchParams.get('sort');
     const urlTypes = searchParams.get('types') ? searchParams.get('types').split(',') : [];
     const urlOrgs = searchParams.get('orgs') ? searchParams.get('orgs').split(',') : [];
     const urlMinAmount = searchParams.get('minAmount') || '';
@@ -126,14 +126,14 @@ const EntityDetailPage = () => {
     const urlSearch = searchParams.get('search') || '';
     
     // Update state if URL values differ
-    if (urlSort !== sortBy) setSortBy(urlSort);
+    if (urlSort && urlSort !== sortBy) setSortBy(urlSort);
     if (JSON.stringify(urlTypes) !== JSON.stringify(selectedDecisionTypes)) setSelectedDecisionTypes(urlTypes);
     if (JSON.stringify(urlOrgs) !== JSON.stringify(organizationFilters)) setOrganizationFilters(urlOrgs);
     if (urlMinAmount !== amountFilters.minAmount || urlMaxAmount !== amountFilters.maxAmount) {
       setAmountFilters({ minAmount: urlMinAmount, maxAmount: urlMaxAmount });
     }
     if (urlSearch !== searchQuery) setSearchQuery(urlSearch);
-  }, [searchParams]);
+  }, [searchParams, sortBy, selectedDecisionTypes, organizationFilters, amountFilters, searchQuery]);
 
   const handleViewDocumentContent = async (decisionId) => {
     try {
@@ -506,15 +506,6 @@ const EntityDetailPage = () => {
     updateUrlParams({ search: newSearch });
   };
 
-  const handleOrganizationFilterChange = (orgUid, isChecked) => {
-    const newOrgs = isChecked
-      ? [...organizationFilters, orgUid]
-      : organizationFilters.filter(uid => uid !== orgUid);
-    
-    setOrganizationFilters(newOrgs);
-    updateUrlParams({ orgs: newOrgs });
-  };
-
   const clearAllFilters = () => {
     setSelectedDecisionTypes([]);
     setAmountFilters({ minAmount: '', maxAmount: '' });
@@ -817,17 +808,7 @@ const EntityDetailPage = () => {
               </div>
             </div>
             
-            <div className="sort-container">
-              <label className="sort-label">{t('entityDetail.sortBy')}:</label>
-              <select 
-                value={sortBy}
-                onChange={(e) => handleSortChange(e.target.value)}
-                className="sort-select"
-              >
-                <option value="recent">{t('exploration.recent')}</option>
-                <option value="amount_desc">{t('exploration.amountDesc')}</option>
-              </select>
-            </div>
+            <SortControl sortBy={sortBy} onSortChange={handleSortChange} options="simple" />
           </div>
         </div>
 

@@ -64,6 +64,7 @@
     "searchPlaceholder": "Αναζήτηση αποφάσεων...",
     "sortBy": "Ταξινόμηση κατά",
     "recent": "Πρόσφατες",
+    "oldest": "Παλαιότερες",
     "amountDesc": "Ποσό (Από Υψηλό σε Χαμηλό)",
     "amountAsc": "Ποσό (Από Χαμηλό σε Υψηλό)",
     "loadMore": "Φόρτωση Περισσότερων",
@@ -187,7 +188,8 @@
     "incorporated": "Ιδρύθηκε",
     "noRelatedEntities": "Δεν βρέθηκαν σχετικές οντότητες για αυτή την απόφαση",
     "entityRelationships" : "Σχετικές Οντότητες",
-    "showText" : "Κείμενο Απόφασης"
+    "showText" : "Κείμενο Απόφασης",
+    "hideText" : "Απόκρυψη Κειμένου Απόφασης"
   },
   "entityDetail": {
     "loadingEntity": "Φόρτωση λεπτομερειών {entityType}...",

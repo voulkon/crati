@@ -417,11 +417,8 @@ class DecisionHealthGuaranteeService:
         try:
             health_check = self.orchestrator.get_or_create_health_check(decision)
             
-            # Step 1: Extract entities (creates DecisionEntityRelationship)
-            self.orchestrator._step_extract_entities(decision, health_check)
-            
-            # Step 2: Extract amounts (links to relationships via associated_relationship FK)
-            self.orchestrator._step_extract_amounts(decision, health_check, force=False)
+            # Use the unified extraction method
+            self.orchestrator._step_extract_entities_and_amounts(decision, health_check)
             
             # Count what we found
             entities_found = decision.entity_relationships.count()

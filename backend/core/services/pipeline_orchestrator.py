@@ -12,8 +12,9 @@ from core.models.decisions import Decision
 from core.models.decision_health import DecisionHealthCheck, HealthStatus
 from core.models.document_analysis import DocumentExtraction, ProcessingStatus
 from core.models.import_jobs import ImportJob
-from core.services.afm_extractor import AFMExtractionService
-from core.services.entity_extraction_service import EntityExtractionService
+# from core.services.afm_extractor import AFMExtractionService
+# from core.services.entity_extraction_service import EntityExtractionService
+from core.services.entity_amount_extraction_service import EntityAmountExtractionService
 from core.services.document_processor import DocumentAnalysisService
 from core.services.opensearch_service import OpenSearchService
 from core.tasks.tasks_entities import fetch_company_data_for_entities
@@ -28,8 +29,9 @@ class DecisionPipelineOrchestrator:
     """
 
     def __init__(self):
-        self.afm_service = AFMExtractionService()
-        self.entity_service = EntityExtractionService()
+        # self.afm_service = AFMExtractionService()
+        # self.entity_service = EntityExtractionService()
+        self.extraction_service = EntityAmountExtractionService()
         self.doc_service = DocumentAnalysisService()
         self.search_service = OpenSearchService()
         self.decision_importer = DecisionImporter()
@@ -136,12 +138,16 @@ class DecisionPipelineOrchestrator:
             self._step_resolve_organizations(decision, health_check)
 
             # 2. Entity Extraction (must come before amounts so relationships exist for linking)
-            logger.info(f"\n{self._separator()}\n📝 STAGE 2/8: ENTITY EXTRACTION\n{self._separator()}")
-            self._step_extract_entities(decision, health_check)
+            # logger.info(f"\n{self._separator()}\n📝 STAGE 2/8: ENTITY EXTRACTION\n{self._separator()}")
+            # self._step_extract_entities(decision, health_check)
 
-            # 3. Amount Extraction (links to relationships created in step 2)
-            logger.info(f"\n{self._separator()}\n💰 STAGE 3/8: AMOUNT EXTRACTION\n{self._separator()}")
-            self._step_extract_amounts(decision, health_check)
+            # # 3. Amount Extraction (links to relationships created in step 2)
+            # logger.info(f"\n{self._separator()}\n💰 STAGE 3/8: AMOUNT EXTRACTION\n{self._separator()}")
+            # self._step_extract_amounts(decision, health_check)
+
+            # 2 & 3. Entity and Amount Extraction (combined)
+            logger.info(f"\n{self._separator()}\n📝💰 STAGE 2/8: ENTITY AND AMOUNT EXTRACTION\n{self._separator()}")
+            self._step_extract_entities_and_amounts(decision, health_check)
 
             # 4. Company Data Enrichment
             logger.info(f"\n{self._separator()}\n🏢 STAGE 4/8: COMPANY ENRICHMENT\n{self._separator()}")
@@ -388,58 +394,105 @@ class DecisionPipelineOrchestrator:
             logger.error(f"Failed organization resolution for {decision.ada}: {e}")
             self.update_health_status(health_check, 'organization', HealthStatus.ERROR, str(e))
 
-    def _step_extract_amounts(self, decision: Decision, health_check: DecisionHealthCheck, force: bool = False):
-        """Extract and save DecisionAmountField records from extra field values."""
-        try:
-            from core.models.entities import DecisionAmountField
-            
-            logger.info(f"Step 2: Extracting amounts for {decision.ada}")
-            
-            # Check if amounts already extracted
-            existing_count = DecisionAmountField.objects.filter(decision=decision).count()
-            
-            if existing_count > 0 and not force:
-                logger.debug(f"Decision {decision.ada} already has {existing_count} amount fields, skipping extraction")
-            else:
-                if force and existing_count > 0:
-                    logger.info(f"Force re-extraction: deleting {existing_count} existing amount fields")
-                    DecisionAmountField.objects.filter(decision=decision).delete()
-                
-                # Extract and save amounts
-                self.decision_importer.extract_and_save_amounts(decision)
-                
-                new_count = DecisionAmountField.objects.filter(decision=decision).count()
-                logger.info(f"Extracted {new_count} amount fields for {decision.ada}")
-            
-            # Always mark as healthy - having no amounts is valid
-            self.update_health_status(health_check, 'entities', HealthStatus.HEALTHY)
-            
-        except Exception as e:
-            logger.error(f"Failed amount extraction: {e}", exc_info=True)
-            self.update_health_status(health_check, 'entities', HealthStatus.ERROR, str(e))
-
     def _step_extract_entities(self, decision: Decision, health_check: DecisionHealthCheck):
+        """
+        DEPRECATED: Use _step_extract_entities_and_amounts instead.
+        
+        This method is kept for backward compatibility with retry_failed_step.
+        """
+        import warnings
+        warnings.warn(
+            "_step_extract_entities is deprecated. Use _step_extract_entities_and_amounts instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        # Delegate to the new unified method
+        return self._step_extract_entities_and_amounts(decision, health_check)
+
+    def _step_extract_amounts(self, decision: Decision, health_check: DecisionHealthCheck, force: bool = False):
+        """
+        DEPRECATED: Use _step_extract_entities_and_amounts instead.
+        
+        This method is kept for backward compatibility with retry_failed_step.
+        The 'force' parameter is ignored since the new method handles this internally.
+        """
+        import warnings
+        warnings.warn(
+            "_step_extract_amounts is deprecated. Use _step_extract_entities_and_amounts instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        # Delegate to the new unified method
+        # Note: force parameter is ignored - the new method has its own logic
+        return self._step_extract_entities_and_amounts(decision, health_check)
+
+    def _step_extract_entities_and_amounts(
+        self, 
+        decision: Decision, 
+        health_check: DecisionHealthCheck
+    ) -> Dict[str, Any]:
+        """
+        STEP 2: Extract AFM entities AND amounts from decision data.
+        
+        This is a SINGLE step that handles both, since amounts need
+        to be linked to entity relationships.
+        
+        Args:
+            decision: Decision to extract from
+            health_check: Health check to update
+            
+        Returns:
+            Dict with extraction results
+        """
+        step_result = {
+            'step': 'entity_amount_extraction',
+            'success': False,
+            'entities_created': 0,
+            'amounts_created': 0,
+            'error': None
+        }
+        
         try:
-            from core.models.entities import DecisionEntityRelationship
+            logger.info(f"Extracting entities and amounts for {decision.ada}")
             
-            logger.info(f"Step 1: Extracting entities for {decision.ada}")
+            # Extract using the unified service (with idempotent mode)
+            result = self.extraction_service.extract_from_decision(
+                decision,
+                save_to_db=True,
+                skip_if_existing=True  # Skip if already has relationships
+            )
             
-            # Check if entities already extracted
-            existing_count = DecisionEntityRelationship.objects.filter(decision=decision).count()
+            step_result['success'] = True
+            step_result['entities_created'] = result.entities_created
+            step_result['amounts_created'] = result.amounts_created
             
-            if existing_count > 0:
-                logger.debug(f"Decision {decision.ada} already has {existing_count} entity relationships, skipping extraction")
+            if result.errors:
+                step_result['warnings'] = result.errors
+                logger.warning(
+                    f"Extraction completed with {len(result.errors)} warnings for {decision.ada}"
+                )
+            
+            logger.info(
+                f"Extracted {result.entities_created} entities and "
+                f"{result.amounts_created} amounts from {decision.ada}"
+            )
+            
+            # Update health status
+            if result.entities_created > 0 or result.amounts_created > 0:
+                self.update_health_status(health_check, 'entities', HealthStatus.HEALTHY)
+            elif result.had_extractable_content:
+                # Had content but found nothing - this is valid (some decisions legitimately have no entities/amounts)
+                self.update_health_status(health_check, 'entities', HealthStatus.HEALTHY)
             else:
-                # Extract entities
-                self.afm_service.extract_afms_from_decision(decision, save_to_db=True)
-                
-                new_count = DecisionEntityRelationship.objects.filter(decision=decision).count()
-                logger.info(f"Extracted {new_count} entity relationships for {decision.ada}")
+                # No content to extract from
+                self.update_health_status(health_check, 'entities', HealthStatus.HEALTHY)
             
-            self.update_health_status(health_check, 'entities', HealthStatus.HEALTHY)
         except Exception as e:
-            logger.error(f"Failed entity extraction: {e}")
+            step_result['error'] = str(e)
+            logger.error(f"Entity/amount extraction failed for {decision.ada}: {e}", exc_info=True)
             self.update_health_status(health_check, 'entities', HealthStatus.ERROR, str(e))
+        
+        return step_result
 
     def _step_enrich_companies(self, decision: Decision, health_check: DecisionHealthCheck):
         try:
@@ -852,6 +905,7 @@ class DecisionPipelineOrchestrator:
             'amounts': self._step_extract_amounts,
             'entities': self._step_extract_entities,
             'companies': self._step_enrich_companies,
+            'entity_amount_extraction': self._step_extract_entities_and_amounts,
             'document': self._step_process_document,
             'opensearch': self._step_index_opensearch,
             'coverage': self._step_verify_coverage,

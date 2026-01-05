@@ -18,6 +18,7 @@ class EntityRole(models.TextChoices):
     GRANTEE = "grantee", "Grantee"
     DONATION_GIVER = "donationGiver", "Donation Giver"
     DONATION_RECEIVER = "donationReceiver", "Donation Receiver"
+    CONTRACTOR = 'contractor', 'Contractor'
     OTHER = "other", "Other"
 
 

@@ -119,7 +119,8 @@
     "colorPalette": "Παλέτα Χρωμάτων",
     "goBack": "Επιστροφή",
     "noAmount" : "Χωρίς Ποσό",
-    "days" : "ημέρες"
+    "days" : "ημέρες",
+    "viewEntityDecisions": "Προβολή Αποφάσεων Οντότητας"
   },
   "errors": {
     "failedToLoad": "Αποτυχία φόρτωσης δεδομένων",

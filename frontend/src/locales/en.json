@@ -119,7 +119,8 @@
     "colorPalette": "Color Palette",
     "goBack": "Go Back",
     "noAmount" : "No Amount",
-    "days" : "days"
+    "days" : "days",
+    "viewEntityDecisions": "View Entity Decisions"
   },
   "errors": {
     "failedToLoad": "Failed to load data",

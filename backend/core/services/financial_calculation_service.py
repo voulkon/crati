@@ -23,13 +23,17 @@ from core.utils.performance_monitoring import monitor_query_performance
 
 class FinancialCalculationService:
     """
-    Central service for all financial calculations using the new DecisionEntityRelationship approach.
+    Central service for all financial calculations using DecisionAmountField and DecisionEntityRelationship.
 
     This service provides optimized methods for:
-    - Entity-based financial calculations
-    - Organization-based financial calculations
-    - Decision-based financial calculations
+    - Entity-based financial calculations (requires entity relationships)
+    - Organization-based financial calculations (via entity relationships)
+    - Decision-based financial calculations (includes amounts with or without entities)
     - Aggregation and summarization
+    
+    Note: Entity and organization calculations naturally filter for amounts linked to entities,
+    while decision-level calculations can include unlinked amounts (e.g., decisions with amounts
+    but no AFM counterparts).
     """
 
     # Standard roles that indicate money received/paid
@@ -267,18 +271,95 @@ class FinancialCalculationService:
 
         return list(breakdown)
 
+    @monitor_query_performance(operation="top_counterparts_for_org")
+    def get_top_counterparts_for_organization(
+        self,
+        organization: Organization,
+        start_date: datetime,
+        end_date: datetime,
+        limit: int = 5,
+        offset: int = 0,
+        roles: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Get top entities by total amount for an organization in a date range.
+        Optimized for pagination with caching support.
+        
+        Args:
+            organization: Organization to analyze
+            start_date: Start of date range
+            end_date: End of date range
+            limit: Number of results to return
+            offset: Pagination offset
+            roles: Optional list of roles to filter by (defaults to MONEY_RECEIVED_ROLES)
+        
+        Returns:
+            Dict with 'results', 'total_count', and 'has_more' for pagination
+        """
+        if roles is None:
+            roles = self.MONEY_RECEIVED_ROLES
+        
+        # Query with pagination
+        results = list(
+            DecisionEntityRelationship.objects
+            .filter(
+                decision__organization=organization,
+                decision__issue_date__gte=start_date,
+                decision__issue_date__lte=end_date,
+                role__in=roles
+            )
+            .values('entity__afm', 'entity__name', 'entity__entity_type')
+            .annotate(
+                total_amount=Sum('linked_amounts__amount'),
+                decision_count=Count('decision', distinct=True)
+            )
+            .filter(total_amount__gt=0)  # Only entities with amounts
+            .order_by('-total_amount')
+            [offset:offset+limit]
+        )
+        
+        # Get total count for pagination UI
+        total_count = (
+            DecisionEntityRelationship.objects
+            .filter(
+                decision__organization=organization,
+                decision__issue_date__gte=start_date,
+                decision__issue_date__lte=end_date,
+                role__in=roles
+            )
+            .values('entity')
+            .distinct()
+            .count()
+        )
+        
+        return {
+            'results': results,
+            'total_count': total_count,
+            'has_more': offset + limit < total_count
+        }
+
     # =============================================================================
     # DECISION-BASED CALCULATIONS
     # =============================================================================
 
-    def get_decision_total_amount(self, decision: Decision) -> Decimal:
+    def get_decision_total_amount(self, decision: Decision, include_unlinked: bool = True) -> Decimal:
         """
-        Get total amount for a specific decision from all linked amounts.
+        Get total amount for a specific decision from all amounts.
+        
+        Args:
+            decision: The decision to calculate for
+            include_unlinked: If True (default), includes amounts not linked to entities.
+                            If False, only includes amounts linked to entity relationships.
+        
+        Returns:
+            Total amount as Decimal
         """
-        result = DecisionAmountField.objects.filter(
-            decision=decision, associated_relationship__isnull=False
-        ).aggregate(total=Sum("amount"))
-
+        qs = DecisionAmountField.objects.filter(decision=decision)
+        
+        if not include_unlinked:
+            qs = qs.filter(associated_relationship__isnull=False)
+        
+        result = qs.aggregate(total=Sum("amount"))
         return result["total"] or Decimal("0.00")
 
     def get_decision_entity_amounts(self, decision: Decision) -> List[Dict[str, Any]]:
@@ -314,6 +395,39 @@ class FinancialCalculationService:
                 )
 
         return sorted(entity_amounts, key=lambda x: x["total_amount"], reverse=True)
+
+    def get_decision_amount_breakdown(self, decision: Decision) -> Dict[str, Any]:
+        """
+        Get breakdown of amounts for a decision, distinguishing between
+        linked (with entities) and unlinked (without entities) amounts.
+        
+        This is useful for understanding decisions that have amounts but no counterparts/entities.
+        
+        Returns:
+            Dictionary with linked_total, unlinked_total, total, has_entities, etc.
+        """
+        all_amounts = DecisionAmountField.objects.filter(decision=decision)
+        
+        linked_total = all_amounts.filter(
+            associated_relationship__isnull=False
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+        
+        unlinked_total = all_amounts.filter(
+            associated_relationship__isnull=True
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+        
+        entity_count = DecisionEntityRelationship.objects.filter(decision=decision).count()
+        
+        return {
+            "decision_ada": decision.ada,
+            "linked_total": linked_total,
+            "unlinked_total": unlinked_total,
+            "total_amount": linked_total + unlinked_total,
+            "entity_count": entity_count,
+            "has_entities": entity_count > 0,
+            "has_unlinked_amounts": unlinked_total > 0,
+            "all_amounts_linked": unlinked_total == 0,
+        }
 
     # =============================================================================
     # UTILITY METHODS
@@ -374,11 +488,16 @@ class FinancialCalculationService:
 
     def validate_amount_consistency(self, decision: Decision) -> Dict[str, Any]:
         """
-        Validate that linked amounts are consistent with decision amount field.
+        Validate that amounts are consistent with decision amount field.
         Useful for data integrity checks.
+        
+        This now includes both linked and unlinked amounts for full accuracy.
         """
-        # Get total from linked amounts
-        linked_total = self.get_decision_total_amount(decision)
+        # Get total from all amounts (linked and unlinked)
+        total_from_amount_fields = self.get_decision_total_amount(decision, include_unlinked=True)
+        
+        # Get just linked amounts for comparison
+        linked_total = self.get_decision_total_amount(decision, include_unlinked=False)
 
         # Get decision's primary amount field
         decision_amount = decision.amount or Decimal("0.00")
@@ -388,8 +507,8 @@ class FinancialCalculationService:
             total=Sum("amount")
         )["total"] or Decimal("0.00")
 
-        # Calculate discrepancy
-        discrepancy = abs(linked_total - decision_amount) if decision_amount else None
+        # Calculate discrepancy (use total from amount fields, not just linked)
+        discrepancy = abs(total_from_amount_fields - decision_amount) if decision_amount else None
         discrepancy_percentage = (
             (discrepancy / decision_amount * 100)
             if decision_amount and discrepancy
@@ -398,7 +517,9 @@ class FinancialCalculationService:
 
         return {
             "decision_ada": decision.ada,
+            "total_from_amount_fields": total_from_amount_fields,
             "linked_amounts_total": linked_total,
+            "unlinked_amounts_total": total_from_amount_fields - linked_total,
             "decision_amount_field": decision_amount,
             "kae_total": kae_total,
             "discrepancy": discrepancy,

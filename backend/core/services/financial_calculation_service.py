@@ -338,6 +338,76 @@ class FinancialCalculationService:
             'has_more': offset + limit < total_count
         }
 
+    @monitor_query_performance(operation="top_relationship_pairs")
+    def get_top_relationship_pairs(
+        self,
+        start_date: datetime,
+        end_date: datetime,
+        limit: int = 10,
+        offset: int = 0,
+        roles: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Get top organization-entity pairs by total amount across all relationships.
+        Used for temporal exploration to find which Org×Entity combinations had
+        the highest transaction amounts in a date range.
+        
+        Args:
+            start_date: Start of date range
+            end_date: End of date range
+            limit: Number of results to return
+            offset: Pagination offset
+            roles: Optional list of roles to filter by (defaults to MONEY_RECEIVED_ROLES)
+        
+        Returns:
+            Dict with 'results', 'total_count', and 'has_more' for pagination
+        """
+        if roles is None:
+            roles = self.MONEY_RECEIVED_ROLES
+        
+        # Query: Group by both organization AND entity
+        results = list(
+            DecisionEntityRelationship.objects
+            .filter(
+                decision__issue_date__gte=start_date,
+                decision__issue_date__lte=end_date,
+                role__in=roles
+            )
+            .values(
+                'decision__organization__uid',
+                'decision__organization__label',
+                'entity__afm',
+                'entity__name',
+                'entity__entity_type'
+            )
+            .annotate(
+                total_amount=Sum('linked_amounts__amount'),
+                decision_count=Count('decision', distinct=True)
+            )
+            .filter(total_amount__gt=0)
+            .order_by('-total_amount')
+            [offset:offset+limit]
+        )
+        
+        # Get total count of unique org-entity pairs
+        total_count = (
+            DecisionEntityRelationship.objects
+            .filter(
+                decision__issue_date__gte=start_date,
+                decision__issue_date__lte=end_date,
+                role__in=roles
+            )
+            .values('decision__organization', 'entity')
+            .distinct()
+            .count()
+        )
+        
+        return {
+            'results': results,
+            'total_count': total_count,
+            'has_more': offset + limit < total_count
+        }
+
     # =============================================================================
     # DECISION-BASED CALCULATIONS
     # =============================================================================

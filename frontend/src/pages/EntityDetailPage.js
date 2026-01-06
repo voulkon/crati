@@ -5,6 +5,7 @@ import DualRangeSlider from '../components/DualRangeSlider';
 import DecisionCard from '../components/DecisionCard';
 import SortControl from '../components/SortControl';
 import TopCounterparts from '../components/TopCounterparts';
+import TopRelationshipPairs from '../components/TopRelationshipPairs';
 import useUrlFilters from '../hooks/useUrlFilters';
 import { createDynamicDateRangeUtils, formatAmount } from '../utils/dateUtils';
 import { useTranslation } from '../contexts/TranslationContext';
@@ -701,6 +702,17 @@ const EntityDetailPage = () => {
             end_date: timeRange.endDate
           }}
           limit={5}
+        />
+      )}
+
+      {/* Top Relationship Pairs - For temporal exploration, shows top Org×Entity combinations */}
+      {explorationMode === 'temporal' && timeRange && (
+        <TopRelationshipPairs
+          dateRange={{
+            start_date: timeRange.startDate,
+            end_date: timeRange.endDate
+          }}
+          limit={10}
         />
       )}
 

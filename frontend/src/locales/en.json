@@ -120,7 +120,8 @@
     "goBack": "Go Back",
     "noAmount" : "No Amount",
     "days" : "days",
-    "viewEntityDecisions": "View Entity Decisions"
+    "viewEntityDecisions": "View Entity Decisions",
+    "expand" : "Expand"
   },
   "errors": {
     "failedToLoad": "Failed to load data",
@@ -426,5 +427,9 @@
     "company": "Company", 
     "organization": "Organization",
     "unknown": "Unknown"
+  },
+  "relationships": {
+    "topPairs": "Top Organization × Entity Relationships",
+    "showingTopPairs": "Showing top {{count}} relationship pairs"
   }
 }

@@ -182,6 +182,48 @@
   border-color: var(--accent-color);
 }
 
+/* Relationship Pair Card Styles (for temporal exploration) */
+.relationship-pair-card {
+  min-height: 180px;
+}
+
+.pair-names {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.pair-org,
+.pair-entity {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: var(--secondary-bg);
+  border-radius: 6px;
+}
+
+.pair-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.pair-id {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: monospace;
+}
+
+.pair-connector {
+  text-align: center;
+  font-size: 1.2rem;
+  color: var(--accent-color);
+  padding: 4px 0;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .counterparts-grid {

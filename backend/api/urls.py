@@ -14,7 +14,11 @@ from .views.companies.details import company_detail, company_decisions, company_
 from .views.summary import amounts as summary_amounts_views
 from .views.organy import details as details_between_companies_and_orgs
 from .views.tracing_test_views import tracing_test_views
-from .views.organization_entity_relationships import organization_top_counterparts_api, entity_top_organizations_api
+from .views.organization_entity_relationships import (
+    organization_top_counterparts_api, 
+    entity_top_organizations_api, 
+    temporal_top_relationship_pairs_api
+    )
 from users.views import UserDataViewSet
 
 router = DefaultRouter()
@@ -79,6 +83,11 @@ urlpatterns = [
         entity_top_organizations_api, 
         name='entity_top_organizations'
         ),
+    path(
+        'explore/temporal/top-relationships/',
+        temporal_top_relationship_pairs_api,
+        name='temporal-top-relationships'
+    ),
     # Document content
     path('decision/<int:decision_id>/content/', search.get_document_content_api_dev, name='decision_content_dev'),
     

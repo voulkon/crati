@@ -339,3 +339,120 @@ def entity_top_organizations_api(request, afm):
             status=500,
         )
 
+
+@swagger_auto_schema(
+    method="get",
+    manual_parameters=[
+        openapi.Parameter(
+            "start_date",
+            openapi.IN_QUERY,
+            description="Start date (YYYY-MM-DD)",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+        openapi.Parameter(
+            "end_date",
+            openapi.IN_QUERY,
+            description="End date (YYYY-MM-DD)",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+        openapi.Parameter(
+            "limit",
+            openapi.IN_QUERY,
+            description="Number of results to return",
+            type=openapi.TYPE_INTEGER,
+        ),
+        openapi.Parameter(
+            "offset",
+            openapi.IN_QUERY,
+            description="Pagination offset",
+            type=openapi.TYPE_INTEGER,
+        ),
+    ],
+)
+@api_view(["GET"])
+@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+@monitor_query_performance(operation="temporal_top_relationships")
+def temporal_top_relationship_pairs_api(request):
+    """
+    Get top organization-entity relationship pairs by total amount across all orgs/entities.
+    
+    This endpoint is for TEMPORAL EXPLORATION - it shows which Org×Entity combinations
+    had the highest transaction amounts in a given date range, regardless of which
+    specific organization or entity you're looking at.
+    
+    Use case: On /explore/temporal/{dates}, show the top money flows between
+    any organization and any entity, allowing users to discover the biggest
+    financial relationships in that time period.
+    """
+    start_date_str = request.GET.get("start_date")
+    end_date_str = request.GET.get("end_date")
+    limit = int(request.GET.get("limit", 10))
+    offset = int(request.GET.get("offset", 0))
+    
+    # Validate required parameters
+    if not start_date_str or not end_date_str:
+        return Response(
+            {"error": "start_date and end_date are required"},
+            status=400
+        )
+    
+    try:
+        start_date = parse_date(start_date_str)
+        end_date = parse_date(end_date_str)
+    except ValueError as e:
+        return Response(
+            {"error": f"Invalid date format: {str(e)}"},
+            status=400
+        )
+    
+    # Validate date range
+    if start_date > end_date:
+        return Response(
+            {"error": "start_date must be before or equal to end_date"},
+            status=400
+        )
+    
+    # Warn on large date ranges
+    if (end_date - start_date).days > 365:
+        logger.warning(
+            f"Large date range requested for temporal exploration: "
+            f"{start_date} to {end_date} ({(end_date - start_date).days} days)"
+        )
+    
+    try:
+        # Get top relationship pairs using financial service
+        financial_service = FinancialCalculationService()
+        result = financial_service.get_top_relationship_pairs(
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+            offset=offset
+        )
+        
+        return Response({
+            "date_range": {
+                "start": start_date_str,
+                "end": end_date_str,
+            },
+            "results": result["results"],
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "total_count": result["total_count"],
+                "has_more": result["has_more"],
+            }
+        })
+    
+    except Exception as e:
+        import traceback
+        logger.error(f"Error in temporal_top_relationship_pairs_api: {e}")
+        return Response(
+            {
+                "error": f"Internal server error: {str(e)}",
+                "traceback": traceback.format_exc() if settings.DEBUG else None,
+            },
+            status=500,
+        )
+

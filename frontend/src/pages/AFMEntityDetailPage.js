@@ -1,34 +1,37 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
 import { useTranslation } from '../contexts/TranslationContext';
+import useUrlFilters from '../hooks/useUrlFilters';
 import DecisionCard from '../components/DecisionCard';
 import SortControl from '../components/SortControl';
+import TopCounterparts from '../components/TopCounterparts';
 import './AFMEntityDetailPage.css';
 
 const AFMEntityDetailPage = () => {
   const { afm } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const [searchParams, setSearchParams] = useSearchParams();
   
   const [entity, setEntity] = useState(null);
   const [decisions, setDecisions] = useState([]);
   const [statistics, setStatistics] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // Get initial values from URL params
-  const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'amount_desc');
   const [pagination, setPagination] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  
-  // Role-based filtering state - restore from URL
   const [availableRoles, setAvailableRoles] = useState([]);
-  const [selectedRoles, setSelectedRoles] = useState(
-    searchParams.get('roles') ? searchParams.get('roles').split(',') : []
-  );
   const [showRoleFilter, setShowRoleFilter] = useState(false);
+  
+  // Use URL filters hook - replaces all the manual URL state management
+  const {
+    sortBy,
+    selectedRoles,
+    activeFiltersCount,
+    setSortBy,
+    toggleRole,
+    clearAllFilters
+  } = useUrlFilters({ sortBy: 'amount_desc' });
 
   const fetchEntityData = useCallback(async (loadMore = false) => {
     try {
@@ -72,63 +75,12 @@ const AFMEntityDetailPage = () => {
 
   useEffect(() => {
     fetchEntityData();
-  }, [fetchEntityData]);
-
-  // Sync state with URL parameters when they change
-  useEffect(() => {
-    const urlSort = searchParams.get('sort');
-    const urlRoles = searchParams.get('roles') ? searchParams.get('roles').split(',') : [];
-    
-    if (urlSort && urlSort !== sortBy) {
-      setSortBy(urlSort);
-    }
-    
-    if (JSON.stringify(urlRoles) !== JSON.stringify(selectedRoles)) {
-      setSelectedRoles(urlRoles);
-    }
-  }, [searchParams, sortBy, selectedRoles]);
+  }, [afm, sortBy, selectedRoles]); // Removed fetchEntityData from deps to avoid infinite loop
 
   const handleLoadMore = () => {
     if (pagination?.has_next && !loadingMore) {
       fetchEntityData(true);
     }
-  };
-
-  // Update URL params when filters change
-  const updateUrlParams = (newSort = sortBy, newRoles = selectedRoles) => {
-    const params = new URLSearchParams();
-    
-    if (newSort !== 'recent') {
-      params.set('sort', newSort);
-    }
-    
-    if (newRoles.length > 0) {
-      params.set('roles', newRoles.join(','));
-    }
-    
-    setSearchParams(params);
-  };
-
-  const handleRoleFilterChange = (role) => {
-    const newSelectedRoles = selectedRoles.includes(role)
-      ? selectedRoles.filter(r => r !== role)
-      : [...selectedRoles, role];
-    
-    setSelectedRoles(newSelectedRoles);
-    updateUrlParams(sortBy, newSelectedRoles);
-    // Refetch with new filters
-    setTimeout(() => fetchEntityData(), 100);
-  };
-
-  const handleSortChange = (newSort) => {
-    setSortBy(newSort);
-    updateUrlParams(newSort, selectedRoles);
-  };
-
-  const clearAllFilters = () => {
-    setSelectedRoles([]);
-    updateUrlParams(sortBy, []);
-    setTimeout(() => fetchEntityData(), 100);
   };
 
   const handleViewDocumentContent = async (decisionId) => {
@@ -285,6 +237,19 @@ const AFMEntityDetailPage = () => {
         </div>
       )}
 
+      {/* Top Organizations - Shows top organizations this entity worked with */}
+      {entity && (
+        <TopCounterparts
+          type="entity"
+          id={entity.afm}
+          dateRange={{
+            start_date: entity.first_seen,
+            end_date: entity.last_seen
+          }}
+          limit={5}
+        />
+      )}
+
       {/* Role Breakdown */}
       {availableRoles && availableRoles.length > 0 && (
         <div className="roles-section">
@@ -318,7 +283,7 @@ const AFMEntityDetailPage = () => {
           </h3>
           
           <div className="controls-container">
-            <SortControl sortBy={sortBy} onSortChange={handleSortChange} />
+            <SortControl sortBy={sortBy} onSortChange={setSortBy} />
           </div>
         </div>
 
@@ -332,12 +297,12 @@ const AFMEntityDetailPage = () => {
               {t('afmEntityDetail.filterByRole')} {showRoleFilter ? '▲' : '▼'}
             </button>
             
-            {selectedRoles.length > 0 && (
+            {activeFiltersCount > 0 && (
               <button 
                 className="clear-filters-button"
                 onClick={clearAllFilters}
               >
-                {t('common.clearFilters')} ({selectedRoles.length})
+                {t('common.clearFilters')} ({activeFiltersCount})
               </button>
             )}
           </div>
@@ -350,7 +315,7 @@ const AFMEntityDetailPage = () => {
                     <input
                       type="checkbox"
                       checked={selectedRoles.includes(role.role)}
-                      onChange={() => handleRoleFilterChange(role.role)}
+                      onChange={() => toggleRole(role.role)}
                     />
                     <span className="checkbox-content">
                       <span className="role-label">
@@ -372,7 +337,7 @@ const AFMEntityDetailPage = () => {
             {selectedRoles.map(role => (
               <span key={role} className="filter-tag">
                 {t(`afmEntityDetail.roles.${role}`, role)}
-                <button onClick={() => handleRoleFilterChange(role)}>×</button>
+                <button onClick={() => toggleRole(role)}>×</button>
               </span>
             ))}
           </div>

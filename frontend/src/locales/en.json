@@ -394,5 +394,37 @@
     "signInTitle": "Sign In Required",
     "signIn": "Sign In",
     "cancel": "Cancel"
+  },
+  "counterparts": {
+    "topOrganizations": "Top Organizations",
+    "topEntities": "Top Entities",
+    "dateRange": "Date Range",
+    "showing": "Showing",
+    "of": "of",
+    "totalAmount": "Total Amount",
+    "decisions": "Decisions",
+    "seeAll": "See All"
+  },
+  "relationship": {
+    "title": "Relationship Details",
+    "pageTitle": "Entity × Organization Relationship",
+    "entity": "Entity",
+    "organization": "Organization",
+    "totalDecisions": "Total Decisions",
+    "totalAmount": "Total Amount",
+    "dateRange": "Date Range",
+    "decisions": "Related Decisions",
+    "loading": "Loading relationship data...",
+    "error": "Error Loading Relationship",
+    "noData": "No Relationship Data Found",
+    "noDataMessage": "No decisions found linking this entity and organization",
+    "noDecisions": "No decisions found for this relationship",
+    "noDecisionsWithFilters": "No decisions match your filters"
+  },
+  "entityTypes": {
+    "person": "Person",
+    "company": "Company", 
+    "organization": "Organization",
+    "unknown": "Unknown"
   }
 }

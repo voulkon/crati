@@ -3,6 +3,8 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ReactFlowProvider } from 'reactflow';
 import { useTranslation } from '../contexts/TranslationContext';
 import organizationApi from '../api/organizationApi';
+import apiClient from '../api/client';
+import TopCounterparts from '../components/TopCounterparts';
 import OrgChartViewer from '../components/org-chart';
 import './OrganizationsPage.css';
 
@@ -23,6 +25,9 @@ const OrganizationsPage = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
+  
+  // Date range state for top counterparts
+  const [orgDateRange, setOrgDateRange] = useState(null);
 
   const fetchOrgData = async (uid) => {
     if (!uid) return;
@@ -35,6 +40,20 @@ const OrganizationsPage = () => {
       
       // Extract org_chart_data from the response
       setOrgData(result.org_chart_data);
+      
+      // Fetch date range for this organization
+      try {
+        const dateRangeResponse = await apiClient.get(`/entity/organization/${uid}/date-range/`);
+        if (dateRangeResponse.data.has_data) {
+          setOrgDateRange({
+            start_date: dateRangeResponse.data.start_date,
+            end_date: dateRangeResponse.data.end_date
+          });
+        }
+      } catch (dateErr) {
+        console.error("Error fetching date range:", dateErr);
+        // Non-critical error, continue without date range
+      }
     } catch (err) {
       console.error("Error fetching organization data:", err);
       setError(t('organizations.failedToLoad', { uid, message: err.message }));
@@ -237,6 +256,16 @@ const OrganizationsPage = () => {
             )}
           </div>
         </div>
+      )}
+
+      {/* Top Counterparts - Shows top entities this organization works with */}
+      {orgUid && orgDateRange && (
+        <TopCounterparts
+          type="organization"
+          id={orgUid}
+          dateRange={orgDateRange}
+          limit={5}
+        />
       )}
 
       {/* Main Content Area */}

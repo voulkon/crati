@@ -456,3 +456,129 @@ curl -X 'GET' \
     "has_more": true
   }
 }
+
+
+------------------------------------------------------
+
+curl -X 'GET' \
+  'http://localhost/api/explore/decisions-optimized/?organization_uid=99201057&entity_afm=094079101&start_date=2025-12-05&end_date=2025-12-31&page_size=3' \
+  -H 'accept: application/json' \
+  -H 'X-CSRFTOKEN: MTwI7kxfhtcHYmXgTHeG11lNkcubJCdys5S6fN4pz2jY286bbiHmEU3f7OM5T9hx'
+
+{
+  "results": [
+    {
+      "id": 29855,
+      "ada": "97Λ246Ψ84Ω-ΧΧΑ",
+      "subject": "ΕΝΤΑΛΜΑ ΠΛΗΡΩΜΗΣ",
+      "issue_date": "2025-12-29T22:00:00+00:00",
+      "amount": null,
+      "decision_type": {
+        "uid": "Β.2.2",
+        "label": "ΟΡΙΣΤΙΚΟΠΟΙΗΣΗ ΠΛΗΡΩΜΗΣ"
+      },
+      "status": "PUBLISHED",
+      "document_url": "https://diavgeia.gov.gr/doc/97Λ246Ψ84Ω-ΧΧΑ",
+      "url": "https://diavgeia.gov.gr/luminapi/api/decisions/97Λ246Ψ84Ω-ΧΧΑ",
+      "organization": {
+        "uid": "99201057",
+        "label": "ΕΤΑΙΡΕΙΑ ΠΑΓΙΩΝ ΕΥΔΑΠ"
+      },
+      "signers": [
+        {
+          "uid": "100083787",
+          "first_name": "ΧΑΡΑΛΑΜΠΟΣ",
+          "last_name": "ΚΟΚΚΙΝΟΣ"
+        },
+        {
+          "uid": "100028744",
+          "first_name": "ΣΤΑΥΡΟΥΛΑ",
+          "last_name": "ΓΙΑΝΝΑΡΑ"
+        }
+      ],
+      "kae_amounts": [],
+      "kae_total": null,
+      "has_amount_discrepancy": false,
+      "discrepancy_percentage": 0,
+      "has_document_content": true,
+      "entity_amount": 5587643.46,
+      "main_recipient": {
+        "afm": "094079101",
+        "name": "ΕΤΑΙΡΙΑ ΥΔΡΕΥΣΕΩΣ ΚΑΙ ΑΠΟΧΕΤΕΥΣΕΩΣ ΠΡΩΤΕΥΟΥΣΗΣ ΑΝΩΝΥΜΗ ΕΤΑΙΡΕΙΑ",
+        "amount": 5587643.46,
+        "role": "sponsorAFMName"
+      },
+      "entity_count": 1
+    },
+    {
+      "id": 7785,
+      "ada": "ΨΟΟΙ46Ψ84Ω-2ΤΝ",
+      "subject": "ΕΝΤΑΛΜΑ ΠΛΗΡΩΜΗΣ",
+      "issue_date": "2025-12-14T22:00:00+00:00",
+      "amount": null,
+      "decision_type": {
+        "uid": "Β.2.2",
+        "label": "ΟΡΙΣΤΙΚΟΠΟΙΗΣΗ ΠΛΗΡΩΜΗΣ"
+      },
+      "status": "PUBLISHED",
+      "document_url": "https://diavgeia.gov.gr/doc/ΨΟΟΙ46Ψ84Ω-2ΤΝ",
+      "url": "https://diavgeia.gov.gr/luminapi/api/decisions/ΨΟΟΙ46Ψ84Ω-2ΤΝ",
+      "organization": {
+        "uid": "99201057",
+        "label": "ΕΤΑΙΡΕΙΑ ΠΑΓΙΩΝ ΕΥΔΑΠ"
+      },
+      "signers": [
+        {
+          "uid": "100083787",
+          "first_name": "ΧΑΡΑΛΑΜΠΟΣ",
+          "last_name": "ΚΟΚΚΙΝΟΣ"
+        },
+        {
+          "uid": "100028744",
+          "first_name": "ΣΤΑΥΡΟΥΛΑ",
+          "last_name": "ΓΙΑΝΝΑΡΑ"
+        }
+      ],
+      "kae_amounts": [],
+      "kae_total": null,
+      "has_amount_discrepancy": false,
+      "discrepancy_percentage": 0,
+      "has_document_content": true,
+      "entity_amount": 48.18,
+      "main_recipient": {
+        "afm": "094079101",
+        "name": "ΕΤΑΙΡΙΑ ΥΔΡΕΥΣΕΩΣ ΚΑΙ ΑΠΟΧΕΤΕΥΣΕΩΣ ΠΡΩΤΕΥΟΥΣΗΣ ΑΝΩΝΥΜΗ ΕΤΑΙΡΕΙΑ",
+        "amount": 48.18,
+        "role": "sponsorAFMName"
+      },
+      "entity_count": 1
+    }
+  ],
+  "pagination": {
+    "current_page": 1,
+    "total_pages": 1,
+    "total_count": 2,
+    "has_next": false,
+    "has_previous": false,
+    "page_size": 3
+  },
+  "filters": {
+    "search_query": "",
+    "status": "",
+    "start_date": "2025-12-05",
+    "end_date": "2025-12-31",
+    "sort_by": "entity_amount_desc",
+    "organization_uid": "99201057",
+    "entity_afm": "094079101",
+    "decision_types": "",
+    "organization_ids": "",
+    "min_amount": null,
+    "max_amount": null
+  },
+  "optimization_info": {
+    "entity_data_included": true,
+    "eliminates_n_plus_1": true,
+    "default_sort": "entity_amount_desc"
+  }
+}
+

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import apiClient from '../api/client';
 import DualRangeSlider from '../components/DualRangeSlider';
 import DecisionCard from '../components/DecisionCard';
 import SortControl from '../components/SortControl';
+import TopCounterparts from '../components/TopCounterparts';
+import useUrlFilters from '../hooks/useUrlFilters';
 import { createDynamicDateRangeUtils, formatAmount } from '../utils/dateUtils';
 import { useTranslation } from '../contexts/TranslationContext';
 import './EntityDetailPage.css';
@@ -13,22 +15,37 @@ const EntityDetailPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { t } = useTranslation();
-  const [searchParams, setSearchParams] = useSearchParams();
   
   // Determine exploration mode
   const explorationMode = location.pathname.startsWith('/explore') ? 'temporal' : 'entity';
   
-  // Enhanced state to handle both modes - restore from URL params
+  // Use URL filters hook for filter state management
+  const {
+    sortBy,
+    searchQuery,
+    selectedTypes: selectedDecisionTypes,
+    selectedOrgs: organizationFilters,
+    amountFilters,
+    activeFiltersCount,
+    setSortBy,
+    setSearchQuery,
+    toggleType,
+    toggleOrg,
+    setAmountFilters,
+    clearAllFilters
+  } = useUrlFilters({ sortBy: 'amount_desc' });
+  
+  // Debounced search query
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchQuery);
+  
+  // Enhanced state to handle both modes
   const [entityData, setEntityData] = useState(null);
   const [statistics, setStatistics] = useState(null);
   const [decisions, setDecisions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'amount_desc');
   const [pagination, setPagination] = useState(null);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(searchParams.get('search') || '');
   
   // Enhanced date range state
   const [entityDateRange, setEntityDateRange] = useState(null);
@@ -37,26 +54,12 @@ const EntityDetailPage = () => {
   const [timeRange, setTimeRange] = useState(null);
   const [monthRange, setMonthRange] = useState(null);
   
-  // Decision type filtering state - restore from URL
+  // Decision type filtering state
   const [availableDecisionTypes, setAvailableDecisionTypes] = useState([]);
-  const [selectedDecisionTypes, setSelectedDecisionTypes] = useState(
-    searchParams.get('types') ? searchParams.get('types').split(',') : []
-  );
   const [showDecisionTypeFilter, setShowDecisionTypeFilter] = useState(false);
   const [decisionTypesLoading, setDecisionTypesLoading] = useState(false);
   const [isOrganizationsExpanded, setIsOrganizationsExpanded] = useState(true);
   const [isTimeRangeExpanded, setIsTimeRangeExpanded] = useState(true);
-  
-  // Amount filtering state - restore from URL
-  const [amountFilters, setAmountFilters] = useState({
-    minAmount: searchParams.get('minAmount') || '',
-    maxAmount: searchParams.get('maxAmount') || ''
-  });
-  
-  // Temporal exploration specific state - restore from URL
-  const [organizationFilters, setOrganizationFilters] = useState(
-    searchParams.get('orgs') ? searchParams.get('orgs').split(',') : []
-  );
   const [temporalSummary, setTemporalSummary] = useState(null);
 
   // Parse temporal parameters into date range
@@ -115,25 +118,6 @@ const EntityDetailPage = () => {
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
-
-  // Sync state with URL parameters when they change
-  useEffect(() => {
-    const urlSort = searchParams.get('sort');
-    const urlTypes = searchParams.get('types') ? searchParams.get('types').split(',') : [];
-    const urlOrgs = searchParams.get('orgs') ? searchParams.get('orgs').split(',') : [];
-    const urlMinAmount = searchParams.get('minAmount') || '';
-    const urlMaxAmount = searchParams.get('maxAmount') || '';
-    const urlSearch = searchParams.get('search') || '';
-    
-    // Update state if URL values differ
-    if (urlSort && urlSort !== sortBy) setSortBy(urlSort);
-    if (JSON.stringify(urlTypes) !== JSON.stringify(selectedDecisionTypes)) setSelectedDecisionTypes(urlTypes);
-    if (JSON.stringify(urlOrgs) !== JSON.stringify(organizationFilters)) setOrganizationFilters(urlOrgs);
-    if (urlMinAmount !== amountFilters.minAmount || urlMaxAmount !== amountFilters.maxAmount) {
-      setAmountFilters({ minAmount: urlMinAmount, maxAmount: urlMaxAmount });
-    }
-    if (urlSearch !== searchQuery) setSearchQuery(urlSearch);
-  }, [searchParams, sortBy, selectedDecisionTypes, organizationFilters, amountFilters, searchQuery]);
 
   const handleViewDocumentContent = async (decisionId) => {
     try {
@@ -373,45 +357,6 @@ const EntityDetailPage = () => {
   };
 
   // Update URL params when filters change
-  const updateUrlParams = (updates = {}) => {
-    const params = new URLSearchParams();
-    
-    // Get current or updated values
-    const currentSort = updates.sort !== undefined ? updates.sort : sortBy;
-    const currentTypes = updates.types !== undefined ? updates.types : selectedDecisionTypes;
-    const currentOrgs = updates.orgs !== undefined ? updates.orgs : organizationFilters;
-    const currentMinAmount = updates.minAmount !== undefined ? updates.minAmount : amountFilters.minAmount;
-    const currentMaxAmount = updates.maxAmount !== undefined ? updates.maxAmount : amountFilters.maxAmount;
-    const currentSearch = updates.search !== undefined ? updates.search : searchQuery;
-    
-    // Only add non-default values to URL
-    if (currentSort !== 'recent') {
-      params.set('sort', currentSort);
-    }
-    
-    if (currentTypes.length > 0) {
-      params.set('types', currentTypes.join(','));
-    }
-    
-    if (currentOrgs.length > 0) {
-      params.set('orgs', currentOrgs.join(','));
-    }
-    
-    if (currentMinAmount) {
-      params.set('minAmount', currentMinAmount);
-    }
-    
-    if (currentMaxAmount) {
-      params.set('maxAmount', currentMaxAmount);
-    }
-    
-    if (currentSearch) {
-      params.set('search', currentSearch);
-    }
-    
-    setSearchParams(params);
-  };
-
   // Initial load effect
   useEffect(() => {
     const loadInitialData = async () => {
@@ -478,45 +423,15 @@ const EntityDetailPage = () => {
     });
   };
 
+  // Simplified handlers - the hook handles URL updates automatically
   const handleDecisionTypeToggle = (typeUid, isChecked) => {
-    const newTypes = isChecked 
-      ? [...selectedDecisionTypes, typeUid]
-      : selectedDecisionTypes.filter(uid => uid !== typeUid);
-    
-    setSelectedDecisionTypes(newTypes);
-    updateUrlParams({ types: newTypes });
+    toggleType(typeUid);
   };
 
   const handleAmountFilterChange = (field, value) => {
-    const newAmountFilters = {
+    setAmountFilters({
       ...amountFilters,
       [field]: value
-    };
-    setAmountFilters(newAmountFilters);
-    updateUrlParams({ [field]: value });
-  };
-
-  const handleSortChange = (newSort) => {
-    setSortBy(newSort);
-    updateUrlParams({ sort: newSort });
-  };
-
-  const handleSearchChange = (newSearch) => {
-    setSearchQuery(newSearch);
-    updateUrlParams({ search: newSearch });
-  };
-
-  const clearAllFilters = () => {
-    setSelectedDecisionTypes([]);
-    setAmountFilters({ minAmount: '', maxAmount: '' });
-    setSearchQuery('');
-    setOrganizationFilters([]);
-    updateUrlParams({ 
-      types: [], 
-      orgs: [], 
-      minAmount: '', 
-      maxAmount: '', 
-      search: '' 
     });
   };
 
@@ -524,12 +439,6 @@ const EntityDetailPage = () => {
     if (!dynamicDateUtils) return '';
     return dynamicDateUtils.formatMonth(value);
   }, [dynamicDateUtils]);
-
-  // Calculate active filters count
-  const activeFiltersCount = selectedDecisionTypes.length + 
-    (amountFilters.minAmount ? 1 : 0) + 
-    (amountFilters.maxAmount ? 1 : 0) +
-    (searchQuery ? 1 : 0);
 
   // Loading states
   if (dateRangeLoading || loading) {
@@ -782,6 +691,19 @@ const EntityDetailPage = () => {
         </div>
       )}
 
+      {/* Top Counterparts - Shows related entities/organizations */}
+      {explorationMode === 'entity' && entityData && entityType === 'organization' && timeRange && (
+        <TopCounterparts
+          type="organization"
+          id={entityId}
+          dateRange={{
+            start_date: timeRange.startDate,
+            end_date: timeRange.endDate
+          }}
+          limit={5}
+        />
+      )}
+
       {/* Enhanced Filters Section for both modes */}
       <div className="decisions-section">
         <div className="decisions-header">
@@ -796,19 +718,19 @@ const EntityDetailPage = () => {
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => handleSearchChange(e.target.value)}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={t('entityDetail.searchInDecisions')}
                   className="search-input"
                 />
                 {searchQuery && (
-                  <button onClick={() => handleSearchChange('')} className="clear-button">
+                  <button onClick={() => setSearchQuery('')} className="clear-button">
                     ×
                   </button>
                 )}
               </div>
             </div>
             
-            <SortControl sortBy={sortBy} onSortChange={handleSortChange} options="simple" />
+            <SortControl sortBy={sortBy} onSortChange={setSortBy} options="simple" />
           </div>
         </div>
 

@@ -127,6 +127,7 @@ def fetch_daily_decisions_to_pickle(self, target_date_str: str,
                 'chunk_id': chunk_id,
                 'parent_task': self.request.id,
                 'target_date': target_date_str,
+                'search_params': search_params,  # Include search params for tracking
                 'chunk_index': i // chunk_size,
                 'count': len(chunk_decisions)
             }
@@ -215,6 +216,10 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25, sk
         # Import decisions and dispatch pipeline tasks using orchestrator
         from core.services.pipeline_orchestrator import DecisionPipelineOrchestrator
         from core.tasks.tasks_documents import run_decision_pipeline_task
+        from core.utils.discovery_tracking import (
+            DiscoverySource,
+            add_discovery_source_to_decision
+        )
         
         orchestrator = DecisionPipelineOrchestrator()
         dispatched_tasks = []
@@ -228,17 +233,39 @@ def store_decisions_from_pickle(self, pickle_file: str, batch_size: int = 25, sk
                 decision = orchestrator._step_import_decision(decision_dto)
                 
                 if decision:
-                    # Dispatch pipeline task for full processing (Stages 1-7)
-                    # Note: We don't pass decision_dto here since it's already imported
-                    pipeline_task = run_decision_pipeline_task.delay(
-                        ada=decision.ada,
-                        force_reprocess=False,
-                        skip_opensearch=skip_opensearch
+                    # Tag with default search source
+                    add_discovery_source_to_decision(
+                        decision,
+                        source_type=DiscoverySource.DEFAULT_SEARCH,
+                        search_params=pickle_data.get('search_params', {}),
+                        notes="From default daily fetch",
+                        save=True
                     )
-                    dispatched_tasks.append({
-                        'ada': decision.ada,
-                        'task_id': pipeline_task.id
-                    })
+                    
+                    # Check if decision needs processing (avoid reprocessing healthy decisions)
+                    from core.models.decision_health import DecisionHealthCheck, HealthStatus
+                    health_check = DecisionHealthCheck.objects.filter(decision=decision).first()
+                    
+                    needs_processing = True
+                    if health_check and health_check.overall_status == HealthStatus.HEALTHY:
+                        needs_processing = False
+                        logger.debug(
+                            f"Task {self.request.id}: Skipping {decision.ada} - "
+                            f"already processed with healthy status"
+                        )
+                    
+                    if needs_processing:
+                        # Dispatch pipeline task for full processing (Stages 1-7)
+                        # Note: We don't pass decision_dto here since it's already imported
+                        pipeline_task = run_decision_pipeline_task.delay(
+                            ada=decision.ada,
+                            force_reprocess=False,
+                            skip_opensearch=skip_opensearch
+                        )
+                        dispatched_tasks.append({
+                            'ada': decision.ada,
+                            'task_id': pipeline_task.id
+                        })
                     
                     if i % 10 == 0:
                         logger.info(f"Task {self.request.id}: Processed {i}/{len(decisions)} decisions")

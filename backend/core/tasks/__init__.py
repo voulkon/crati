@@ -68,6 +68,12 @@ from .health_check_tasks import (
     retry_failed_decisions_for_import_job,
 )
 
+from .tasks_org_decisions import (
+    fetch_org_decisions_to_pickle,
+    store_org_decisions_from_pickle,
+    fetch_all_orgs_decisions,
+)
+
 # This ensures all tasks are available when importing from core.tasks
 __all__ = [
     # Documents
@@ -113,4 +119,7 @@ __all__ = [
     "check_single_decision_health",
     "backfill_health_checks_for_import_job",
     "retry_failed_decisions_for_import_job",
+    "fetch_org_decisions_to_pickle",
+    "store_org_decisions_from_pickle",
+    "fetch_all_orgs_decisions"
 ]

@@ -191,6 +191,28 @@ class Decision(models.Model):
     updated_at = models.DateTimeField(_("Updated At"), auto_now=True)
 
     # ------------------------------------------------------------------
+    # Discovery tracking
+    # ------------------------------------------------------------------
+    discovery_sources = models.JSONField(
+        _("Discovery Sources"),
+        default=list,
+        null=True,  # Allow NULL for backwards compatibility
+        blank=True,
+        help_text=_(
+            "Tracks how this decision was discovered. List of source objects with "
+            "source_type (default/org-specific/unit-specific/etc) and search_params."
+        ),
+    )
+    first_discovery_source = models.CharField(
+        _("First Discovery Source"),
+        max_length=50,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=_("The type of the first source that discovered this decision"),
+    )
+
+    # ------------------------------------------------------------------
     # Computed date fields for efficient querying
     # ------------------------------------------------------------------
     issue_date_day = models.DateField(

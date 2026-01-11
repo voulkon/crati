@@ -14,7 +14,7 @@ Architecture:
     3. Each storage task sleeps before processing (prevents DB deadlocks)
 """
 from celery import shared_task
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import List, Dict, Any, Optional
 from loguru import logger
 import pickle
@@ -56,7 +56,7 @@ def fetch_daily_decisions_to_pickle(self, target_date_str: str,
         
         search_params.update({
             "from_issue_date": target_date.isoformat(),
-            "to_issue_date": target_date.isoformat(),
+            "to_issue_date": (target_date + timedelta(days=1)).isoformat(),
             "page": 0,
             "size": 500
         })

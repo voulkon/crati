@@ -8,16 +8,20 @@ python manage.py wait_for_db
 echo "Waiting for Redis..."
 python manage.py wait_for_redis
 
-# Wait for OpenSearch
-echo "Waiting for OpenSearch..."
-python manage.py wait_for_opensearch
+if [ "${INDEX_THE_OPENSEARCH:-true}" = "true" ]; then
+    # Wait for OpenSearch
+    echo "Waiting for OpenSearch..."
+    python manage.py wait_for_opensearch
+fi
 
 # Wait for Loki
 echo "Waiting for Loki..."
 python manage.py wait_for_loki
 
-echo "Setting up OpenSearch Greek language support..."
-python manage.py setup_opensearch_greek
+if [ "${INDEX_THE_OPENSEARCH:-true}" = "true" ]; then
+    echo "Setting up OpenSearch Greek language support..."
+    python manage.py setup_opensearch_greek
+fi
 
 # Test services integration
 echo "Testing services integration..."

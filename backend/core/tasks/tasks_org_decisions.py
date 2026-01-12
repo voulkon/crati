@@ -83,8 +83,8 @@ def fetch_org_decisions_to_pickle(
         
         search_params.update({
             "org": org_identifier,
-            "from_date": from_date,
-            "to_date": to_date,
+            "from_issue_date": from_date,  # Use issue_date not modification date!
+            "to_issue_date": to_date,      # Use issue_date not modification date!
             "page": 0,
             "size": 500
         })

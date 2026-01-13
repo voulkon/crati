@@ -48,7 +48,8 @@ class BackupService:
         self._validate_credentials()
         
         # Initialize OpenSearch service
-        self.opensearch_service = OpenSearchService()
+        if settings.INDEX_THE_OPENSEARCH:
+            self.opensearch_service = OpenSearchService()
         
         # Ensure bucket exists
         self._ensure_bucket_exists()
@@ -260,6 +261,9 @@ class BackupService:
                 os.remove(local_path)
 
     def create_opensearch_snapshot(self, backup_id):
+        if not settings.INDEX_THE_OPENSEARCH:
+            logger.info("OpenSearch indexing is disabled in settings. Skipping snapshot.")
+            return
         backup = Backup.objects.get(id=backup_id)
         backup.status = Backup.Status.IN_PROGRESS
         backup.logs += "Starting OpenSearch snapshot...\n"
@@ -316,6 +320,9 @@ class BackupService:
             raise
 
     def restore_opensearch_snapshot(self, backup_id):
+        if not settings.INDEX_THE_OPENSEARCH:
+            logger.info("OpenSearch indexing is disabled in settings. Skipping restore.")
+            return
         backup = Backup.objects.get(id=backup_id)
         
         try:

@@ -2,7 +2,6 @@ import requests
 import json
 from django.core.management.base import BaseCommand
 from django.conf import settings
-from django.conf import settings
 
 class Command(BaseCommand):
     help = "Test integration with OpenSearch and Greek analysis"
@@ -38,7 +37,7 @@ class Command(BaseCommand):
         opensearch_url = getattr(settings, 'OPENSEARCH_URL', 'http://opensearch:9200')
         if not settings.INDEX_THE_OPENSEARCH:
             self.stdout.write(self.style.WARNING("OpenSearch indexing is disabled in settings. Skipping tcu_plugin."))
-        
+            return
         try:
             # Check if ICU plugin is installed
             response = requests.get(f"{opensearch_url}/_cat/plugins")

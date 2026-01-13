@@ -36,6 +36,8 @@ class Command(BaseCommand):
         self.stdout.write("\n--- Testing ICU Plugin ---")
         
         opensearch_url = getattr(settings, 'OPENSEARCH_URL', 'http://opensearch:9200')
+        if not settings.INDEX_THE_OPENSEARCH:
+            self.stdout.write(self.style.WARNING("OpenSearch indexing is disabled in settings. Skipping tcu_plugin."))
         
         try:
             # Check if ICU plugin is installed
@@ -53,7 +55,9 @@ class Command(BaseCommand):
 
     def test_greek_analysis(self):
         self.stdout.write("\n--- Testing Greek Text Analysis ---")
-        
+        if not settings.INDEX_THE_OPENSEARCH:
+            self.stdout.write(self.style.WARNING("OpenSearch indexing is disabled in settings. Skipping test_greek_analysis."))
+            return
         opensearch_url = getattr(settings, 'OPENSEARCH_URL', 'http://opensearch:9200')
         
         try:

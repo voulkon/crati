@@ -2,6 +2,11 @@ docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.sec
 docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets down
 docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets up --build
 
+
+docker-compose -f docker/docker-compose-no-db.yml --env-file=.env_files/.env.local.no-db.secrets up
+docker-compose -f docker/docker-compose-no-db.yml --env-file=.env_files/.env.local.no-db.secrets down
+
+
 cd frontend
 npm start
 

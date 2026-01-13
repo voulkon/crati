@@ -1,7 +1,8 @@
-version: '3.8'
+name: diavgeia-no-db
 
-# Application services (Backend, Frontend, Workers, Proxies)
-# Usage: docker-compose -f docker/docker-compose-no-db.yml up -d
+# Usage:
+# docker-compose -f docker/docker-compose-no-db.yml --env-file=.env_files/.env.local.no-db.secrets up
+# docker-compose -f docker/docker-compose-no-db.yml --env-file=.env_files/.env.local.no-db.secrets down
 
 services:
   # ───────────────────── Observability ──────────────────────
@@ -133,12 +134,10 @@ services:
       - ../.env_files/.env.local.secrets
     environment:
       - DJANGO_DEBUG_PORT=${DJANGO_DEBUG_PORT:-8002}
-      # Point to container name 'crati_db' via crati-db-net
       - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST:-crati_db}:${DB_PORT:-5432}/${POSTGRES_DB}
       - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
       - JAEGER_HOST=${JAEGER_HOST:-jaeger}
       - JAEGER_PORT=${JAEGER_PORT:-4317}
-      # Point to container name 'crati_opensearch' via crati-opensearch-net
       - OPENSEARCH_URL=${OPENSEARCH_URL:-http://crati_opensearch:9200}
       - INDEX_THE_OPENSEARCH=${INDEX_THE_OPENSEARCH:-true}
       - GEMI_API_KEY=${GEMI_API_KEY}
@@ -148,8 +147,6 @@ services:
       - DB_LOG_LEVEL=${DB_LOG_LEVEL:-WARNING}
     networks:
       - crati-app-net
-      - crati-db-net
-      - crati-opensearch-net
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -166,8 +163,6 @@ services:
     restart: unless-stopped
     networks:
       - crati-app-net
-      - crati-db-net
-      - crati-opensearch-net
     volumes:
       - ../backend:/code
     ports:
@@ -201,7 +196,6 @@ services:
     command: celery -A diavgeia_project beat -l INFO
     networks:
       - crati-app-net
-      - crati-db-net
     volumes:
       - ../backend:/code
     depends_on:
@@ -287,9 +281,3 @@ networks:
   crati-app-net:
     driver: bridge
     name: crati-app-net
-  crati-db-net:
-    external: true
-    name: crati-db-net
-  crati-opensearch-net:
-    external: true
-    name: crati-opensearch-net

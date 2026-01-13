@@ -1,5 +1,9 @@
 name: diavgeia
 
+# Usage:
+# docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets up
+# docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets down
+
 services:
 
   # ───────────────────── Observability ──────────────────────

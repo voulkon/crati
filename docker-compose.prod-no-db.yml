@@ -10,6 +10,8 @@ services:
     restart: always
     environment:
       - COLLECTOR_OTLP_ENABLED=true
+    labels:
+      - "caddy_0.basicauth.${JAEGER_AUTH_USER}=${JAEGER_AUTH_HASH}"
     expose:
       - "16686"
       - "4317"

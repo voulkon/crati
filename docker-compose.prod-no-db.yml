@@ -270,5 +270,5 @@ volumes:
     
 networks:
   diavgeia-prod-net:
-    driver: bridge
-    name: diavgeia-prod-net
+    external: true
+    name: coolify

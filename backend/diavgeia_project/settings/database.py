@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 # Database configuration - use DATABASE_URL if available, otherwise individual vars
 DATABASE_URL = os.environ.get("DATABASE_URL")
-
+CONN_MAX_AGE = int(os.environ.get("DB_CONN_MAX_AGE", 60))  # Default to 60 seconds
 if DATABASE_URL:
     # Parse DATABASE_URL
     parsed = urlparse(DATABASE_URL)
@@ -26,7 +26,7 @@ if DATABASE_URL:
                 "connect_timeout": 60,
                 "options": "-c statement_timeout=300000"  # 5 minutes
             },
-            "CONN_MAX_AGE": 0,  # Don't persist connections for remote DB
+            "CONN_MAX_AGE": CONN_MAX_AGE,  # Persist connections to reduce handshake overhead
             "CONN_HEALTH_CHECKS": True,  # Enable connection health checks
         }
     }
@@ -44,7 +44,7 @@ else:
                 "connect_timeout": 60,
                 "options": "-c statement_timeout=300000"  # 5 minutes
             },
-            "CONN_MAX_AGE": 0,  # Don't persist connections for remote DB
+            "CONN_MAX_AGE": CONN_MAX_AGE,  # Persist connections to reduce handshake overhead
             "CONN_HEALTH_CHECKS": True,  # Enable connection health checks
         }
     }

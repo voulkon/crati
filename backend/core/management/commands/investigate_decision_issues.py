@@ -4,7 +4,7 @@ from django.db.models import Q, Count
 from datetime import datetime, timedelta
 from loguru import logger
 import json
-
+from django.conf import settings
 from core.models.decisions import Decision
 from core.models.decision_health import DecisionHealthCheck, HealthStatus
 from core.models.document_analysis import DocumentExtraction, ProcessingStatus
@@ -317,7 +317,8 @@ class Command(BaseCommand):
         
         # Check if document exists
         try:
-            analysis['technical_analysis']['exists_in_opensearch'] = self.opensearch_service.document_exists(decision.ada)
+            if settings.INDEX_THE_OPENSEARCH:
+                analysis['technical_analysis']['exists_in_opensearch'] = self.opensearch_service.document_exists(decision.ada)
         except Exception as e:
             analysis['fix_suggestions'].append(f"Error checking document existence: {str(e)}")
             return analysis

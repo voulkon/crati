@@ -646,9 +646,12 @@ class DecisionHealthGuaranteeService:
         
         for extraction in completed_extractions:
             try:
-                is_indexed = search_service.document_exists(extraction.decision.id)
-                if not is_indexed:
-                    missing_indexes.append(extraction)
+                if settings.INDEX_THE_OPENSEARCH:
+                    is_indexed = search_service.document_exists(extraction.decision.id)
+                    if not is_indexed:
+                        missing_indexes.append(extraction)
+                else:
+                    logger.debug(f"Skipping OpenSearch check due to INDEX_THE_OPENSEARCH feature flag set to {settings.INDEX_THE_OPENSEARCH}")
             except Exception as e:
                 logger.warning(f"Could not check index status for {extraction.decision.ada}: {e}")
                 check_errors.append({

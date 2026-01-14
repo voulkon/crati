@@ -1,5 +1,6 @@
 from typing import Dict, Any, List, Optional, Tuple
 from django.utils import timezone
+from django.conf import settings
 from loguru import logger
 import time
 import json
@@ -336,6 +337,16 @@ class DecisionHealthService:
                 message = "No document text to index - OpenSearch not needed"
                 details = {'should_be_indexed': False}
             else:
+                
+                if not settings.INDEX_THE_OPENSEARCH:
+                    status = HealthStatus.UNKNOWN
+                    message = "OpenSearch indexing disabled via settings"
+                    details = {
+                        'should_be_indexed': True,
+                        'indexing_disabled': True
+                    }
+                    health_check.set_finding('opensearch', status, message, details)
+                    return
                 # Check if document exists in OpenSearch
                 doc_exists = self.opensearch_service.document_exists(decision.ada)
                 

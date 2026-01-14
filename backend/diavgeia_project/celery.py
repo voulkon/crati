@@ -1,15 +1,20 @@
 import os
 from celery import Celery
-from celery.signals import task_prerun, task_postrun, task_failure
+from celery.signals import task_prerun, task_postrun, task_failure, worker_process_init
 from celery.schedules import crontab
 from opentelemetry import trace
 from opentelemetry.instrumentation.celery import CeleryInstrumentor
 from .otel_init import initialize_otel
+import diavgeia_project.otel_init as otel_init_module
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "diavgeia_project.settings")
 
-# Initialize OpenTelemetry FIRST
-tracer = initialize_otel("diavgeia-celery")
+# Initial setup for Main Process (Beat, Worker Parent, etc)
+# This might not be fork-safe, but we fix it in worker_process_init below
+try:
+    tracer = initialize_otel("diavgeia-celery")
+except Exception as e:
+    print(f"⚠️ Failed to initialize OpenTelemetry in main process: {e}")
 
 # Configure Loguru for JSON logging BEFORE any Loguru imports
 from diavgeia_project.logging.loguru_config import configure_loguru
@@ -27,7 +32,33 @@ def config_loggers(*args, **kwargs):
     """Prevent Celery from overriding Django's logging configuration"""
     pass  # Do nothing, let Django handle logging
 
+# Fix for "ValueError: Cannot invoke RPC on closed channel!"
+# This ensures each forked worker process gets a FRESH OpenTelemetry exporter
+@worker_process_init.connect(weak=False)
+def init_celery_tracing(*args, **kwargs):
+    """
+    Re-initialize OpenTelemetry in the worker child process.
+    This is critical because gRPC channels (used by the OTLP exporter) 
+    are not fork-safe and break when inherited from the parent process.
+    """
+    try:
+        # 1. Force reset the global state in otel_init module
+        # This makes initialize_otel() create a NEW provider instead of returning the parent's
+        otel_init_module._global_initialized = False
+        otel_init_module._services_initialized.clear()
+        
+        # 2. Re-initialize with a fresh gRPC channel
+        print("🔄 [Worker Child] Re-initializing OpenTelemetry for fork safety...")
+        initialize_otel("diavgeia-celery")
+        
+        # 3. Ensure instrumentation is active
+        CeleryInstrumentor().instrument()
+        print("✅ [Worker Child] OpenTelemetry re-initialized successfully")
+    except Exception as e:
+        print(f"❌ [Worker Child] Failed to re-initialize OpenTelemetry: {e}")
+
 # Modern instrumentation for v0.53b1+
+# We call it here for the Main Process
 CeleryInstrumentor().instrument(
     tracer_provider=trace.get_tracer_provider(),
     # Optional: Add any specific instrumentation configurations

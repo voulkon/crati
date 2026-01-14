@@ -192,7 +192,8 @@ services:
       - JAEGER_PORT=${JAEGER_PORT:-4317}
       - GEMI_API_KEY=${GEMI_API_KEY}
       - LIGHT_WORKER=${LIGHT_WORKER:-false}
-
+      - GRPC_ENABLE_FORK_SUPPORT=true
+      - GRPC_POLL_STRATEGY=epoll1
   beat:
     build:
       context: .

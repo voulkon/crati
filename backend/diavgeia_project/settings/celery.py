@@ -11,7 +11,19 @@ import sys
 CELERY_BROKER_URL = os.environ.get(
     "CELERY_BROKER_URL", "amqp://guest:guest@localhost:5672//"
 )
-CELERY_RESULT_BACKEND = "django-db"
+
+# Use Redis for results to avoid PostgreSQL churn (Massive WAL generation on high task volume)
+# We default to Redis (DB 0) which is much faster and ephemeral.
+# Set USE_DB_FOR_CELERY_RESULTS=true if you really need the Django Admin results view.
+if os.environ.get("USE_DB_FOR_CELERY_RESULTS", "false") == "true":
+    CELERY_RESULT_BACKEND = "django-db"
+else:
+    _redis_host = os.environ.get("REDIS_HOST", "redis")
+    _redis_port = os.environ.get("REDIS_PORT", "6379")
+    _redis_password = os.environ.get("REDIS_PASSWORD", "")
+    _redis_auth = f":{_redis_password}@" if _redis_password else ""
+    CELERY_RESULT_BACKEND = f"redis://{_redis_auth}{_redis_host}:{_redis_port}/0"
+
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

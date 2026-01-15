@@ -115,11 +115,12 @@ services:
       - REDIS_HOSTS=local:redis:6379:0:${REDIS_PASSWORD}
     expose:
       - "8081"
+    labels:
+      - "caddy_0.basicauth.${JAEGER_AUTH_USER}=${JAEGER_AUTH_HASH}"
     networks:
       - diavgeia-prod-net
     depends_on:
       - redis
-
   # ───────────────────────── Backend ─────────────────────────
   backend:
     build:

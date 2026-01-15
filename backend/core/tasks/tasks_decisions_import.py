@@ -25,12 +25,13 @@ from core.services.redis_decision_cache import RedisDecisionCache
 from core.models.import_jobs import ImportJobStatus, ImportJob
 from django.db import transaction
 from django.utils import timezone
+from diavgeia_api.models.decisions import Decision
 
 
 @shared_task(bind=True, max_retries=3)
 def fetch_daily_decisions_to_redis(self, target_date_str: str, 
-                                   search_params: Optional[Dict[str, Any]] = None,
-                                   chunk_size: int = 10):
+                                search_params: Optional[Dict[str, Any]] = None,
+                                chunk_size: int = 10):
     """
     Phase 1: Fetch ALL decisions for a full day and save to Redis with batch tracking.
     
@@ -218,7 +219,7 @@ def fetch_daily_decisions_to_redis(self, target_date_str: str,
 
 @shared_task(bind=True, max_retries=5)
 def store_decisions_from_redis(self, chunk_id: str, job_id: int, 
-                              skip_opensearch: bool = False, delay_seconds: float = 0):
+                            skip_opensearch: bool = False, delay_seconds: float = 0):
     """
     Phase 2: Load decisions from Redis and run through full pipeline with job tracking.
     
@@ -261,11 +262,31 @@ def store_decisions_from_redis(self, chunk_id: str, job_id: int,
                 f"May have expired or been processed already."
             )
         
-        decisions = chunk_data['decisions']
+        # Get decision dicts from Redis
+        decision_dicts = chunk_data['decisions']
         metadata = chunk_data.get('metadata', {})
         
         logger.info(
-            f"Task {self.request.id}: Loaded {len(decisions)} decisions from Redis chunk {chunk_id}"
+            f"Task {self.request.id}: Loaded {len(decision_dicts)} decisions from Redis chunk {chunk_id}"
+        )
+        
+        # Convert dicts back to Decision DTO objects
+        decisions = []
+        for decision_dict in decision_dicts:
+            try:
+                # Pydantic will handle datetime string conversion automatically
+                decision_dto = Decision(**decision_dict)
+                decisions.append(decision_dto)
+            except Exception as parse_error:
+                logger.error(
+                    f"Task {self.request.id}: Failed to parse decision from dict: {parse_error}"
+                )
+                logger.debug(f"Problematic dict: {decision_dict}")
+                # Skip this decision and continue with others
+                continue
+        
+        logger.info(
+            f"Task {self.request.id}: Successfully parsed {len(decisions)} Decision DTOs"
         )
         
         # Get ImportJob for progress tracking
@@ -382,7 +403,8 @@ def store_decisions_from_redis(self, chunk_id: str, job_id: int,
             'status': 'success',
             'chunk_id': chunk_id,
             'job_id': job_id,
-            'decisions_loaded': len(decisions),
+            'decisions_loaded': len(decision_dicts),
+            'decisions_parsed': len(decisions),
             'decisions_processed': len(dispatched_tasks),
             'decisions_failed': len(failed_imports),
             'failed_imports': failed_imports[:10],

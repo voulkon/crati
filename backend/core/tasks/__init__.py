@@ -16,8 +16,9 @@ from .tasks_documents import (
 )
 
 from .tasks_decisions_import import (
-    fetch_daily_decisions_to_pickle,
+    fetch_daily_decisions_to_redis,
     store_decisions_from_pickle,
+    store_decisions_from_redis,
     fetch_daily_decisions_distributed,
 )
 

@@ -5,6 +5,7 @@ Central registry of Redis keys used throughout the application.
 # Key namespaces
 STATS_NS = "stats"
 RATELIMIT_NS = "ratelimit"
+IMPORT_CHUNKS_NS = "import"  # 🆕 Import decision chunks namespace
 
 # Stats keys
 TOTAL_REQUESTS = f"{STATS_NS}:total_requests"
@@ -23,9 +24,14 @@ ENDPOINT_IPS_PREFIX = f"{STATS_NS}:endpoint_ips:"  # stats:endpoint_ips:<endpoin
 USER_RATELIMIT_PREFIX = f"{RATELIMIT_NS}:user:"
 IP_RATELIMIT_PREFIX = f"{RATELIMIT_NS}:ip:"
 
+# 🆕 Import decision chunks keys
+IMPORT_CHUNK_PREFIX = f"{IMPORT_CHUNKS_NS}:chunk:"  # import:chunk:<job_id>_chunk_<n>
+IMPORT_JOB_METADATA_PREFIX = f"{IMPORT_CHUNKS_NS}:job:"  # import:job:<job_id>
+
 # Default expiration times (in seconds)
 STATS_EXPIRE = 60 * 60 * 24 * 30  # 30 days
 RATELIMIT_EXPIRE = 60 * 60 * 24  # 24 hours
+IMPORT_CHUNKS_EXPIRE = 60 * 60 * 24  # 24 hours (decisions should be processed before this)
 
 # AFM Fetch Locking (distributed lock for company data fetching)
 AFM_FETCH_LOCK_PREFIX = "afm_fetch_lock:"
@@ -59,3 +65,15 @@ def get_ip_endpoints_key(ip: str) -> str:
 def get_endpoint_ips_key(endpoint: str) -> str:
     """Generate Redis key for tracking IPs that visited an endpoint"""
     return f"{ENDPOINT_IPS_PREFIX}{endpoint}"
+
+
+# 🆕 Import chunk key helpers
+def get_import_chunk_key(chunk_id: str) -> str:
+    """Generate Redis key for storing decision chunk data"""
+    return f"{IMPORT_CHUNK_PREFIX}{chunk_id}"
+
+
+def get_import_job_metadata_key(job_id: int) -> str:
+    """Generate Redis key for storing import job metadata"""
+    return f"{IMPORT_JOB_METADATA_PREFIX}{job_id}"
+

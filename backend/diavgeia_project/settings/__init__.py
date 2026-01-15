@@ -23,7 +23,6 @@ from .database import *
 
 # Import cache configuration
 from .cache import *
-
 # Import security settings (CORS, CSP, cookies, etc.)
 from .security import *
 

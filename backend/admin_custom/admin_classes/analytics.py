@@ -4,6 +4,7 @@ from django.http import HttpResponse
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.http import urlencode
+from django.utils.safestring import mark_safe
 import json
 
 from core.models.decision_health import HealthStatus
@@ -53,7 +54,7 @@ class DailyTrafficAdmin(admin.ModelAdmin):
 
 
 class ImportJobAdmin(admin.ModelAdmin):
-    """Admin interface for Import Jobs"""
+    """Admin interface for Import Jobs with Redis chunking progress tracking"""
     list_display = (
         "id",
         "start_date",
@@ -63,19 +64,45 @@ class ImportJobAdmin(admin.ModelAdmin):
         "created_by",
         "created_at",
         "decisions_count",
+        "chunk_progress_display",
+        "total_decisions",
+        "new_decisions",
         "no_health_check_count",
         "no_health_check_link",
         "healthy_count",
         "warning_count",
-        "error_count",
+        "health_error_count",
         "unknown_count",
         "health_percentage",
         "warning_health_checks_link",
         "failed_health_checks_link",
     )
     list_filter = ("status", "created_by", "created_at")
-    search_fields = ("organization__label", "signer__label")
+    search_fields = ("organization__label", "signer__first_name", "signer__last_name", "celery_task_id")
     date_hierarchy = "created_at"
+    readonly_fields = [
+        'created_at',
+    ]
+    fieldsets = (
+        ('Basic Info', {
+            'fields': ('id', 'start_date', 'end_date', 'status', 'created_by', 'created_at', 'completed_at')
+        }),
+        ('Progress', {
+            'fields': ('total_decisions', 'new_decisions', 'updated_decisions', 'error_count')
+        }),
+        ('Redis Chunks', {
+            'fields': ('total_chunks', 'chunks_completed', 'chunks_failed', 'chunk_task_ids', 'search_params'),
+            'classes': ('collapse',)
+        }),
+        ('Entity Filters', {
+            'fields': ('organization', 'unit', 'signer'),
+            'classes': ('collapse',)
+        }),
+        ('Error Details', {
+            'fields': ('error_details', 'celery_task_id'),
+            'classes': ('collapse',)
+        }),
+    )
     actions = (
         "download_batch_health_report",
         "enqueue_backfill_missing_health_checks",
@@ -97,7 +124,7 @@ class ImportJobAdmin(admin.ModelAdmin):
                 filter=Q(decisions__health_check__overall_status=HealthStatus.WARNING),
                 distinct=True,
             ),
-            error_count=Count(
+            health_error_count=Count(
                 "decisions__health_check",
                 filter=Q(decisions__health_check__overall_status=HealthStatus.ERROR),
                 distinct=True,
@@ -113,7 +140,7 @@ class ImportJobAdmin(admin.ModelAdmin):
         if obj.organization:
             return f"Org: {obj.organization.label}"
         elif obj.signer:
-            return f"Signer: {obj.signer.label}"
+            return f"Signer: {obj.signer}"
         return "All"
     entity_name.short_description = "Entity"
 
@@ -155,10 +182,10 @@ class ImportJobAdmin(admin.ModelAdmin):
     warning_count.short_description = "Warnings"
     warning_count.admin_order_field = "warning_count"
 
-    def error_count(self, obj):
-        return getattr(obj, "error_count", 0)
-    error_count.short_description = "Errors"
-    error_count.admin_order_field = "error_count"
+    def health_error_count(self, obj):
+        return getattr(obj, "health_error_count", 0)
+    health_error_count.short_description = "Errors"
+    health_error_count.admin_order_field = "health_error_count"
 
     def unknown_count(self, obj):
         return getattr(obj, "unknown_count", 0)
@@ -174,8 +201,16 @@ class ImportJobAdmin(admin.ModelAdmin):
         return f"{pct:.1f}%"
     health_percentage.short_description = "Health %"
 
+    def chunk_progress_display(self, obj):
+        """Display chunk processing progress"""
+        if obj.total_chunks == 0:
+            return "-"
+        completed = obj.chunks_completed + obj.chunks_failed
+        return f"{completed}/{obj.total_chunks}"
+    chunk_progress_display.short_description = 'Chunks'
+
     def failed_health_checks_link(self, obj):
-        errors = getattr(obj, "error_count", 0) or 0
+        errors = getattr(obj, "health_error_count", 0) or 0
         if errors <= 0:
             return "-"
 

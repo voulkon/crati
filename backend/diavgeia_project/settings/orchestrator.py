@@ -35,7 +35,8 @@ if USE_ORCHESTRATOR_MODE:
 
 # Clerk Authentication Settings
 CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY")
-CLERK_JWT_PUBLIC_KEY = os.getenv("CLERK_JWT_PUBLIC_KEY")
+_clerk_public_key = os.getenv("CLERK_JWT_PUBLIC_KEY")
+CLERK_JWT_PUBLIC_KEY = _clerk_public_key.replace("\\n", "\n") if _clerk_public_key else None
 
 # Use the first frontend hostname, or localhost:3000 in debug
 # Auto-derive from frontend domains

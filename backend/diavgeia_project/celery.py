@@ -1,6 +1,7 @@
 import os
+import sys
 from celery import Celery
-from celery.signals import task_prerun, task_postrun, task_failure, worker_process_init
+from celery.signals import task_prerun, task_postrun, task_failure, worker_process_init, beat_init
 from celery.schedules import crontab
 from opentelemetry import trace
 from opentelemetry.instrumentation.celery import CeleryInstrumentor
@@ -9,12 +10,32 @@ import diavgeia_project.otel_init as otel_init_module
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "diavgeia_project.settings")
 
-# Initial setup for Main Process (Beat, Worker Parent, etc)
-# This might not be fork-safe, but we fix it in worker_process_init below
-try:
-    tracer = initialize_otel("diavgeia-celery")
-except Exception as e:
-    print(f"⚠️ Failed to initialize OpenTelemetry in main process: {e}")
+# OpenTelemetry Initialization Logic
+# We avoid initializing in the Worker Parent process to prevent gRPC fork-safety issues.
+# Instead, we initialize in the child process via signals.
+
+is_celery_worker = len(sys.argv) > 1 and 'worker' in sys.argv
+is_celery_beat = len(sys.argv) > 1 and 'beat' in sys.argv
+
+# Initialize for Beat (Single process)
+@beat_init.connect
+def init_beat_tracing(*args, **kwargs):
+    try:
+        initialize_otel("diavgeia-celery-beat")
+        CeleryInstrumentor().instrument()
+        print("✅ [Beat] OpenTelemetry initialized")
+    except Exception as e:
+        print(f"❌ [Beat] Failed to initialize OpenTelemetry: {e}")
+
+# If we are NOT a worker and NOT beat (e.g. Django web, management command, etc.)
+# We invoke instrumentation. We assume the TracerProvider is configured elsewhere (e.g. settings/wsgi)
+# or via initialize_otel called by other means.
+if not is_celery_worker and not is_celery_beat:
+    try:
+        # We can try to instrument using existing provider if available
+        CeleryInstrumentor().instrument()
+    except Exception:
+        pass
 
 # Configure Loguru for JSON logging BEFORE any Loguru imports
 from diavgeia_project.logging.loguru_config import configure_loguru
@@ -43,28 +64,29 @@ def init_celery_tracing(*args, **kwargs):
     """
     try:
         # 1. Force reset the global state in otel_init module
-        # This makes initialize_otel() create a NEW provider instead of returning the parent's
         otel_init_module._global_initialized = False
         otel_init_module._services_initialized.clear()
         
-        # 2. Re-initialize with a fresh gRPC channel
+        # 2. FORCE reset the global TracerProvider
+        # This is required because opentelemetry-api refuses to overwrite the provider
+        # if one is already set. We must clear it to allow the new provider (with fresh exporter)
+        # to be registered.
+        trace._TRACER_PROVIDER = None
+        
+        # 3. Re-initialize with a fresh gRPC channel
         print("🔄 [Worker Child] Re-initializing OpenTelemetry for fork safety...")
         initialize_otel("diavgeia-celery")
         
-        # 3. Ensure instrumentation is active
+        # 4. Ensure instrumentation is active for this process
+        # We explicitly instrument here for the worker child logic
         CeleryInstrumentor().instrument()
         print("✅ [Worker Child] OpenTelemetry re-initialized successfully")
     except Exception as e:
         print(f"❌ [Worker Child] Failed to re-initialize OpenTelemetry: {e}")
 
-# Modern instrumentation for v0.53b1+
-# We call it here for the Main Process
-CeleryInstrumentor().instrument(
-    tracer_provider=trace.get_tracer_provider(),
-    # Optional: Add any specific instrumentation configurations
-    # enable_propagators=["tracecontext", "baggage"],
-    # disable_span_enrich=False
-)
+# Instrumentation is now handled via signals (worker_process_init, beat_init)
+# or conditionally at the top of the file for other processes.
+
 
 app.autodiscover_tasks()
 

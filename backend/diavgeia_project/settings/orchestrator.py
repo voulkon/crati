@@ -6,6 +6,7 @@ Contains configuration for the DecisionPipelineOrchestrator and related settings
 
 import os
 import sys
+from backend.diavgeia_project.settings.orchestrator_utils import validate_and_format_public_key
 
 # Import from base module for FRONTEND_HOSTNAMES and DEBUG
 from .base import FRONTEND_HOSTNAMES, DEBUG
@@ -33,10 +34,25 @@ if USE_ORCHESTRATOR_MODE:
     "   - No automatic document/entity processing on save",
     "=" * 50)
 
+# ============================================================================
 # Clerk Authentication Settings
+# ============================================================================
+
 CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY")
-_clerk_public_key = os.getenv("CLERK_JWT_PUBLIC_KEY")
-CLERK_JWT_PUBLIC_KEY = _clerk_public_key.replace("\\n", "\n") if _clerk_public_key else None
+
+try:
+    CLERK_JWT_PUBLIC_KEY = validate_and_format_public_key(
+        os.getenv("CLERK_JWT_PUBLIC_KEY")
+    )
+except ValueError as e:
+    logger.error(f"❌ Failed to load CLERK_JWT_PUBLIC_KEY: {e}")
+    logger.error(
+        "Please check your Coolify environment variable configuration. "
+        "The key should be pasted as-is with actual newlines, not escaped \\n. "
+        "Alternatively, you can paste it as a single line (without the newlines in the middle)."
+    )
+    # Set to None to prevent authentication from silently failing
+    CLERK_JWT_PUBLIC_KEY = None
 
 # Use the first frontend hostname, or localhost:3000 in debug
 # Auto-derive from frontend domains

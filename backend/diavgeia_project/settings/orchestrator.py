@@ -6,7 +6,7 @@ Contains configuration for the DecisionPipelineOrchestrator and related settings
 
 import os
 import sys
-from backend.diavgeia_project.settings.orchestrator_utils import validate_and_format_public_key
+from .orchestrator_utils import validate_and_format_public_key
 
 # Import from base module for FRONTEND_HOSTNAMES and DEBUG
 from .base import FRONTEND_HOSTNAMES, DEBUG

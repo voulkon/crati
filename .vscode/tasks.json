@@ -31,6 +31,30 @@
             "windows": {
                 "command": "cd backend; if ($?) { py -m poetry add ${input:packageName} --group dev }; if ($?) { cd .. }; if ($?) { docker-compose -f docker/docker-compose.yml build backend }; if ($?) { docker-compose -f docker/docker-compose.yml up -d --no-deps backend }"
             }
+        },
+        {
+            "label": "Docker Compose (with DB) Up",
+            "type": "shell",
+            "command": "docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets up",
+            "problemMatcher": []
+        },
+        {
+            "label": "Docker Compose (with DB) Down",
+            "type": "shell",
+            "command": "docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets down",
+            "problemMatcher": []
+        },
+        {
+            "label": "Docker Compose (no DB) Up",
+            "type": "shell",
+            "command": "docker-compose -f docker/docker-compose-no-db.yml --env-file=.env_files/.env.local.no-db.secrets up",
+            "problemMatcher": []
+        },
+        {
+            "label": "Docker Compose (no DB) Down",
+            "type": "shell",
+            "command": "docker-compose -f docker/docker-compose-no-db.yml --env-file=.env_files/.env.local.no-db.secrets down",
+            "problemMatcher": []
         }
     ],
     "inputs": [

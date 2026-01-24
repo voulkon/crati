@@ -138,6 +138,8 @@ services:
       - SERVER_IDLE_TIMEOUT=600
       - MAX_DB_CONNECTIONS=0
       - MAX_USER_CONNECTIONS=0
+      - AUTH_TYPE=scram-sha-256
+      - CLIENT_TLS_SSLMODE=disable
     expose:
       - "5432"
     networks:

@@ -122,6 +122,32 @@ services:
       - diavgeia-prod-net
     depends_on:
       - redis
+
+  # ──────────────────── Connection Pooler ────────────────────
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: diavgeia_pgbouncer
+    restart: always
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${DB_PORT}/${POSTGRES_DB}
+      - POOL_MODE=transaction
+      - MAX_CLIENT_CONN=1000
+      - DEFAULT_POOL_SIZE=25
+      - RESERVE_POOL_SIZE=5
+      - RESERVE_POOL_TIMEOUT=3
+      - SERVER_IDLE_TIMEOUT=600
+      - MAX_DB_CONNECTIONS=0
+      - MAX_USER_CONNECTIONS=0
+    expose:
+      - "5432"
+    networks:
+      - diavgeia-prod-net
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "localhost", "-p", "5432", "-U", "${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # ───────────────────────── Backend ─────────────────────────
   backend:
     build:
@@ -147,8 +173,8 @@ services:
     expose:
       - "8000"
     environment:
-      # VITAL: Points to remote servers
-      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${DB_PORT}/${POSTGRES_DB}
+      # VITAL: Points to remote servers via PgBouncer for connection pooling
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pgbouncer:5432/${POSTGRES_DB}
       - OPENSEARCH_URL=${OPENSEARCH_URL} # e.g., http://my-os-server.com:9200
       - INDEX_THE_OPENSEARCH=${INDEX_THE_OPENSEARCH:-true}
       - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
@@ -169,6 +195,8 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
     
   worker:
     build:
@@ -184,9 +212,11 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
     environment:
-      # Same vital remote connections
-      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${DB_PORT}/${POSTGRES_DB}
+      # Same vital remote connections via PgBouncer
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pgbouncer:5432/${POSTGRES_DB}
       - OPENSEARCH_URL=${OPENSEARCH_URL}
       - INDEX_THE_OPENSEARCH=${INDEX_THE_OPENSEARCH:-true}
       - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
@@ -207,8 +237,10 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}:${DB_PORT}/${POSTGRES_DB}
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@pgbouncer:5432/${POSTGRES_DB}
       - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
       - GEMI_API_KEY=${GEMI_API_KEY}
 

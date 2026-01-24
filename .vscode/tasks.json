@@ -45,6 +45,12 @@
             "problemMatcher": []
         },
         {
+            "label": "SSH in vm",
+            "type": "shell",
+            "command": "ssh -i ~/.ssh/id_ed25519 root@49.13.136.52",
+            "problemMatcher": []
+        },
+        {
             "label": "Docker Compose (no DB) Up",
             "type": "shell",
             "command": "docker-compose -f docker/docker-compose-no-db.yml --env-file=.env_files/.env.local.no-db.secrets up",

@@ -49,7 +49,14 @@ class ImportJob(models.Model):
     
     # Results
     total_decisions = models.IntegerField(default=0, 
-                                         verbose_name=_("Total Decisions"))
+                                         verbose_name=_("Total Decisions"),
+                                         help_text=_("Decisions fetched from API and stored in Redis"))
+    decisions_restored_from_redis = models.IntegerField(default=0,
+                                                       verbose_name=_("Restored from Redis"),
+                                                       help_text=_("Decisions loaded from Redis chunks"))
+    decisions_assigned_to_pipeline = models.IntegerField(default=0,
+                                                        verbose_name=_("Assigned to Pipeline"),
+                                                        help_text=_("Decisions dispatched to run_decision_pipeline_task"))
     new_decisions = models.IntegerField(default=0,
                                       verbose_name=_("New Decisions"))
     updated_decisions = models.IntegerField(default=0,
@@ -115,13 +122,23 @@ class ImportJob(models.Model):
             return False
         return (self.chunks_completed + self.chunks_failed) >= self.total_chunks
     
-    def mark_chunk_completed(self, decisions_count: int = 0):
-        """Atomically increment completed chunk counter"""
+    def mark_chunk_completed(self, decisions_restored: int = 0, decisions_assigned: int = 0):
+        """Atomically increment completed chunk counter and track decision progress
+        
+        Args:
+            decisions_restored: Number of decisions restored from Redis in this chunk
+            decisions_assigned: Number of decisions assigned to pipeline tasks
+        """
         from django.db.models import F
-        ImportJob.objects.filter(pk=self.pk).update(
-            chunks_completed=F('chunks_completed') + 1,
-            new_decisions=F('new_decisions') + decisions_count,
-        )
+        update_dict = {
+            'chunks_completed': F('chunks_completed') + 1,
+        }
+        if decisions_restored > 0:
+            update_dict['decisions_restored_from_redis'] = F('decisions_restored_from_redis') + decisions_restored
+        if decisions_assigned > 0:
+            update_dict['decisions_assigned_to_pipeline'] = F('decisions_assigned_to_pipeline') + decisions_assigned
+        
+        ImportJob.objects.filter(pk=self.pk).update(**update_dict)
         self.refresh_from_db()
         
         # Auto-complete if all chunks done

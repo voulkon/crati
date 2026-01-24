@@ -80,7 +80,7 @@ def fetch_daily_decisions_to_redis(self, target_date_str: str,
             celery_task_id=self.request.id,
             status=ImportJobStatus.FETCHING,
             search_params=search_params,
-            created_at=timezone.now()
+            # created_at auto-set by Django's auto_now_add=True
         )
         
         logger.info(f"Task {self.request.id}: Created ImportJob {import_job.id} for {target_date}")
@@ -134,6 +134,22 @@ def fetch_daily_decisions_to_redis(self, target_date_str: str,
         logger.success(
             f"Task {self.request.id}: Fetched {len(all_decisions)} decisions for {target_date}"
         )
+        
+        # Handle case with zero decisions
+        if len(all_decisions) == 0:
+            import_job.status = ImportJobStatus.COMPLETED
+            import_job.completed_at = timezone.now()
+            import_job.save(update_fields=['status', 'completed_at'])
+            logger.info(f"Task {self.request.id}: No decisions found for {target_date}, marking job as completed")
+            return {
+                'status': 'success',
+                'job_id': import_job.id,
+                'decisions_count': 0,
+                'chunks_created': 0,
+                'target_date': target_date_str,
+                'message': 'No decisions found for this date',
+                'task_id': self.request.id
+            }
         
         # Initialize Redis cache
         redis_cache = RedisDecisionCache()
@@ -380,18 +396,26 @@ def store_decisions_from_redis(self, chunk_id: str, job_id: int,
         
         # Update ImportJob progress
         if import_job:
+            # Always track restored and assigned counts, even if some failed
+            import_job.mark_chunk_completed(
+                decisions_restored=len(decision_dicts),  # How many we got from Redis
+                decisions_assigned=len(dispatched_tasks)  # How many we sent to pipeline
+            )
+            
+            # Also track failures separately if any
             if failed_imports:
-                import_job.mark_chunk_failed(
-                    error_msg=f"{len(failed_imports)} failures in chunk {chunk_id}",
-                    decisions_count=len(failed_imports)
+                from django.db.models import F
+                ImportJob.objects.filter(pk=import_job.pk).update(
+                    error_count=F('error_count') + len(failed_imports)
                 )
-            else:
-                import_job.mark_chunk_completed(decisions_count=len(dispatched_tasks))
+                import_job.refresh_from_db()
             
             logger.info(
                 f"Task {self.request.id}: Updated job {job_id} progress: "
                 f"{import_job.chunks_completed}/{import_job.total_chunks} chunks completed "
-                f"({import_job.progress_percentage:.1f}%)"
+                f"({import_job.progress_percentage:.1f}%), "
+                f"Restored: {import_job.decisions_restored_from_redis}/{import_job.total_decisions}, "
+                f"Assigned to pipeline: {import_job.decisions_assigned_to_pipeline}"
             )
         
         logger.success(

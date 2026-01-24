@@ -35,6 +35,7 @@ def daily_decision_analysis(request):
     analysis_service = DecisionAnalysisService()
 
     # Get comprehensive analysis
+    # TODO: This is super slow
     analysis_data = analysis_service.get_daily_decision_analysis(target_date)
     
     # Get paginated decision details

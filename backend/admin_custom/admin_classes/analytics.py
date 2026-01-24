@@ -65,8 +65,7 @@ class ImportJobAdmin(admin.ModelAdmin):
         "created_at",
         "decisions_count",
         "chunk_progress_display",
-        "total_decisions",
-        "new_decisions",
+        "pipeline_progress_display",
         "no_health_check_count",
         "no_health_check_link",
         "healthy_count",
@@ -87,8 +86,9 @@ class ImportJobAdmin(admin.ModelAdmin):
         ('Basic Info', {
             'fields': ('id', 'start_date', 'end_date', 'status', 'created_by', 'created_at', 'completed_at')
         }),
-        ('Progress', {
-            'fields': ('total_decisions', 'new_decisions', 'updated_decisions', 'error_count')
+        ('Pipeline Progress', {
+            'fields': ('total_decisions', 'decisions_restored_from_redis', 'decisions_assigned_to_pipeline', 'new_decisions', 'updated_decisions', 'error_count'),
+            'description': 'Track decisions through the import pipeline: API → Redis → Restored → Pipeline'
         }),
         ('Redis Chunks', {
             'fields': ('total_chunks', 'chunks_completed', 'chunks_failed', 'chunk_task_ids', 'search_params'),
@@ -208,6 +208,32 @@ class ImportJobAdmin(admin.ModelAdmin):
         completed = obj.chunks_completed + obj.chunks_failed
         return f"{completed}/{obj.total_chunks}"
     chunk_progress_display.short_description = 'Chunks'
+
+    def pipeline_progress_display(self, obj):
+        """Display decision pipeline progress: Fetched → Redis → Restored → Assigned"""
+        if obj.total_decisions == 0:
+            return "-"
+        
+        parts = []
+        # (a) Stored in Redis (this is total_decisions)
+        parts.append(f"Redis: {obj.total_decisions}")
+        
+        # (b) Restored from Redis
+        if obj.decisions_restored_from_redis > 0:
+            pct_restored = (obj.decisions_restored_from_redis / obj.total_decisions) * 100
+            parts.append(f"Restored: {obj.decisions_restored_from_redis} ({pct_restored:.0f}%)")
+        else:
+            parts.append(f"Restored: 0")
+        
+        # (c) Assigned to pipeline
+        if obj.decisions_assigned_to_pipeline > 0:
+            pct_assigned = (obj.decisions_assigned_to_pipeline / obj.total_decisions) * 100
+            parts.append(f"Pipeline: {obj.decisions_assigned_to_pipeline} ({pct_assigned:.0f}%)")
+        else:
+            parts.append(f"Pipeline: 0")
+        
+        return mark_safe("<br>".join(parts))
+    pipeline_progress_display.short_description = 'Pipeline Progress'
 
     def failed_health_checks_link(self, obj):
         errors = getattr(obj, "health_error_count", 0) or 0

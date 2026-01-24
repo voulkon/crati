@@ -31,59 +31,67 @@ from diavgeia_api.models.decisions import Decision
 @shared_task(bind=True, max_retries=3)
 def fetch_daily_decisions_to_redis(self, target_date_str: str, 
                                 search_params: Optional[Dict[str, Any]] = None,
-                                chunk_size: int = 10):
+                                chunk_size: int = 10,
+                                job_id: Optional[int] = None):
     """
     Phase 1: Fetch ALL decisions for a full day and save to Redis with batch tracking.
     
+    NOW EXPECTS job_id from orchestrator - updates existing ImportJob instead of creating new one.
+    This provides immediate visibility as soon as the import is queued.
+    
     IMPROVEMENTS:
     - Uses Redis instead of filesystem pickles (no lost files on container restart)
-    - Creates ImportBatch record for tracking progress
-    - Provides visibility into import status
+    - Updates existing ImportJob created by orchestrator
+    - Provides visibility into import status from the moment it's queued
     
     Args:
         target_date_str: Date in ISO format (e.g., "2025-03-09")
         search_params: Additional search parameters
         chunk_size: Number of decisions per chunk (default: 10)
+        job_id: ImportJob ID created by orchestrator (required)
         
     Returns:
-        Dict with batch_id, Redis keys, and metadata
+        Dict with job_id, Redis keys, and metadata
     """
     try:
         from datetime import datetime
         target_date = datetime.fromisoformat(target_date_str).date()
-        # Check if job already exists (prevent duplicate imports)
-        existing_job = ImportJob.objects.filter(
-            start_date=target_date,
-            end_date=target_date,
-            status__in=[
-                ImportJobStatus.FETCHING,
-                ImportJobStatus.SPLITTING,
-                ImportJobStatus.PROCESSING
-            ]
-        ).first()
         
-        if existing_job:
+        # Get the ImportJob created by orchestrator
+        if job_id:
+            try:
+                import_job = ImportJob.objects.get(id=job_id)
+                logger.info(
+                    f"Task {self.request.id}: Using existing ImportJob {import_job.id} for {target_date}"
+                )
+            except ImportJob.DoesNotExist:
+                logger.error(f"Task {self.request.id}: ImportJob {job_id} not found! Creating new one.")
+                import_job = None
+        else:
             logger.warning(
-                f"Task {self.request.id}: Import already in progress for {target_date} "
-                f"(job ID {existing_job.id})"
+                f"Task {self.request.id}: No job_id provided (legacy call?), creating new ImportJob"
             )
-            return {
-                'status': 'duplicate',
-                'message': f'Import already in progress for {target_date}',
-                'existing_job_id': existing_job.id
-            }
+            import_job = None
         
-        # Create ImportJob record
-        import_job = ImportJob.objects.create(
-            start_date=target_date,
-            end_date=target_date,
-            celery_task_id=self.request.id,
-            status=ImportJobStatus.FETCHING,
-            search_params=search_params,
-            # created_at auto-set by Django's auto_now_add=True
-        )
+        # Fallback: Create ImportJob if not found (backward compatibility)
+        if not import_job:
+            import_job = ImportJob.objects.create(
+                start_date=target_date,
+                end_date=target_date,
+                celery_task_id=self.request.id,
+                status=ImportJobStatus.FETCHING,
+                search_params=search_params,
+            )
+            logger.info(f"Task {self.request.id}: Created new ImportJob {import_job.id} for {target_date}")
         
-        logger.info(f"Task {self.request.id}: Created ImportJob {import_job.id} for {target_date}")
+        # Update job status to FETCHING (transition from PENDING)
+        import_job.status = ImportJobStatus.FETCHING
+        import_job.celery_task_id = self.request.id
+        if search_params:
+            import_job.search_params = {**(import_job.search_params or {}), **search_params}
+        import_job.save(update_fields=['status', 'celery_task_id', 'search_params'])
+        
+        logger.info(f"Task {self.request.id}: Updated ImportJob {import_job.id} to FETCHING status")
         
         # Create fetcher and get decisions for the full day
         fetcher = DiavgeiaFetcher()
@@ -502,41 +510,103 @@ def store_decisions_from_pickle(self, pickle_file: str, **kwargs):
 
 
 @shared_task(bind=True)
-def fetch_daily_decisions_distributed(self, target_date_str: str, chunk_size: int = 10):
+def fetch_daily_decisions_distributed(self, target_date_str: str, chunk_size: int = 10, force: bool = False, job_id: Optional[int] = None):
     """
-    Orchestrator task: Fetches full day of decisions and distributes storage work using Redis.
+    Orchestrator task: Uses existing ImportJob or creates one, then dispatches fetch task.
     
     This is the main entry point for daily decision imports.
     
     Args:
         target_date_str: Date to fetch in ISO format (e.g., "2025-03-09")
         chunk_size: Number of decisions per chunk (default: 10)
+        force: Force import even if already completed (default: False)
+        job_id: Pre-created ImportJob ID from command (optional)
         
     Returns:
-        Dict with orchestration results including batch_id for tracking
+        Dict with orchestration results including job_id for tracking
     """
     try:
         from datetime import datetime
         target_date = datetime.fromisoformat(target_date_str).date()
         
-        logger.info(f"Orchestrator {self.request.id}: Starting distributed import for {target_date}")
+        logger.info(f"Orchestrator {self.request.id}: Starting distributed import for {target_date} (force={force}, job_id={job_id})")
         
-        # Dispatch the fetch task (will create batch and store in Redis)
+        # Use provided ImportJob or create new one
+        if job_id:
+            try:
+                import_job = ImportJob.objects.get(id=job_id)
+                logger.info(f"Orchestrator {self.request.id}: Using pre-created ImportJob {import_job.id}")
+            except ImportJob.DoesNotExist:
+                logger.warning(f"Orchestrator {self.request.id}: ImportJob {job_id} not found, creating new one")
+                import_job = None
+        else:
+            import_job = None
+        
+        # Create ImportJob if not provided (fallback for direct calls)
+        if not import_job:
+            # Check for existing job (unless force=True)
+            existing_job = None
+            if not force:
+                existing_job = ImportJob.objects.filter(
+                    start_date=target_date,
+                    end_date=target_date,
+                    status__in=[
+                        ImportJobStatus.PENDING,
+                        ImportJobStatus.FETCHING,
+                        ImportJobStatus.SPLITTING,
+                        ImportJobStatus.PROCESSING
+                    ]
+                ).first()
+                
+                if existing_job:
+                    logger.warning(
+                        f"Orchestrator {self.request.id}: Import already in progress for {target_date} "
+                        f"(job ID {existing_job.id}). Use --force to override."
+                    )
+                    return {
+                        'status': 'duplicate',
+                        'message': f'Import already in progress for {target_date}',
+                        'existing_job_id': existing_job.id,
+                        'target_date': target_date_str,
+                        'note': 'Use force=True to create a new import job'
+                    }
+            
+            # Create ImportJob for visibility
+            import_job = ImportJob.objects.create(
+                start_date=target_date,
+                end_date=target_date,
+                celery_task_id=self.request.id,
+                status=ImportJobStatus.PENDING,
+                search_params={'chunk_size': chunk_size, 'force': force},
+            )
+            
+            logger.info(
+                f"Orchestrator {self.request.id}: Created ImportJob {import_job.id} for {target_date}"
+            )
+        
+        # Dispatch the fetch task with job_id
         fetch_task = fetch_daily_decisions_to_redis.delay(
             target_date_str=target_date_str,
-            chunk_size=chunk_size
+            chunk_size=chunk_size,
+            job_id=import_job.id
         )
         
+        # Update job with fetch task ID
+        import_job.celery_task_id = fetch_task.id
+        import_job.save(update_fields=['celery_task_id'])
+        
         logger.info(
-            f"Orchestrator {self.request.id}: Dispatched fetch task {fetch_task.id} for {target_date}"
+            f"Orchestrator {self.request.id}: Dispatched fetch task {fetch_task.id} for {target_date}, "
+            f"ImportJob {import_job.id} is now visible in monitoring"
         )
         
         return {
             'status': 'dispatched',
             'target_date': target_date_str,
+            'job_id': import_job.id,
             'fetch_task_id': fetch_task.id,
             'orchestrator_id': self.request.id,
-            'note': 'Fetch task will automatically create ImportBatch for progress tracking'
+            'note': f'ImportJob {import_job.id} created immediately for tracking. Check admin for progress.'
         }
         
     except Exception as e:

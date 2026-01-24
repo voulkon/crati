@@ -447,6 +447,16 @@
 {% block content %}
 <h1>Daily Decision Analysis</h1>
 
+<!-- Help banner -->
+<div style="background: #e7f3ff; border-left: 4px solid #007cba; padding: 12px 15px; margin: 15px 0; border-radius: 4px;">
+    <strong>💡 Quick Guide:</strong>
+    <ul style="margin: 8px 0 0 20px; font-size: 0.9em;">
+        <li><strong>Re-importing old days with bugs?</strong> Just click "Fetch Day" (no Force needed)</li>
+        <li><strong>Import is stuck?</strong> Tick "Force" to override the running job</li>
+        <li><strong>Need today's latest?</strong> Use "Incremental" (ignores date picker)</li>
+    </ul>
+</div>
+
 <!-- Alert messages -->
 <div id="alert-container"></div>
 
@@ -489,11 +499,11 @@
             </label>
             <label style="cursor: pointer;">
                 <input type="checkbox" id="opt-force">
-                <span title="⚠️ FORCE MODE&#10;&#10;Re-imports decisions even if they were already processed for this date.&#10;&#10;Use when:&#10;  • You suspect incomplete/corrupted data&#10;  • You want to refresh existing decisions&#10;  • You need to re-run after a bug fix&#10;&#10;⚠️ WARNING:&#10;  • May create duplicate work&#10;  • Slower than normal import&#10;  • Updates existing records&#10;&#10;Default: OFF (use only when needed)">⚠️ Force</span>
+                <span title="⚠️ FORCE MODE&#10;&#10;Override an ALREADY RUNNING import for this date.&#10;&#10;🔍 When to use:&#10;  • An import is stuck in PENDING/FETCHING/PROCESSING&#10;  • You deployed a bug fix and want to restart mid-import&#10;  • You need to cancel and re-run an active job&#10;&#10;🎯 For RE-IMPORTING COMPLETED days:&#10;  ✓ Just click 'Fetch Day' - NO force needed!&#10;  ✓ System allows re-import of COMPLETED/FAILED jobs automatically&#10;  ✓ Use this for days imported with old buggy code&#10;&#10;⚠️ WARNING:&#10;  • Creates duplicate jobs if import is running&#10;  • May waste resources on parallel imports&#10;&#10;Default: OFF (rarely needed)">⚠️ Force</span>
             </label>
             <label style="cursor: pointer;">
                 <input type="checkbox" id="opt-incremental">
-                <span title="⚡ INCREMENTAL MODE&#10;&#10;Syncs only NEW decisions published since your last import (timestamp-based).&#10;&#10;Use when:&#10;  • You want to catch up on recent changes&#10;  • Running multiple imports per day&#10;  • You need fast updates&#10;&#10;✓ Much faster than full day import&#10;✓ Automatically finds new decisions&#10;&#10;⚠️ NOTE:&#10;  • Ignores the date picker (uses last sync time)&#10;  • Cannot be combined with Distributed/Reconcile&#10;  • Only fetches decisions published after last import&#10;&#10;Default: OFF (use for quick updates)">⚡ Incremental</span>
+                <span title="⚡ INCREMENTAL MODE&#10;&#10;Syncs only NEW decisions published since your last import (timestamp-based).&#10;&#10;🔍 When to use:&#10;  • Catching up on today's new publications&#10;  • Running multiple imports per day&#10;  • Quick updates for ongoing monitoring&#10;&#10;❌ NOT for re-importing historical days:&#10;  • Ignores the date picker completely&#10;  • Uses last sync timestamp, not selected date&#10;  • Won't fix bugs in old imports&#10;&#10;✓ Much faster than full day import&#10;✓ Automatically finds decisions after last sync&#10;&#10;⚠️ NOTE:&#10;  • Cannot be combined with Distributed/Reconcile&#10;  • Only fetches decisions with uploadDate > last import&#10;&#10;Default: OFF (for ongoing monitoring only)">⚡ Incremental</span>
             </label>
         </div>
     </div>

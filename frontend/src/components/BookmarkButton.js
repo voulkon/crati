@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { toggleBookmarkForCurrentPage, isCurrentPageBookmarked } from '../api/bookmarks';
 import { useTranslation } from '../contexts/TranslationContext';
 import './BookmarkButton.css';
@@ -9,6 +10,7 @@ import './BookmarkButton.css';
  */
 export default function BookmarkButton() {
   const { t } = useTranslation();
+  const location = useLocation();
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showToast, setShowToast] = useState(false);
@@ -16,7 +18,7 @@ export default function BookmarkButton() {
 
   useEffect(() => {
     checkBookmarkStatus();
-  }, [window.location.pathname, window.location.search]);
+  }, [location.pathname, location.search]);
 
   async function checkBookmarkStatus() {
     try {

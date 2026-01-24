@@ -374,7 +374,8 @@ const EntityDetailPage = () => {
     };
 
     loadInitialData();
-  }, [fetchEntityDateRange, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [explorationMode, entityType, entityId]);
 
   // Load data when time range is set
   useEffect(() => {
@@ -393,7 +394,8 @@ const EntityDetailPage = () => {
 
       loadData();
     }
-  }, [timeRange, fetchStatistics, fetchDecisions, fetchDecisionTypes, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeRange, sortBy, debouncedSearchQuery, selectedDecisionTypes, amountFilters, organizationFilters]);
 
   useEffect(() => {
     const handleScroll = () => {

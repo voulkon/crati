@@ -36,6 +36,7 @@ ENV PYTHONUNBUFFERED=1
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     postgresql-client \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /code

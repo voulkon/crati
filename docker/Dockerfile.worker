@@ -60,11 +60,13 @@ RUN if [ "$LIGHT_WORKER" = "true" ]; then \
         echo "🪶 LIGHT_WORKER mode: Installing minimal runtime dependencies..."; \
         apt-get update && apt-get install -y \
             postgresql-client \
+            procps \
             && rm -rf /var/lib/apt/lists/*; \
     else \
         echo "🚀 FULL_WORKER mode: Installing full runtime dependencies (OpenCV, OpenMP)..."; \
         apt-get update && apt-get install -y \
             postgresql-client \
+            procps \
             libgl1 \
             libglib2.0-0 \
             libgomp1 \

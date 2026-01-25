@@ -54,6 +54,7 @@ export function useAllowlistCheck() {
     }
 
     checkAccess();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, isSignedIn, getToken]);
 
   return { isAllowed, isChecking };

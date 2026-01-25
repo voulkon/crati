@@ -413,7 +413,8 @@ const EntityDetailPage = () => {
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [pagination, loadingMore, loading, loadMoreDecisions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagination, loadingMore, loading]);
 
   // Handlers
   const handleMonthRangeChange = (startIndex, endIndex) => {

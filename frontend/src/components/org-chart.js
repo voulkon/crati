@@ -406,13 +406,10 @@ const OrgChartViewer = ({ orgData, onNodeClick }) => {
         }, 100);
       }, 50);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     processedNodes, 
-    processedEdges, 
-    getLayoutedElements, 
-    setNodes, 
-    setEdges, 
-    fitView
+    processedEdges
   ]);
   
   // Render the flow diagram

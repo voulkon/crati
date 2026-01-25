@@ -39,6 +39,7 @@ function AuthenticatedApp({ controlsLayout }) {
   // Set up the token getter for API client
   useEffect(() => {
     setTokenGetter(getToken);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getToken]);
   
   // If allowlist is enabled, check if user is allowed

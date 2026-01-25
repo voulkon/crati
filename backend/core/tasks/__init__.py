@@ -75,6 +75,16 @@ from .tasks_org_decisions import (
     fetch_all_orgs_decisions,
 )
 
+from .tasks_import_validation import (
+    validate_and_backfill_imports,
+    validate_single_day,
+    update_thresholds_from_analysis,
+)
+
+from .tasks_periodic_validation import (
+    periodic_validation_task,
+)
+
 # This ensures all tasks are available when importing from core.tasks
 __all__ = [
     # Documents
@@ -122,5 +132,10 @@ __all__ = [
     "retry_failed_decisions_for_import_job",
     "fetch_org_decisions_to_pickle",
     "store_org_decisions_from_pickle",
-    "fetch_all_orgs_decisions"
+    "fetch_all_orgs_decisions",
+    # Import Validation
+    "validate_and_backfill_imports",
+    "validate_single_day",
+    "update_thresholds_from_analysis",
+    "periodic_validation_task",
 ]

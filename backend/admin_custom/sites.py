@@ -137,7 +137,8 @@ def register_all_models():
         DecisionHealthCheckAdmin, DecisionHealthSummaryAdmin,
         APIAnalyticsAdmin, EndpointStatsAdmin, DailyTrafficAdmin, ImportJobAdmin,
         CustomUserAdmin, SubscriptionAdmin, BackupAdmin,
-        AIModelPricingAdmin, TaskOutputEstimateAdmin, AIJobDefinitionAdmin, AIJobExecutionAdmin
+        AIModelPricingAdmin, TaskOutputEstimateAdmin, AIJobDefinitionAdmin, AIJobExecutionAdmin,
+        ImportThresholdAdmin
     )
     
     from core.models.decisions import Decision, Attachment
@@ -146,6 +147,7 @@ def register_all_models():
     from core.models.ai_pricing import AIModelPricing, TaskOutputEstimate, AIJobDefinition, AIJobExecution
     from core.models.decision_health import DecisionHealthCheck, DecisionHealthSummary
     from core.models.import_jobs import ImportJob, DateCoverage
+    from core.models.import_thresholds import ImportThreshold
     from core.models.backups import Backup
     from api.models import APIAnalytics, EndpointStats, DailyTraffic
     from users.models import CustomUser, Subscription
@@ -184,6 +186,9 @@ def register_all_models():
     admin_site.register(Subscription, SubscriptionAdmin)
 
     # Register Backup models
+    
+    # Register Import Validation models
+    admin_site.register(ImportThreshold, ImportThresholdAdmin)
     admin_site.register(Backup, BackupAdmin)
 
 

@@ -27,12 +27,13 @@ ENABLE_LEGACY_DOCUMENT_SIGNALS = not USE_ORCHESTRATOR_MODE
 
 if USE_ORCHESTRATOR_MODE:
     
-    logger.debug("=" * 50,
-    "🎯 Orchestrator Mode ENABLED:",
-    "   - Legacy document processing signals DISABLED",
-    "   - Use run_decision_pipeline_task for processing",
-    "   - No automatic document/entity processing on save",
-    "=" * 50)
+    # logger.debug("=" * 50,
+    # "🎯 Orchestrator Mode ENABLED:",
+    # "   - Legacy document processing signals DISABLED",
+    # "   - Use run_decision_pipeline_task for processing",
+    # "   - No automatic document/entity processing on save",
+    # "=" * 50)
+    ...
 
 # ============================================================================
 # Clerk Authentication Settings

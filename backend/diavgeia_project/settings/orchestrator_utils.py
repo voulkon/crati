@@ -103,10 +103,10 @@ def validate_and_format_public_key(raw_key: str | None) -> str | None:
     
     formatted_key = "\n".join(lines)
     
-    logger.info(
-        f"✓ CLERK_JWT_PUBLIC_KEY validated successfully "
-        f"({len(content_clean)} base64 chars)"
-    )
+    # logger.debug(
+    #     f"✓ CLERK_JWT_PUBLIC_KEY validated successfully "
+    #     f"({len(content_clean)} base64 chars)"
+    # )
     
     return formatted_key
 

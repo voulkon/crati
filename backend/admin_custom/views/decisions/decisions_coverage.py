@@ -20,6 +20,10 @@ def coverage_explorer(request):
         "entity_type", "all"  # Default to 'all' - showing all decisions
     )  # 'all', 'organization', 'unit', or 'signer'
     entity_id = request.GET.get("entity_id")
+    
+    # Normalize null/empty entity_id (handle 'null' string from JavaScript)
+    if entity_id in ['null', 'None', '']:
+        entity_id = None
 
     # Get view type (quarter, year, or multi-year)
     view_type = request.GET.get("view", "quarter")  # 'quarter', 'year', or 'multi-year'

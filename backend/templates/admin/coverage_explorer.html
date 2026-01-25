@@ -605,10 +605,18 @@
             }
         });
         
+        // Initialize entity type on page load (trigger change to set correct state)
+        $('#entity-type').trigger('change');
+        
         // Handle load button
         $('#load-entity').on('click', function() {
             const entityType = $('#entity-type').val();
-            const entityId = $('#entity-select').val();
+            let entityId = $('#entity-select').val();
+            
+            // Normalize null/empty values
+            if (entityId === 'null' || entityId === null || entityId === '') {
+                entityId = null;
+            }
             
             // For "all" mode, entity ID is not required
             if (entityType !== 'all' && !entityId) {
@@ -621,7 +629,12 @@
             var currentYear = {% if year %}{{ year }}{% else %}new Date().getFullYear(){% endif %};
             var currentMonth = {% if month %}{{ month }}{% else %}new Date().getMonth() + 1{% endif %};
             
-            var url = '?entity_type=' + entityType + '&entity_id=' + entityId + '&view=' + viewType + '&year=' + currentYear;
+            // Build URL - omit entity_id if it's null or for 'all' mode
+            var url = '?entity_type=' + entityType;
+            if (entityType !== 'all' && entityId) {
+                url += '&entity_id=' + entityId;
+            }
+            url += '&view=' + viewType + '&year=' + currentYear;
             
             if (viewType === 'quarter') {
                 url += '&month=' + currentMonth;

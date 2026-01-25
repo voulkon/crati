@@ -23,9 +23,28 @@ def get_month_calendar_data(month, year, entity_type, entity_id):
     # Get calendar info
     cal = calendar.monthcalendar(year, month)
 
-    # Get decision coverage data if an entity is selected
+    # Get decision coverage data
     coverage_data = {}
-    if entity_id:
+    if entity_type == 'all':
+        # For "all" decisions, query Decision model directly grouped by date
+        from core.models.decisions import Decision
+        from django.db.models import Count
+        
+        decisions_by_day = Decision.objects.filter(
+            issue_date__year=year,
+            issue_date__month=month
+        ).extra(
+            select={'day': 'DATE(issue_date)'}
+        ).values('day').annotate(
+            count=Count('id')
+        ).order_by('day')
+        
+        for item in decisions_by_day:
+            day_date = item['day']
+            if isinstance(day_date, str):
+                day_date = datetime.strptime(day_date, '%Y-%m-%d').date()
+            coverage_data[day_date] = item['count']
+    elif entity_id:
         # Get the date coverage for the selected entity
         coverage_query = DateCoverage.objects.filter(date__year=year, date__month=month)
 
@@ -105,6 +124,9 @@ def get_month_calendar_data(month, year, entity_type, entity_id):
 
 def get_entity_name(entity_type, entity_id):
     """Helper function to get entity name"""
+    if entity_type == 'all':
+        return "All Decisions"
+    
     entity_name = None
     if entity_id:
         try:
@@ -127,7 +149,22 @@ def get_year_summary_data(year, entity_type, entity_id):
     total_decisions = 0
     months_with_data = 0
 
-    if entity_id:
+    if entity_type == 'all':
+        # For "all" decisions, query Decision model directly
+        from core.models.decisions import Decision
+        from django.db.models import Count
+        
+        decisions_by_month = Decision.objects.filter(
+            issue_date__year=year
+        ).extra(
+            select={'month': 'EXTRACT(MONTH FROM issue_date)'}
+        ).values('month').annotate(
+            count=Count('id')
+        ).order_by('month')
+        
+        total_decisions = sum(item['count'] for item in decisions_by_month)
+        months_with_data = len(decisions_by_month)
+    elif entity_id:
         # Get coverage data for the entire year
         coverage_query = DateCoverage.objects.filter(date__year=year)
 

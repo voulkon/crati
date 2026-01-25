@@ -14,11 +14,11 @@ from loguru import logger
 
 @staff_member_required
 def coverage_explorer(request):
-    """View for exploring decision coverage by organization, unit, or signer"""
+    """View for exploring decision coverage by organization, unit, signer, or ALL decisions"""
     # Get selected entity
     entity_type = request.GET.get(
-        "entity_type", "organization"
-    )  # 'organization', 'unit', or 'signer'
+        "entity_type", "all"  # Default to 'all' - showing all decisions
+    )  # 'all', 'organization', 'unit', or 'signer'
     entity_id = request.GET.get("entity_id")
 
     # Get view type (quarter, year, or multi-year)
@@ -39,8 +39,8 @@ def coverage_explorer(request):
         year = datetime.now().year
 
     # Handle entity type validation
-    if entity_type not in ["organization", "unit", "signer"]:
-        entity_type = "organization"  # Default fallback
+    if entity_type not in ["all", "organization", "unit", "signer"]:
+        entity_type = "all"  # Default fallback to show all decisions
 
     if view_type == "multi-year":
         # Create multi-year view (10 years centered around current year)

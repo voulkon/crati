@@ -306,11 +306,12 @@
     <div class="entity-selector">
         <label for="entity-type">View by:</label>
         <select id="entity-type">
+            <option value="all" {% if entity_type == 'all' %}selected{% endif %}>All Decisions</option>
             <option value="organization" {% if entity_type == 'organization' %}selected{% endif %}>Organization</option>
             <option value="signer" {% if entity_type == 'signer' %}selected{% endif %}>Signer</option>
         </select>
         
-        <select id="entity-select" style="width: 400px;">
+        <select id="entity-select" style="width: 400px;" {% if entity_type == 'all' %}disabled{% endif %}>
             {% if entity_id %}
             <option value="{{ entity_id }}" selected>{{ entity_name }}</option>
             {% endif %}
@@ -584,15 +585,24 @@
         
         // Handle entity type change
         $('#entity-type').on('change', function() {
-            $('#entity-select').val(null).trigger('change');
+            const entityType = $(this).val();
             
-            // Update placeholder based on entity type
-            if ($(this).val() === 'signer') {
-                $('#entity-select').data('placeholder', 'Search by last name or first name');
+            if (entityType === 'all') {
+                // Disable entity selector for "all" mode
+                $('#entity-select').prop('disabled', true).val(null).trigger('change');
             } else {
-                $('#entity-select').data('placeholder', 'Search for an organization');
+                // Enable entity selector
+                $('#entity-select').prop('disabled', false);
+                $('#entity-select').val(null).trigger('change');
+                
+                // Update placeholder based on entity type
+                if (entityType === 'signer') {
+                    $('#entity-select').data('placeholder', 'Search by last name or first name');
+                } else {
+                    $('#entity-select').data('placeholder', 'Search for an organization');
+                }
+                $('#entity-select').trigger('change');
             }
-            $('#entity-select').trigger('change');
         });
         
         // Handle load button
@@ -600,7 +610,8 @@
             const entityType = $('#entity-type').val();
             const entityId = $('#entity-select').val();
             
-            if (!entityId) {
+            // For "all" mode, entity ID is not required
+            if (entityType !== 'all' && !entityId) {
                 alert('Please select an entity first');
                 return;
             }

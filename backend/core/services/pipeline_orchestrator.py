@@ -590,6 +590,11 @@ class DecisionPipelineOrchestrator:
         try:
             logger.info(f"Step 3: Processing document for {decision.ada}")
             
+            if not settings.EXTRACT_THE_DOCS_FROM_PDFS:
+                logger.info(f"Skipping document processing for {decision.ada} (EXTRACT_THE_DOCS_FROM_PDFS=False)")
+                self.update_health_status(health_check, 'document_extraction', HealthStatus.UNKNOWN)
+                return
+            
             if not decision.document_url:
                 self.update_health_status(health_check, 'document_extraction', HealthStatus.WARNING, "No document URL")
                 return

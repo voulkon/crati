@@ -28,7 +28,9 @@ class DecisionHealthService:
     """
     
     def __init__(self):
-        self.opensearch_service = OpenSearchService()
+
+        if settings.INDEX_THE_OPENSEARCH:
+            self.opensearch_service = OpenSearchService()
     
     def check_decision_health(self, decision: Decision, force_refresh: bool = False) -> DecisionHealthCheck:
         """
@@ -66,8 +68,13 @@ class DecisionHealthService:
         self._check_ingestion(decision, health_check)
         self._check_relations(decision, health_check)
         self._check_entities(decision, health_check)
-        self._check_document_extraction(decision, health_check)
-        self._check_opensearch(decision, health_check)
+
+        if settings.EXTRACT_THE_DOCS_FROM_PDFS:
+            self._check_document_extraction(decision, health_check)
+        
+        if settings.INDEX_THE_OPENSEARCH:
+            self._check_opensearch(decision, health_check)
+        
         self._check_coverage(decision, health_check)
         
         # Calculate check duration

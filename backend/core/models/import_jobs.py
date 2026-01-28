@@ -175,6 +175,45 @@ class ImportJob(models.Model):
             self.completed_at = timezone.now()
             self.save(update_fields=['status', 'completed_at'])
 
+class ImportFailure(models.Model):
+    """Tracks specific failures during an import job for later reprocessing"""
+    
+    class FailureType(models.TextChoices):
+        CHUNK = 'CHUNK', _('Chunk Level Failure')
+        DECISION = 'DECISION', _('Individual Decision Failure')
+        FETCH = 'FETCH', _('API Fetch Failure')
+
+    import_job = models.ForeignKey(
+        ImportJob, 
+        on_delete=models.CASCADE, 
+        related_name='failures',
+        verbose_name=_("Import Job")
+    )
+    task_id = models.CharField(max_length=50, db_index=True)
+    ada = models.CharField(max_length=20, null=True, blank=True, db_index=True)
+    failure_type = models.CharField(
+        max_length=20, 
+        choices=FailureType.choices,
+        default=FailureType.DECISION
+    )
+    error_message = models.TextField()
+    error_traceback = models.TextField(null=True, blank=True)
+    
+    # Store the problematic data for debugging/reprocessing
+    data_snapshot = models.JSONField(null=True, blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved = models.BooleanField(default=False)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = _("Import Failure")
+        verbose_name_plural = _("Import Failures")
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Failure {self.failure_type} in Task {self.task_id} ({self.ada or 'No ADA'})"
+
 class DateCoverage(models.Model):
     """Tracks which dates have decisions in the database"""
     date = models.DateField(db_index=True)

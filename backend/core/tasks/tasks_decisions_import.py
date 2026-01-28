@@ -19,10 +19,11 @@ from typing import List, Dict, Any, Optional
 from loguru import logger
 import time
 import random
+import traceback
 from core.fetchers.diavgeia_fetcher import DiavgeiaFetcher
 from core.importers.decisions import DecisionImporter
 from core.services.redis_decision_cache import RedisDecisionCache
-from core.models.import_jobs import ImportJobStatus, ImportJob
+from core.models.import_jobs import ImportJobStatus, ImportJob, ImportFailure
 from django.db import transaction
 from django.utils import timezone
 from diavgeia_api.models.decisions import Decision
@@ -227,10 +228,20 @@ def fetch_daily_decisions_to_redis(self, target_date_str: str,
         
         # Update job status if it exists
         try:
-            import_job = ImportJob.objects.get(celery_task_id=self.request.id)
+            import_job = ImportJob.objects.get(id=job_id) if job_id else ImportJob.objects.get(celery_task_id=self.request.id)
             import_job.status = ImportJobStatus.FAILED
             import_job.error_details = str(e)
             import_job.save(update_fields=['status', 'error_details'])
+            
+            # Record structured failure
+            ImportFailure.objects.create(
+                import_job=import_job,
+                task_id=self.request.id,
+                failure_type=ImportFailure.FailureType.FETCH,
+                error_message=str(e),
+                error_traceback=traceback.format_exc(),
+                data_snapshot={'target_date': target_date_str, 'search_params': search_params}
+            )
         except ImportJob.DoesNotExist:
             pass
         
@@ -401,6 +412,18 @@ def store_decisions_from_redis(self, chunk_id: str, job_id: int,
                         'ada': decision_ada,
                         'error': str(decision_error)
                     })
+                    
+                    # Record specific decision failure
+                    if import_job:
+                        ImportFailure.objects.create(
+                            import_job=import_job,
+                            task_id=self.request.id,
+                            ada=decision_ada,
+                            failure_type=ImportFailure.FailureType.DECISION,
+                            error_message=str(decision_error),
+                            error_traceback=traceback.format_exc(),
+                            data_snapshot=decision_dto.model_dump() if hasattr(decision_dto, 'model_dump') else str(decision_dto)
+                        )
         
         # Update ImportJob progress
         if import_job:
@@ -452,6 +475,21 @@ def store_decisions_from_redis(self, chunk_id: str, job_id: int,
         try:
             import_job = ImportJob.objects.get(id=job_id)
             import_job.mark_chunk_failed(error_msg=str(e))
+            
+            # Record structured failure for the chunk
+            # Try to get decision ADAs from the chunk if available
+            snapshot = {'chunk_id': chunk_id}
+            if 'decision_dicts' in locals():
+                snapshot['decisions'] = decision_dicts
+            
+            ImportFailure.objects.create(
+                import_job=import_job,
+                task_id=self.request.id,
+                failure_type=ImportFailure.FailureType.CHUNK,
+                error_message=str(e),
+                error_traceback=traceback.format_exc(),
+                data_snapshot=snapshot
+            )
         except ImportJob.DoesNotExist:
             pass
         

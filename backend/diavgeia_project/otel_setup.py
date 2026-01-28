@@ -10,10 +10,16 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 import os
 from opentelemetry.trace import StatusCode
 import json
+from django.conf import settings
 
 
 def setup_tracing(service_name="diavgeia-app"):
     """Initialize and configure OpenTelemetry tracing."""
+    # Check if Jaeger transmission is disabled
+    if not settings.TRANSMIT_TO_JAEGER:
+        # Return a no-op tracer when tracing is disabled
+        return trace.get_tracer(__name__)
+    
     # Check if a tracer provider is already set
     current_provider = trace.get_tracer_provider()
     if not isinstance(current_provider, trace.NoOpTracerProvider):

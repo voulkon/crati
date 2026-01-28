@@ -16,6 +16,7 @@ def system_config(request):
             "opensearch_indexing": settings.INDEX_THE_OPENSEARCH,
             "company_enrichment": settings.HAVE_AFM_FETCH_JOB,
             "document_extraction": settings.EXTRACT_THE_DOCS_FROM_PDFS,
+            "jaeger_tracing": settings.TRANSMIT_TO_JAEGER,
         },
         "settings": {
             "retry_afm_fetches_after_days": settings.RETRY_AFM_FETCHES_AFTER_NUMBER_OF_DAYS,
@@ -32,6 +33,10 @@ def system_config(request):
             "document_extraction": (
                 "Document text extraction is disabled. PDF content analysis is not available."
                 if not settings.EXTRACT_THE_DOCS_FROM_PDFS else None
+            ),
+            "jaeger_tracing": (
+                "Distributed tracing is disabled. No telemetry data is sent to Jaeger."
+                if not settings.TRANSMIT_TO_JAEGER else None
             ),
         }
     })

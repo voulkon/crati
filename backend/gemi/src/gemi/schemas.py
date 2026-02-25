@@ -8,40 +8,40 @@ class Announcement(BaseModel):
     decision_date: date = Field(alias="decisionDate")
     subject: str = Field(alias="decisionSubject")
     announcement_date: date = Field(alias="announcementDate")
-    announcement_file: Optional[AnyUrl] = Field(alias="announcementFile", description="URL of the announcement document")
-    completion_date: Optional[date] = Field(alias="completionDate")
+    announcement_file: Optional[AnyUrl] = Field(None, alias="announcementFile", description="URL of the announcement document")
+    completion_date: Optional[date] = Field(None, alias="completionDate")
 
 class OrganDecision(BaseModel):
     """Represents a decision by a company organ (e.g., Board or General Meeting) with related publication info."""
     decision_date: date = Field(alias="decisionDate")
     organ_type: str = Field(alias="organType")               # e.g., type of organ (Board, General Assembly):contentReference[oaicite:9]{index=9}
-    protocol_number: Optional[str] = Field(alias="protocolNumber")
-    submission_date: Optional[date] = Field(alias="submissionDate")
-    minutes_text: Optional[str] = Field(alias="minutes", description="Minutes of the meeting (if available)")
-    decision_summary: Optional[str] = Field(alias="decisionSummary")
-    invitation_posted: Optional[bool] = Field(alias="invitationPost", description="Whether an invitation was posted")
-    invitation_post_date: Optional[date] = Field(alias="invitationPostDate")
-    publication: Optional[str] = Field(alias="publicationPaper", description="Newspaper or medium of publication")
-    publication_date: Optional[date] = Field(alias="publicationPaperDate")
+    protocol_number: Optional[str] = Field(None, alias="protocolNumber")
+    submission_date: Optional[date] = Field(None, alias="submissionDate")
+    minutes_text: Optional[str] = Field(None, alias="minutes", description="Minutes of the meeting (if available)")
+    decision_summary: Optional[str] = Field(None, alias="decisionSummary")
+    invitation_posted: Optional[bool] = Field(None, alias="invitationPost", description="Whether an invitation was posted")
+    invitation_post_date: Optional[date] = Field(None, alias="invitationPostDate")
+    publication: Optional[str] = Field(None, alias="publicationPaper", description="Newspaper or medium of publication")
+    publication_date: Optional[date] = Field(None, alias="publicationPaperDate")
     announcements: Optional[List[Announcement]] = Field(alias="announcementRecords", default_factory=list)
 
 class PublicDocument(BaseModel):
     """Represents a public document filed for the company (e.g., filings, certificates)."""
-    document_id: Optional[str] = Field(alias="documentId")
-    document_type: Optional[str] = Field(alias="documentType")
-    title: Optional[str] = Field(alias="title")
-    publish_date: Optional[date] = Field(alias="date")
-    url: Optional[AnyUrl] = Field(alias="url", description="Download link for the document")
+    document_id: Optional[str] = Field(None, alias="documentId")
+    document_type: Optional[str] = Field(None, alias="documentType")
+    title: Optional[str] = Field(None, alias="title")
+    publish_date: Optional[date] = Field(None, alias="date")
+    url: Optional[AnyUrl] = Field(None, alias="url", description="Download link for the document")
 
 class CompanyDetail(BaseModel):
     """Full public profile of a company from the GEMI OpenData API."""
     gemh_number: str = Field(alias="gemhNumber")
     name: str = Field(alias="name")
-    trade_name: Optional[str] = Field(alias="distinctiveTitle")
-    vat_number: Optional[str] = Field(alias="afm")  # 'afm' (Greek Tax ID):contentReference[oaicite:10]{index=10}
-    local_office: Optional[str] = Field(alias="gemiOffice", description="Name of the local GEMI service")
-    status: Optional[str] = Field(alias="status")
-    registration_date: Optional[date] = Field(alias="registrationDate", description="Date of GEMI registration")
+    trade_name: Optional[str] = Field(None, alias="distinctiveTitle")
+    vat_number: Optional[str] = Field(None, alias="afm")  # 'afm' (Greek Tax ID):contentReference[oaicite:10]{index=10}
+    local_office: Optional[str] = Field(None, alias="gemiOffice", description="Name of the local GEMI service")
+    status: Optional[str] = Field(None, alias="status")
+    registration_date: Optional[date] = Field(None, alias="registrationDate", description="Date of GEMI registration")
     publicity_documents: List[PublicDocument] = Field(alias="publicityDocuments", default_factory=list)
     organ_decisions: List[OrganDecision] = Field(alias="organDecisions", default_factory=list)
 
@@ -49,9 +49,9 @@ class CompanySummary(BaseModel):
     """Summary information for a company (used in search results)."""
     gemh_number: str = Field(alias="gemhNumber")
     name: str = Field(alias="name")
-    trade_name: Optional[str] = Field(alias="distinctiveTitle")
-    vat_number: Optional[str] = Field(alias="afm")
-    status: Optional[str] = Field(alias="status")
+    trade_name: Optional[str] = Field(None, alias="distinctiveTitle")
+    vat_number: Optional[str] = Field(None, alias="afm")
+    status: Optional[str] = Field(None, alias="status")
 
 # Models for reference (parametric) data lists
 class LocalOffice(BaseModel):

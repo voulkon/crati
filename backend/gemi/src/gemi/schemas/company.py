@@ -1,5 +1,5 @@
 from typing import List, Optional, Union
-from pydantic import BaseModel, Field, validator
+from pydantic import field_validator, ConfigDict, BaseModel, Field
 from datetime import datetime
 
 
@@ -124,14 +124,16 @@ class CompanyResponse(BaseModel):
     stocks: Optional[List[Stock]] = Field(default_factory=list)
     branch: Optional[List[int]] = Field(default_factory=list, description="Branch GEMI numbers")
     
-    @validator('arGemi')
+    @field_validator('arGemi')
+    @classmethod
     def validate_ar_gemi(cls, v):
         """Validate that arGemi is a positive integer."""
         if v <= 0:
             raise ValueError('arGemi must be a positive integer')
         return v
     
-    @validator('afm')
+    @field_validator('afm')
+    @classmethod
     def validate_afm(cls, v):
         """Validate AFM format if provided."""
         if v is not None and v.strip():
@@ -141,26 +143,18 @@ class CompanyResponse(BaseModel):
                 raise ValueError('AFM must be exactly 9 digits')
             return clean_afm
         return v
-    
-    class Config:
-        """Pydantic configuration."""
-        extra = "ignore"  # Ignore extra fields from API
-        validate_assignment = True
+    model_config = ConfigDict(extra="ignore", validate_assignment=True)
 
 class CompanyStatus(BaseModel):
     """Company status reference data."""
     id: int
-    descr: Optional[str]
+    descr: Optional[str] = None
 
 class CompanySummary(BaseModel):
     """Summary information for a company (used in search results)."""
     gemh_number: str = Field(alias="arGemi")
     name: str = Field(alias="coNameEl")
     trade_name: Optional[str] = Field(default=None, alias="distinctiveTitle")
-    vat_number: Optional[str] = Field(alias="afm")
+    vat_number: Optional[str] = Field(None, alias="afm")
     status: Optional[CompanyStatus] = Field(default=None)
-    
-    class Config:
-        """Pydantic configuration."""
-        populate_by_name = True
-        extra = "ignore"
+    model_config = ConfigDict(populate_by_name=True, extra="ignore")

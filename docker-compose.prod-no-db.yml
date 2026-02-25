@@ -10,8 +10,8 @@ services:
     restart: always
     environment:
       - COLLECTOR_OTLP_ENABLED=true
-    labels:
-      - "caddy_0.basicauth.${JAEGER_AUTH_USER}=${JAEGER_AUTH_HASH}"
+    # labels:
+    #   - "caddy_0.basicauth.${JAEGER_AUTH_USER}=${JAEGER_AUTH_HASH}"
     expose:
       - "16686"
       - "4317"
@@ -116,8 +116,8 @@ services:
       - SERVICE_FQDN_REDIS_COMMANDER=
     expose:
       - "8081"
-    labels:
-      - "caddy_0.basicauth.${JAEGER_AUTH_USER}=${JAEGER_AUTH_HASH}"
+    # labels:
+    #   - "caddy_0.basicauth.${JAEGER_AUTH_USER}=${JAEGER_AUTH_HASH}"
     networks:
       - diavgeia-prod-net
     depends_on:

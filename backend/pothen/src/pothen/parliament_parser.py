@@ -68,4 +68,136 @@ class ParliamentParser:
         </tr>
         """
         url = DECLARATIONS_YEAR_URL_TEMPLATE.format(year=year)
-        logger.info(f"Parsing declarations for year {year} from {url}")\n        \n        try:\n            response = self.scraper.get(url)\n            soup = BeautifulSoup(response.text, 'html.parser')\n            \n            declarations = YearlyDeclarations(\n                year=year,\n                page_url=url\n            )\n            \n            # Find all table rows with declaration data\n            rows = soup.find_all('tr')\n            \n            for row in rows:\n                entry = self._parse_declaration_row(row, year)\n                if entry:\n                    declarations.entries.append(entry)\n            \n            logger.info(f"Found {len(declarations.entries)} declarations for {year}")\n            \n            if not declarations.entries:\n                raise PothenParsingError(f"No declarations found for year {year}")\n            \n            return declarations\n            \n        except Exception as e:\n            raise PothenScrapingError(f"Failed to parse year {year} page: {str(e)}") from e\n    \n    def _parse_declaration_row(self, row: Tag, year: int) -> Optional[DeclarationEntry]:\n        """Parse a single table row to extract declaration information."""\n        try:\n            cells = row.find_all('td')\n            \n            # Need at least 3 cells: last_name, first_name, pdf_link\n            if len(cells) < 3:\n                return None\n            \n            # Extract names\n            last_name_cell = cells[0]\n            first_name_cell = cells[1]\n            pdf_link_cell = cells[2]\n            \n            # Get last name (might be in <a> tag or direct text)\n            last_name_elem = last_name_cell.find('a')\n            if last_name_elem:\n                last_name = last_name_elem.get_text(strip=True)\n            else:\n                last_name = last_name_cell.get_text(strip=True)\n            \n            # Get first name\n            first_name = first_name_cell.get_text(strip=True)\n            \n            # Get PDF link\n            pdf_link = pdf_link_cell.find('a', href=True)\n            if not pdf_link:\n                return None\n            \n            pdf_url = pdf_link['href']\n            \n            # Convert relative URLs to absolute\n            if not pdf_url.startswith('http'):\n                pdf_url = urljoin(PARLIAMENT_BASE_URL, pdf_url)\n            \n            # Skip if not a PDF\n            if not pdf_url.lower().endswith('.pdf'):\n                return None\n            \n            # Extract metadata from filename\n            afm, file_id, declaration_type = self._parse_pdf_filename(pdf_url)\n            \n            return DeclarationEntry(\n                last_name=last_name,\n                first_name=first_name,\n                pdf_url=pdf_url,\n                year=year,\n                declaration_type=declaration_type,\n                afm=afm,\n                file_id=file_id\n            )\n            \n        except Exception as e:\n            logger.debug(f"Failed to parse row: {str(e)}")\n            return None\n    \n    def _parse_pdf_filename(self, pdf_url: str) -> tuple[Optional[str], Optional[str], DeclarationType]:\n        """Extract AFM, file ID, and declaration type from PDF filename."""\n        filename = urlparse(pdf_url).path.split('/')[-1]\n        \n        # Remove .pdf extension\n        name_without_ext = filename.replace('.pdf', '')\n        \n        # Split by underscores: LASTNAME_FIRSTNAME_AFM_YEARx.pdf\n        # where x might be 'a' (arxiki) or 'e' (ethsia)\n        parts = name_without_ext.split('_')\n        \n        afm = None\n        file_id = None\n        declaration_type = DeclarationType.ANNUAL  # Default\n        \n        if len(parts) >= 3:\n            # Try to find AFM (should be numeric)\n            for part in parts:\n                if part.isdigit() and len(part) >= 6:  # AFM is typically 9 digits\n                    afm = part\n                    break\n        \n        # Check last part for declaration type indicator\n        if parts:\n            last_part = parts[-1].lower()\n            if last_part.endswith('a'):\n                declaration_type = DeclarationType.INITIAL\n            elif last_part.endswith('e'):\n                declaration_type = DeclarationType.ANNUAL\n        \n        # Use full filename as file_id for uniqueness\n        file_id = name_without_ext\n        \n        return afm, file_id, declaration_type\n    \n    def get_declarations_for_years(self, years: List[int]) -> Dict[int, YearlyDeclarations]:\n        """Parse declarations for multiple years."""\n        results = {}\n        \n        for year in years:\n            try:\n                declarations = self.parse_year_page(year)\n                results[year] = declarations\n                logger.info(f"Successfully parsed {len(declarations.entries)} declarations for {year}")\n                \n            except Exception as e:\n                logger.error(f"Failed to parse declarations for year {year}: {str(e)}")\n                continue\n        \n        return results
+        logger.info(f"Parsing declarations for year {year} from {url}")
+        
+        try:            
+            response = self.scraper.get(url)            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            declarations = YearlyDeclarations(year=year,
+                page_url=url
+            )
+            
+            # Find all table rows with declaration data
+            rows = soup.find_all('tr')
+            
+            for row in rows:
+                entry = self._parse_declaration_row(row, year)
+                if entry:
+                    declarations.entries.append(entry)
+            
+            logger.info(f"Found {len(declarations.entries)} declarations for {year}")
+            
+            if not declarations.entries:
+                raise PothenParsingError(f"No declarations found for year {year}")
+            
+            return declarations
+            
+        except Exception as e:
+            raise PothenScrapingError(f"Failed to parse year {year} page: {str(e)}") from e
+    
+    def _parse_declaration_row(self, row: Tag, year: int) -> Optional[DeclarationEntry]:
+        """Parse a single table row to extract declaration information."""
+        try:
+            cells = row.find_all('td')
+            
+            # Need at least 3 cells: last_name, first_name, pdf_link
+            if len(cells) < 3:
+                return None
+            
+            # Extract names
+            last_name_cell = cells[0]
+            first_name_cell = cells[1]
+            pdf_link_cell = cells[2]
+            
+            # Get last name (might be in <a> tag or direct text)
+            last_name_elem = last_name_cell.find('a')
+            if last_name_elem:
+                last_name = last_name_elem.get_text(strip=True)
+            else:
+                last_name = last_name_cell.get_text(strip=True)
+            
+            # Get first name
+            first_name = first_name_cell.get_text(strip=True)
+            
+            # Get PDF link
+            pdf_link = pdf_link_cell.find('a', href=True)
+            if not pdf_link:
+                return None
+            
+            pdf_url = pdf_link['href']
+            
+            # Convert relative URLs to absolute
+            if not pdf_url.startswith('http'):
+                pdf_url = urljoin(PARLIAMENT_BASE_URL, pdf_url)
+            
+            # Skip if not a PDF
+            if not pdf_url.lower().endswith('.pdf'):
+                return None
+            
+            # Extract metadata from filename
+            afm, file_id, declaration_type = self._parse_pdf_filename(pdf_url)
+            
+            return DeclarationEntry(
+                last_name=last_name,
+                first_name=first_name,
+                pdf_url=pdf_url,
+                year=year,
+                declaration_type=declaration_type,
+                afm=afm,
+                file_id=file_id
+            )
+            
+        except Exception as e:
+            logger.debug(f"Failed to parse row: {str(e)}")
+            return None
+    
+    def _parse_pdf_filename(self, pdf_url: str) -> tuple[Optional[str], Optional[str], DeclarationType]:
+        """Extract AFM, file ID, and declaration type from PDF filename."""
+        filename = urlparse(pdf_url).path.split('/')[-1]
+        
+        # Remove .pdf extension
+        name_without_ext = filename.replace('.pdf', '')
+        
+        # Split by underscores: LASTNAME_FIRSTNAME_AFM_YEARx.pdf
+        # where x might be 'a' (arxiki) or 'e' (ethsia)
+        parts = name_without_ext.split('_')
+        
+        afm = None
+        file_id = None
+        declaration_type = DeclarationType.ANNUAL  # Default
+        
+        if len(parts) >= 3:
+            # Try to find AFM (should be numeric)
+            for part in parts:
+                if part.isdigit() and len(part) >= 6:  # AFM is typically 9 digits
+                    afm = part
+                    break
+        
+        # Check last part for declaration type indicator
+        if parts:
+            last_part = parts[-1].lower()
+            if last_part.endswith('a'):
+                declaration_type = DeclarationType.INITIAL
+            elif last_part.endswith('e'):
+                declaration_type = DeclarationType.ANNUAL
+        
+        # Use full filename as file_id for uniqueness
+        file_id = name_without_ext
+        
+        return afm, file_id, declaration_type
+    
+    def get_declarations_for_years(self, years: List[int]) -> Dict[int, YearlyDeclarations]:
+        """Parse declarations for multiple years."""
+        results = {}
+        
+        for year in years:
+            try:
+                declarations = self.parse_year_page(year)
+                results[year] = declarations
+                logger.info(f"Successfully parsed {len(declarations.entries)} declarations for {year}")
+                
+            except Exception as e:
+                logger.error(f"Failed to parse declarations for year {year}: {str(e)}")
+                continue
+        
+        return results

@@ -195,3 +195,28 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# ───────────────────────── Crati Specific ─────────────────────────
+# Sample data (keep the generator script)
+sample-data/*.json
+sample-data/*.csv
+sample-data/*.sql
+
+# Docker volumes (local development)
+opensearch_data/
+postgres_data/
+redis_data/
+rabbitmq_data/
+loki_data/
+grafana_data/
+
+# Frontend build artifacts
+node_modules/
+frontend/build/
+frontend/dist/
+
+# Secrets (never commit these)
+*.pem
+*.key
+secrets/
+.secrets/

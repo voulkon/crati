@@ -1,7 +1,11 @@
 import pytest
 from core.pydantic_models.geo_data import NominatimResult
+from core.fetchers.nominatim_fetcher import IS_NOMINATIM_FETCHER_READY
 
-
+@pytest.mark.skipif(
+        not IS_NOMINATIM_FETCHER_READY, 
+        reason="Nominatim is not implemented yet, this is a placeholder test for when it is"
+        )
 @pytest.mark.impossible
 def test_fetch_geo_data_success_full(
     fetched_geo_data_success_full: NominatimResult, label_to_query: str

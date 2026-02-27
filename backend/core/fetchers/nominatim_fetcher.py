@@ -4,6 +4,7 @@ from urllib.parse import quote
 from core.pydantic_models.geo_data import NominatimResult
 from pydantic import ValidationError
 
+IS_NOMINATIM_FETCHER_READY = False
 
 class NominatimFetcher:
     """Fetches geographical data from OpenStreetMap Nominatim."""

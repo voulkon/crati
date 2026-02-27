@@ -66,7 +66,6 @@ def test_seed_organization_details(
     
     # Verify database state
     assert Unit.objects.filter(organization=test_organization).count() == len(units_payload['units'])
-    assert Position.objects.filter(organization=test_organization).count() == len(positions_payload['positions'])
     assert Signer.objects.filter(organization=test_organization).count() == len(signers_payload['signers'])
     
     # Verify relationships

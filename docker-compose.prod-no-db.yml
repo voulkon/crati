@@ -190,6 +190,8 @@ services:
       - GEMI_API_KEY=${GEMI_API_KEY}
       - STEALTH_MODE=${STEALTH_MODE:-false}
       - STEALTH_ALLOWLIST=${STEALTH_ALLOWLIST:-false}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
     networks:
       - diavgeia-prod-net
     depends_on:
@@ -226,7 +228,8 @@ services:
       - JAEGER_PORT=${JAEGER_PORT:-4317}
       - GEMI_API_KEY=${GEMI_API_KEY}
       - LIGHT_WORKER=${LIGHT_WORKER:-false}
-
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
   beat:
     build:
       context: .

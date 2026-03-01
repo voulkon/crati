@@ -8,7 +8,7 @@
     "back": "← Back"
   },
   "homepage": {
-    "title": "Government Decision Explorer",
+    "title": "Crati.Co",
     "subtitle": "Discover and analyze public decisions across all government organizations",
     "todayActivity": "Today's Activity",
     "exploreTitle": "Explore Government Decisions",
@@ -31,7 +31,6 @@
     "last7DaysDecisions": "Last 7 days of government decisions",
     "mostActiveOrgs": "Most Active Organizations",
     "mostActiveOrganizations": "Most Active Organizations",
-    "notableDecisions": "Notable Recent Decisions",
     "notableRecentDecisions": "Notable Recent Decisions",
     "seeAll": "See All →",
     "readyToExplore": "Ready to Explore?",
@@ -121,7 +120,8 @@
     "noAmount" : "No Amount",
     "days" : "days",
     "viewEntityDecisions": "View Entity Decisions",
-    "expand" : "Expand"
+    "expand" : "Expand",
+    "collapse" : "Collapse"
   },
   "errors": {
     "failedToLoad": "Failed to load data",
@@ -136,7 +136,7 @@
     "description": "Explore government organization structures and hierarchies",
     "searchOrganizations": "Search Organizations",
     "clear": "Clear",
-    "welcomeTitle": "Organization Chart Explorer",
+    "welcomeTitle": "Crati.Co",
     "welcomeMessage": "Explore government organization structures and hierarchies. Search for an organization by name to view its organizational chart.",
     "searchTitle": "🔍 Search Organizations",
     "searchDescription": "Type the name of any government organization to find and explore its structure",
@@ -430,6 +430,8 @@
   },
   "relationships": {
     "topPairs": "Top Organization × Entity Relationships",
-    "showingTopPairs": "Showing top {{count}} relationship pairs"
+    "showingTopPairs": "Showing top {{count}} relationship pairs",
+    "uidLabel": "UID",
+    "afmLabel": "AFM"
   }
 }

@@ -11,6 +11,9 @@ from .entity_search import (
     company_person_only_search_api,
     company_and_persons_search_api,
     super_search_api,
+    search_stream_api,
+    autocomplete_suggestions_api,
+    entities_fast_search_api,
 )
 
 from .document_search import (

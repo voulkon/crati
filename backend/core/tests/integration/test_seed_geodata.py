@@ -7,6 +7,7 @@ from core.models.organizations import Organization, OrganizationGeoData
 from core.fetchers.nominatim_fetcher import NominatimFetcher
 from core.pydantic_models.geo_data import NominatimResult#, GeoJson
 from core.tests.utils import load_pickle_fixture
+from core.fetchers.nominatim_fetcher import IS_NOMINATIM_FETCHER_READY
 
 pytestmark = pytest.mark.django_db
 
@@ -41,7 +42,10 @@ def mock_organizations_in_db(db):
         # org3
         ]
 
-
+@pytest.mark.skipif(
+        not IS_NOMINATIM_FETCHER_READY, 
+        reason="Nominatim is not implemented yet, this is a placeholder test for when it is"
+        )
 @pytest.fixture
 def mock_nominatim_response_limnos_valid() -> list[dict]:
     """Loads the full response for Limnos and prepares it for responses mock."""
@@ -49,6 +53,10 @@ def mock_nominatim_response_limnos_valid() -> list[dict]:
         "dimos_limnou_geo_data_whole.pkl"
     )
 
+@pytest.mark.skipif(
+        not IS_NOMINATIM_FETCHER_READY, 
+        reason="Nominatim is not implemented yet, this is a placeholder test for when it is"
+        )
 @pytest.fixture
 def mock_nominatim_response_dodoni_valid() -> list[dict]:
     """Provides a valid mock response dictionary list for Dodoni."""
@@ -83,7 +91,10 @@ def mock_nominatim_response_dodoni_valid() -> list[dict]:
         }
     ]
 
-@pytest.mark.impossible
+@pytest.mark.skipif(
+        not IS_NOMINATIM_FETCHER_READY, 
+        reason="Nominatim is not implemented yet, this is a placeholder test for when it is"
+        )
 @responses.activate
 def test_seed_organization_geodata_happy_path(
     mock_organizations_in_db,

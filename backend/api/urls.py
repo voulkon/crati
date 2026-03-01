@@ -44,6 +44,9 @@ urlpatterns = [
     # Basic search endpoints
     path('search/', search.universal_search_api, name='universal_search'),
     path('search-dev/', search.universal_search_api_dev, name='universal_search_dev'),
+    path('search/entities-fast/', search.entities_fast_search_api, name='entities_fast_search'),  # Fast entity-only search
+    path('search/stream/', search.search_stream_api, name='search_stream'),  # SSE streaming endpoint
+    path('search/autocomplete/', search.autocomplete_suggestions_api, name='autocomplete_suggestions'),
     path('search/super/', search.super_search_api, name='super_search'),
     path('search/org-signer/', search.org_signer_search_api, name='org_signer_search'),
     path('search/org-signer-unit/', search.org_signer_unit_search_api, name='org_signer_unit_search'),

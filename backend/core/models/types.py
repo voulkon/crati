@@ -29,6 +29,7 @@ class ExtraFieldType(models.TextChoices):
 
     STRING = "string", "String"
     NUMBER = "number", "Number"
+    INTEGER = "integer", "Integer"
     BOOLEAN = "boolean", "Boolean"
     OBJECT = "object", "Object"
     DATE = "date", "Date"
@@ -46,6 +47,8 @@ class ExtraField(models.Model):
     field_type = models.CharField(
         max_length=50,
         choices=ExtraFieldType.choices,
+        null=True,
+        blank=True,
     )
     validation = models.CharField(max_length=255, null=True, blank=True)
     required = models.BooleanField(default=False)

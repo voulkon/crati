@@ -67,9 +67,7 @@ class CustomAdminSite(admin.AdminSite):
             "app_label": "analytics",
             "models": [
                 {"name": "Redis Analytics", "object_name": "RedisAnalytics", "admin_url": "/api/admin/analytics/", "view_only": True},
-                {"name": "Export Analytics", "object_name": "ExportAnalytics", "admin_url": "/api/admin/analytics/export/", "view_only": True},
-                {"name": "Pattern Analysis", "object_name": "PatternAnalysis", "admin_url": "/api/admin/analytics/patterns/", "view_only": True},
-                {"name": "Endpoint Deep Dive", "object_name": "EndpointDeepDive", "admin_url": "/api/admin/analytics/endpoints/", "view_only": True},
+                {"name": "Export Analytics", "object_name": "ExportAnalytics", "admin_url": "/api/admin/analytics/export/", "view_only": True}
             ],
         }
         app_list.append(analytics_app)
@@ -104,7 +102,7 @@ class CustomAdminSite(admin.AdminSite):
             "models": [
                 {"name": "Document Search", "object_name": "DocumentSearch", "admin_url": "/api/admin/documents/search/", "view_only": True},
                 {"name": "Processing Dashboard", "object_name": "DocumentDashboard", "admin_url": "/api/admin/documents/dashboard/", "view_only": True},
-                {"name": "📊 Sync Status Dashboard", "object_name": "SyncStatusDashboard", "admin_url": "/api/admin/documents/sync-status/", "view_only": True},
+                {"name": "Sync Status Dashboard", "object_name": "SyncStatusDashboard", "admin_url": "/api/admin/documents/sync-status/", "view_only": True},
             ],
         }
         app_list.append(doc_processing_app)
@@ -114,9 +112,9 @@ class CustomAdminSite(admin.AdminSite):
             "name": "Health & Diagnostics",
             "app_label": "health",
             "models": [
-                {"name": "🔍 Quick Health Check", "object_name": "QuickHealthCheck", "admin_url": "/api/admin/health/quick-check/", "view_only": True},
-                {"name": "📊 Health Dashboard", "object_name": "HealthDashboard", "admin_url": "/api/admin/health/dashboard/", "view_only": True},
-                {"name": "📦 Bulk Health Check", "object_name": "BulkHealthCheck", "admin_url": "/api/admin/health/bulk-check/", "view_only": True},
+                {"name": "Quick Health Check", "object_name": "QuickHealthCheck", "admin_url": "/api/admin/health/quick-check/", "view_only": True},
+                {"name": "Health Dashboard", "object_name": "HealthDashboard", "admin_url": "/api/admin/health/dashboard/", "view_only": True},
+                {"name": "Bulk Health Check", "object_name": "BulkHealthCheck", "admin_url": "/api/admin/health/bulk-check/", "view_only": True},
             ],
         }
         app_list.append(health_app)

@@ -50,7 +50,7 @@ def test_unit_organization_resolution_through_parent_chain_with_vcr(vcr_cassette
         
         # Unit relationships
         assert unit_child.parent_id == TEST_UNIT_PARENT_ID
-        assert unit_parent.parent_id == TEST_ORG_ID  # Parent points to org
+        assert unit_parent.organization_id == TEST_ORG_ID  # Parent points to org
         
         # Decision should be linked to the unit
         assert decision.units.filter(uid=TEST_UNIT_CHILD_ID).exists()

@@ -23,7 +23,7 @@
 }
 
 .expand-toggle {
-  background: var(--accent-color);
+  background: var(--primary-blue);
   color: white;
   border: none;
   padding: 8px 16px;
@@ -34,7 +34,7 @@
 }
 
 .expand-toggle:hover {
-  background: var(--accent-hover);
+  background: var(--secondary-blue);
   transform: translateY(-1px);
 }
 
@@ -43,13 +43,13 @@
   gap: 16px;
   margin-bottom: 16px;
   font-size: 0.9rem;
-  color: var(--text-muted);
+  color: var(--muted-text);
 }
 
 .counterparts-loading {
   text-align: center;
   padding: 40px;
-  color: var(--text-muted);
+  color: var(--muted-text);
 }
 
 .counterparts-grid {
@@ -82,7 +82,7 @@
 }
 
 .counterpart-card:hover {
-  border-color: var(--accent-color);
+  border-color: var(--primary-blue);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
@@ -94,7 +94,7 @@
 }
 
 .counterpart-rank {
-  background: var(--accent-color);
+  background: var(--primary-blue);
   color: white;
   font-size: 0.75rem;
   font-weight: 600;
@@ -119,12 +119,12 @@
 }
 
 .counterpart-id {
-  color: var(--text-muted);
+  color: var(--muted-text);
   font-family: monospace;
 }
 
 .entity-type-badge {
-  background: var(--secondary-bg);
+  background: var(--hover-bg);
   color: var(--text-color);
   padding: 2px 8px;
   border-radius: 4px;
@@ -148,7 +148,7 @@
 
 .stat-label {
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: var(--muted-text);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -160,14 +160,14 @@
 }
 
 .stat-value.amount {
-  color: var(--accent-color);
+  color: var(--primary-blue);
 }
 
 .see-all-button {
   width: 100%;
   margin-top: 16px;
   padding: 12px;
-  background: var(--secondary-bg);
+  background: var(--hover-bg);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   color: var(--text-color);
@@ -177,9 +177,9 @@
 }
 
 .see-all-button:hover {
-  background: var(--accent-color);
+  background: var(--primary-blue);
   color: white;
-  border-color: var(--accent-color);
+  border-color: var(--primary-blue);
 }
 
 /* Relationship Pair Card Styles (for temporal exploration) */
@@ -201,7 +201,7 @@
   flex-direction: column;
   gap: 4px;
   padding: 8px;
-  background: var(--secondary-bg);
+  background: var(--hover-bg);
   border-radius: 6px;
 }
 
@@ -209,18 +209,26 @@
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-color);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pair-icon {
+  flex-shrink: 0;
+  color: var(--primary-blue);
 }
 
 .pair-id {
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: var(--muted-text);
   font-family: monospace;
 }
 
 .pair-connector {
   text-align: center;
   font-size: 1.2rem;
-  color: var(--accent-color);
+  color: var(--primary-blue);
   padding: 4px 0;
 }
 

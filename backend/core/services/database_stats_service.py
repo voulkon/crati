@@ -1,5 +1,5 @@
 from django.db import connection
-from core.services.opensearch_service import OpenSearchService
+from django.conf import settings
 
 class DatabaseStatsService:
     def get_postgres_stats(self):
@@ -41,5 +41,10 @@ class DatabaseStatsService:
         }
 
     def get_opensearch_stats(self):
+        """Get OpenSearch statistics. Returns None if OpenSearch is disabled."""
+        if not settings.INDEX_THE_OPENSEARCH:
+            return None
+        
+        from core.services.opensearch_service import OpenSearchService
         service = OpenSearchService()
         return service.analyze_index_health()

@@ -20,6 +20,15 @@ class OpenSearchService:
             test_connection: If True, force connection test. Otherwise uses cached result.
         """
         self.opensearch_url = getattr(settings, 'OPENSEARCH_URL', 'http://opensearch:9200')
+        
+        # Validate URL has a scheme
+        if not self.opensearch_url or not self.opensearch_url.startswith(('http://', 'https://')):
+            error_msg = f"Invalid OPENSEARCH_URL: '{self.opensearch_url}'. Must start with http:// or https://"
+            logger.error(f"❌ {error_msg}")
+            logger.error("💡 Check that OPENSEARCH_URL environment variable is set correctly")
+            # Set a safe default to prevent crashes, but service won't work
+            self.opensearch_url = 'http://opensearch:9200'
+        
         self.index_name = 'diavgeia-documents'
         self.max_content_length = 10000
         self.preview_length = 500

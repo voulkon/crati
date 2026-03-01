@@ -88,11 +88,18 @@ class BackupAdmin(admin.ModelAdmin):
         return my_urls + urls
 
     def stats_view(self, request):
+        from django.conf import settings
         service = DatabaseStatsService()
+        
+        opensearch_stats = None
+        if settings.INDEX_THE_OPENSEARCH:
+            opensearch_stats = service.get_opensearch_stats()
+        
         context = dict(
            self.admin_site.each_context(request),
            postgres_stats=service.get_postgres_stats(),
-           opensearch_stats=service.get_opensearch_stats(),
+           opensearch_stats=opensearch_stats,
+           opensearch_enabled=settings.INDEX_THE_OPENSEARCH,
            title="Database Statistics"
         )
         return TemplateResponse(request, "admin/backup_stats.html", context)
@@ -116,6 +123,11 @@ class BackupAdmin(admin.ModelAdmin):
         return redirect('admin:core_backup_changelist')
     
     def trigger_opensearch_backup(self, request):
+        from django.conf import settings
+        if not settings.INDEX_THE_OPENSEARCH:
+            self.message_user(request, "OpenSearch is disabled (INDEX_THE_OPENSEARCH=false). Cannot create OpenSearch backup.", messages.ERROR)
+            return redirect('admin:core_backup_changelist')
+        
         backup = Backup.objects.create(
             backup_type=Backup.BackupType.OPENSEARCH,
             status=Backup.Status.PENDING
@@ -130,19 +142,21 @@ class BackupAdmin(admin.ModelAdmin):
         import boto3
         from botocore.exceptions import ClientError
         
-        # Get bucket name with proper None handling
-        bucket_name = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', None)
+        bucket_name = settings.AWS_STORAGE_BUCKET_NAME
         
         # Check if AWS credentials are configured
         aws_access_key = getattr(settings, 'AWS_ACCESS_KEY_ID', None)
         aws_secret_key = getattr(settings, 'AWS_SECRET_ACCESS_KEY', None)
         
+        errors = []
+        
         if not aws_access_key or not aws_secret_key:
+            errors.append('AWS credentials not configured. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in settings.')
             context = dict(
                 self.admin_site.each_context(request),
                 s3_files={'postgres': [], 'opensearch': []},
                 bucket_name=bucket_name,
-                errors=['AWS credentials not configured. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in settings.'],
+                errors=errors,
                 title="Browse S3 Backups"
             )
             return TemplateResponse(request, "admin/browse_s3.html", context)
@@ -175,39 +189,43 @@ class BackupAdmin(admin.ModelAdmin):
         except ClientError as e:
             errors.append(f"Error listing PostgreSQL backups: {str(e)}")
         
-        try:
-            # List OpenSearch snapshots using OpenSearch API
-            # This ensures we get the actual snapshot names that were created
-            from core.services.opensearch_service import OpenSearchService
-            opensearch_service = OpenSearchService()
-            
-            # First ensure repository is registered
+        # Only list OpenSearch snapshots if OpenSearch is enabled
+        if settings.INDEX_THE_OPENSEARCH:
             try:
-                opensearch_service.register_s3_repository(
-                    repository_name="s3-backup-repo",
-                    bucket_name=bucket_name,
-                    base_path="backups/opensearch"
-                )
-            except Exception as reg_error:
-                errors.append(f"Warning: Could not register S3 repository: {str(reg_error)}")
-            
-            # List snapshots from OpenSearch
-            snapshots = opensearch_service.list_snapshots(repository_name="s3-backup-repo")
-            
-            for snapshot in snapshots:
-                # OpenSearch returns snapshot metadata including name, state, timestamp, etc.
-                s3_files['opensearch'].append({
-                    'snapshot_name': snapshot.get('snapshot', 'Unknown'),
-                    'state': snapshot.get('state', 'UNKNOWN'),
-                    'start_time': snapshot.get('start_time_in_millis', 0),
-                    'last_modified': timezone.datetime.fromtimestamp(snapshot.get('start_time_in_millis', 0) / 1000) if snapshot.get('start_time_in_millis') else None,
-                    'size': snapshot.get('shards', {}).get('total', 0),
-                    'indices': ', '.join(snapshot.get('indices', [])),
-                    'uuid': snapshot.get('uuid', 'N/A')
-                })
-                    
-        except Exception as e:
-            errors.append(f"Error listing OpenSearch snapshots: {str(e)}")
+                # List OpenSearch snapshots using OpenSearch API
+                # This ensures we get the actual snapshot names that were created
+                from core.services.opensearch_service import OpenSearchService
+                opensearch_service = OpenSearchService()
+                
+                # First ensure repository is registered
+                try:
+                    opensearch_service.register_s3_repository(
+                        repository_name="s3-backup-repo",
+                        bucket_name=bucket_name,
+                        base_path="backups/opensearch"
+                    )
+                except Exception as reg_error:
+                    errors.append(f"Warning: Could not register S3 repository: {str(reg_error)}")
+                
+                # List snapshots from OpenSearch
+                snapshots = opensearch_service.list_snapshots(repository_name="s3-backup-repo")
+                
+                for snapshot in snapshots:
+                    # OpenSearch returns snapshot metadata including name, state, timestamp, etc.
+                    s3_files['opensearch'].append({
+                        'snapshot_name': snapshot.get('snapshot', 'Unknown'),
+                        'state': snapshot.get('state', 'UNKNOWN'),
+                        'start_time': snapshot.get('start_time_in_millis', 0),
+                        'last_modified': timezone.datetime.fromtimestamp(snapshot.get('start_time_in_millis', 0) / 1000) if snapshot.get('start_time_in_millis') else None,
+                        'size': snapshot.get('shards', {}).get('total', 0),
+                        'indices': ', '.join(snapshot.get('indices', [])),
+                        'uuid': snapshot.get('uuid', 'N/A')
+                    })
+                            
+            except Exception as e:
+                errors.append(f"Error listing OpenSearch snapshots: {str(e)}")
+        else:
+            errors.append("OpenSearch is disabled (INDEX_THE_OPENSEARCH=false). OpenSearch snapshots not available.")
         
         context = dict(
             self.admin_site.each_context(request),
@@ -260,6 +278,15 @@ class BackupAdmin(admin.ModelAdmin):
     
     def restore_opensearch_from_s3(self, request, snapshot_name):
         """Restore an OpenSearch snapshot directly from S3"""
+        from django.conf import settings
+        if not settings.INDEX_THE_OPENSEARCH:
+            self.message_user(
+                request,
+                "OpenSearch is disabled (INDEX_THE_OPENSEARCH=false). Cannot restore OpenSearch backup.",
+                messages.ERROR
+            )
+            return redirect('admin:browse_s3')
+        
         try:
             # Create a new Backup record to track the restore operation
             backup = Backup.objects.create(

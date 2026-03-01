@@ -1,6 +1,4 @@
-import React from 'react';
-
-export { Building2 as OrganizationIcon, PenLine as PenIcon, Calendar as CalendarIcon } from 'lucide-react';
+export { Building2 as OrganizationIcon, PenLine as PenIcon, Calendar as CalendarIcon, Briefcase as EntityIcon } from 'lucide-react';
 export { 
     LibraryBig as LibraryToggleIcon, 
     BookMarked as LibraryIconInSidebar,

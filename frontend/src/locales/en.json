@@ -431,6 +431,8 @@
   },
   "relationships": {
     "topPairs": "Top Organization × Entity Relationships",
-    "showingTopPairs": "Showing top {{count}} relationship pairs"
+    "showingTopPairs": "Showing top {{count}} relationship pairs",
+    "uidLabel": "UID",
+    "afmLabel": "AFM"
   }
 }

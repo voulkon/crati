@@ -431,6 +431,8 @@
   },
   "relationships": {
     "topPairs": "Κορυφαίες Σχέσεις Οργανισμού × Οντότητας",
-    "showingTopPairs": "Εμφάνιση κορυφαίων {{count}} ζευγών σχέσεων"
+    "showingTopPairs": "Εμφάνιση κορυφαίων {{count}} ζευγών σχέσεων",
+    "uidLabel": "UID",
+    "afmLabel": "ΑΦΜ"
   }
 }

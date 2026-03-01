@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import apiClient from '../api/client';
 import { useTranslation } from '../contexts/TranslationContext';
+import { OrganizationIcon, EntityIcon } from './Icons';
 import './TopCounterparts.css'; // Reuse the same styles
 
 /**
@@ -113,7 +114,6 @@ const TopRelationshipPairs = ({
           const orgLabel = pair['decision__organization__label'];
           const entityAfm = pair['entity__afm'];
           const entityName = pair['entity__name'];
-          const entityType = pair['entity__entity_type'];
           
           return (
             <button
@@ -125,13 +125,17 @@ const TopRelationshipPairs = ({
                 <span className="counterpart-rank">#{index + 1}</span>
                 <div className="pair-names">
                   <div className="pair-org">
-                    <span className="pair-label">🏛️ {orgLabel}</span>
-                    <span className="pair-id">UID: {orgUid}</span>
+                    <span className="pair-label">
+                      <OrganizationIcon size={16} className="pair-icon" /> {orgLabel}
+                    </span>
+                    <span className="pair-id">{t('relationships.uidLabel')}: {orgUid}</span>
                   </div>
                   <div className="pair-connector">⇄</div>
                   <div className="pair-entity">
-                    <span className="pair-label">🏢 {entityName}</span>
-                    <span className="pair-id">AFM: {entityAfm}</span>
+                    <span className="pair-label">
+                      <EntityIcon size={16} className="pair-icon" /> {entityName}
+                    </span>
+                    <span className="pair-id">{t('relationships.afmLabel')}: {entityAfm}</span>
                   </div>
                 </div>
               </div>

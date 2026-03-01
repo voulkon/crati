@@ -4,6 +4,22 @@ import apiClient from '../api/client';
 import { useTranslation } from '../contexts/TranslationContext';
 import './DecisionDetailPage.css';
 import EntityDisplay from '../components/EntityDisplay';
+import { 
+  FinancialIcon, 
+  CalendarIcon, 
+  DocumentTypeIcon, 
+  OrganizationIcon, 
+  ChartIcon, 
+  UsersIcon, 
+  UserIcon, 
+  LinkIcon, 
+  FileIcon, 
+  BookOpenIcon, 
+  GlobeIcon, 
+  PaperclipIcon, 
+  SearchIcon, 
+  WrenchIcon 
+} from '../components/Icons';
 
 const DecisionDetailPage = () => {
   const { id } = useParams();
@@ -132,7 +148,7 @@ const DecisionDetailPage = () => {
       {/* Core Information Grid */}
       <div className="decision-info-grid">
         <div className="info-card">
-          <h3>💰 {t('decisionDetail.financialInformation')}</h3>
+          <h3><FinancialIcon size={20} /> {t('decisionDetail.financialInformation')}</h3>
           {decision.amount && (
             <div className="amount-display">
               €{decision.amount.toLocaleString(undefined, { 
@@ -154,7 +170,7 @@ const DecisionDetailPage = () => {
         </div>
 
         <div className="info-card">
-          <h3>📅 {t('decisionDetail.timeline')}</h3>
+          <h3><CalendarIcon size={20} /> {t('decisionDetail.timeline')}</h3>
           <div className="timeline-item">
             <strong>{t('decisionDetail.issueDate')}:</strong> {new Date(decision.issue_date).toLocaleDateString('en-GB', {
               day: '2-digit',
@@ -183,7 +199,7 @@ const DecisionDetailPage = () => {
         </div>
 
         <div className="info-card">
-          <h3>📋 {t('decisionDetail.decisionType')}</h3>
+          <h3><DocumentTypeIcon size={20} /> {t('decisionDetail.decisionType')}</h3>
           {decision.decision_type ? (
             <button 
               className="clickable-entity decision-type-button"
@@ -200,7 +216,7 @@ const DecisionDetailPage = () => {
 
       {/* Organizational Context */}
       <div className="organizational-section">
-        <h3>🏛️ {t('decisionDetail.organizationalContext')}</h3>
+        <h3><OrganizationIcon size={20} /> {t('decisionDetail.organizationalContext')}</h3>
         
         {decision.organization && (
           <div className="org-info">
@@ -210,7 +226,7 @@ const DecisionDetailPage = () => {
               onClick={() => navigate(`/entity/organization/${decision.organization.uid}`)}
               title={t('decisionDetail.viewOrganizationDetails')}
             >
-              🏢 {decision.organization.label}
+              <OrganizationIcon size={16} /> {decision.organization.label}
             </button>
             
             <button
@@ -218,14 +234,14 @@ const DecisionDetailPage = () => {
               onClick={() => navigate(`/organizations?uid=${decision.organization.uid}`)}
               title={t('decisionDetail.viewOrganizationChart')}
             >
-              📊 {t('decisionDetail.viewOrgChart')}
+              <ChartIcon size={16} /> {t('decisionDetail.viewOrgChart')}
             </button>
           </div>
         )}
 
         {decision.signers && decision.signers.length > 0 && (
           <div className="signers-section">
-            <h4>👥 {t('decisionDetail.signers', { count: decision.signers.length })}</h4>
+            <h4><UsersIcon size={18} /> {t('decisionDetail.signers', { count: decision.signers.length })}</h4>
             <div className="signers-grid">
               {decision.signers.map(signer => (
                 <button
@@ -234,7 +250,7 @@ const DecisionDetailPage = () => {
                   onClick={() => navigate(`/entity/signer/${signer.uid}`)}
                   title={t('decisionDetail.viewSignerDetails')}
                 >
-                  👤 {signer.first_name} {signer.last_name}
+                  <UserIcon size={16} /> {signer.first_name} {signer.last_name}
                 </button>
               ))}
             </div>
@@ -243,7 +259,7 @@ const DecisionDetailPage = () => {
 
         {decision.units && decision.units.length > 0 && (
           <div className="units-section">
-            <h4>🏛️ {t('decisionDetail.organizationalUnits', { count: decision.units.length })}</h4>
+            <h4><OrganizationIcon size={18} /> {t('decisionDetail.organizationalUnits', { count: decision.units.length })}</h4>
             <div className="units-list">
               {decision.units.map(unit => (
                 <button
@@ -252,7 +268,7 @@ const DecisionDetailPage = () => {
                   onClick={() => navigate(`/entity/unit/${unit.uid}`)}
                   title={t('decisionDetail.viewUnitDetails')}
                 >
-                  🏛️ {unit.label}
+                  <OrganizationIcon size={16} /> {unit.label}
                 </button>
               ))}
             </div>
@@ -263,7 +279,7 @@ const DecisionDetailPage = () => {
       {/* Entity Relationships */}
       {entityRelationships && entityRelationships.length > 0 && (
         <div className="entities-section">
-          <h3>🔗 {t('decisionDetail.relatedEntities')}</h3>
+          <h3><LinkIcon size={20} /> {t('decisionDetail.relatedEntities')}</h3>
           <p className="section-description">
             {t('decisionDetail.relatedEntitiesDescription')}
           </p>
@@ -278,7 +294,7 @@ const DecisionDetailPage = () => {
 
       {/* Document Section */}
       <div className="document-section">
-        <h3>📄 {t('decisionDetail.documents')}</h3>
+        <h3><FileIcon size={20} /> {t('decisionDetail.documents')}</h3>
         
         <div className="document-actions">
           {decision.document_url && (
@@ -287,7 +303,7 @@ const DecisionDetailPage = () => {
               onClick={() => window.open(decision.document_url, '_blank')}
               title={t('decisionDetail.viewOriginalDocumentTooltip')}
             >
-              📄 {t('decisionDetail.viewOriginalDocument')}
+              <FileIcon size={16} /> {t('decisionDetail.viewOriginalDocument')}
             </button>
           )}
           
@@ -296,7 +312,7 @@ const DecisionDetailPage = () => {
             onClick={handleViewDocumentContent}
             title={t('decisionDetail.viewExtractedContentTooltip')}
           >
-            📖 {t('decisionDetail.viewExtractedContent')}
+            <BookOpenIcon size={16} /> {t('decisionDetail.viewExtractedContent')}
           </button>
           
           {decision.url && (
@@ -305,17 +321,17 @@ const DecisionDetailPage = () => {
               onClick={() => window.open(decision.url, '_blank')}
               title={t('decisionDetail.viewOnDiavgeiaTooltip')}
             >
-              🌐 {t('decisionDetail.viewOnDiavgeia')}
+              <GlobeIcon size={16} /> {t('decisionDetail.viewOnDiavgeia')}
             </button>
           )}
         </div>
         
         {decision.attachments && decision.attachments.length > 0 && (
           <div className="attachments-list">
-            <h4>📎 {t('decisionDetail.attachments', { count: decision.attachments.length })}</h4>
+            <h4><PaperclipIcon size={18} /> {t('decisionDetail.attachments', { count: decision.attachments.length })}</h4>
             {decision.attachments.map((attachment, index) => (
               <div key={index} className="attachment-item">
-                <span className="attachment-icon">📎</span>
+                <span className="attachment-icon"><PaperclipIcon size={14} /></span>
                 <span className="attachment-name">{attachment.filename}</span>
                 <span className="attachment-type">({attachment.mime_type})</span>
                 {attachment.checksum && (
@@ -338,7 +354,7 @@ const DecisionDetailPage = () => {
       {/* Related Decisions */}
       {relatedDecisions && relatedDecisions.length > 0 && (
         <div className="related-decisions">
-          <h3>🔍 {t('decisionDetail.relatedDecisions')}</h3>
+          <h3><SearchIcon size={20} /> {t('decisionDetail.relatedDecisions')}</h3>
           <p className="section-description">
             {t('decisionDetail.relatedDecisionsDescription')}
           </p>
@@ -391,7 +407,7 @@ const DecisionDetailPage = () => {
       {process.env.NODE_ENV === 'development' && (
         <div className="debug-section">
           <details>
-            <summary>🔧 {t('decisionDetail.debugInformation')}</summary>
+            <summary><WrenchIcon size={16} /> {t('decisionDetail.debugInformation')}</summary>
             <div className="debug-content">
               <p><strong>{t('decisionDetail.decisionId')}:</strong> {decision.id}</p>
               <p><strong>ADA:</strong> {decision.ada}</p>

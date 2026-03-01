@@ -8,7 +8,7 @@
     "back": "← Back"
   },
   "homepage": {
-    "title": "Government Decision Explorer",
+    "title": "Crati.Co",
     "subtitle": "Discover and analyze public decisions across all government organizations",
     "todayActivity": "Today's Activity",
     "exploreTitle": "Explore Government Decisions",
@@ -137,7 +137,7 @@
     "description": "Explore government organization structures and hierarchies",
     "searchOrganizations": "Search Organizations",
     "clear": "Clear",
-    "welcomeTitle": "Organization Chart Explorer",
+    "welcomeTitle": "Crati.Co",
     "welcomeMessage": "Explore government organization structures and hierarchies. Search for an organization by name to view its organizational chart.",
     "searchTitle": "🔍 Search Organizations",
     "searchDescription": "Type the name of any government organization to find and explore its structure",

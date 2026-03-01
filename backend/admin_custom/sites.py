@@ -67,9 +67,7 @@ class CustomAdminSite(admin.AdminSite):
             "app_label": "analytics",
             "models": [
                 {"name": "Redis Analytics", "object_name": "RedisAnalytics", "admin_url": "/api/admin/analytics/", "view_only": True},
-                {"name": "Export Analytics", "object_name": "ExportAnalytics", "admin_url": "/api/admin/analytics/export/", "view_only": True},
-                {"name": "Pattern Analysis", "object_name": "PatternAnalysis", "admin_url": "/api/admin/analytics/patterns/", "view_only": True},
-                {"name": "Endpoint Deep Dive", "object_name": "EndpointDeepDive", "admin_url": "/api/admin/analytics/endpoints/", "view_only": True},
+                {"name": "Export Analytics", "object_name": "ExportAnalytics", "admin_url": "/api/admin/analytics/export/", "view_only": True}
             ],
         }
         app_list.append(analytics_app)

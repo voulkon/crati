@@ -121,7 +121,8 @@
     "noAmount" : "Χωρίς Ποσό",
     "days" : "ημέρες",
     "viewEntityDecisions": "Προβολή Αποφάσεων Οντότητας",
-    "expand" : "Ανάπτυξη"
+    "expand" : "Ανάπτυξη",
+    "collapse" : "Σύμπτυξη"
   },
   "errors": {
     "failedToLoad": "Αποτυχία φόρτωσης δεδομένων",

@@ -121,7 +121,8 @@
     "noAmount" : "No Amount",
     "days" : "days",
     "viewEntityDecisions": "View Entity Decisions",
-    "expand" : "Expand"
+    "expand" : "Expand",
+    "collapse" : "Collapse"
   },
   "errors": {
     "failedToLoad": "Failed to load data",

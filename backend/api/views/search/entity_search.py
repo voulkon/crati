@@ -1,90 +1,19 @@
 from core.services.search_service import SearchService
+from api.views.search.entity_search_utils import (
+    get_entities_fast, 
+    get_documents_slow, 
+    get_administrative_terms_autocomplete,
+    highlight_query_in_text,
+    determine_matched_field
+    )
 from django.conf import settings
+from django.http import StreamingHttpResponse
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-import re
-
-
-def highlight_query_in_text(text, query, max_length=300):
-    """
-    Highlight query terms in text and return a truncated excerpt
-    """
-    if not text or not query:
-        return text[:max_length] + ('...' if len(text) > max_length else '') if text else ""
-    
-    # Simple highlighting - wrap matching terms in <mark> tags
-    # This is a basic implementation - you might want to use more sophisticated highlighting
-    query_terms = query.strip().split()
-    highlighted_text = text
-    
-    for term in query_terms:
-        if len(term) > 2:  # Only highlight terms longer than 2 characters
-            pattern = re.compile(re.escape(term), re.IGNORECASE)
-            highlighted_text = pattern.sub(f'<mark>{term}</mark>', highlighted_text)
-    
-    # Truncate if needed
-    if len(highlighted_text) > max_length:
-        # Try to find a good breaking point near a highlight
-        mark_pos = highlighted_text.find('<mark>')
-        if mark_pos > -1 and mark_pos < max_length:
-            # Start excerpt a bit before the highlight
-            start = max(0, mark_pos - 50)
-            end = min(len(highlighted_text), start + max_length)
-            excerpt = highlighted_text[start:end]
-            if start > 0:
-                excerpt = '...' + excerpt
-            if end < len(highlighted_text):
-                excerpt = excerpt + '...'
-            return excerpt
-        else:
-            return highlighted_text[:max_length] + '...'
-    
-    return highlighted_text
-
-
-def determine_matched_field(entity_type, entity, query):
-    """
-    Determine which field likely matched the search query
-    """
-    query_lower = query.lower()
-    
-    if entity_type == 'organization':
-        if query_lower in entity.label.lower():
-            return 'name'
-        elif entity.latin_name and query_lower in entity.latin_name.lower():
-            return 'latin_name'
-        elif entity.category and query_lower in entity.category.lower():
-            return 'category'
-        elif entity.vat_number and query_lower in entity.vat_number.lower():
-            return 'vat_number'
-    elif entity_type == 'signer':
-        if query_lower in entity.first_name.lower() or query_lower in entity.last_name.lower():
-            return 'name'
-    elif entity_type == 'unit':
-        if query_lower in entity.label.lower():
-            return 'name'
-        elif entity.category and query_lower in entity.category.lower():
-            return 'category'
-    elif entity_type == 'company':
-        if entity.co_name_el and query_lower in entity.co_name_el.lower():
-            return 'name'
-        elif entity.afm and query_lower in entity.afm:
-            return 'afm'
-        elif str(entity.ar_gemi) in query:
-            return 'gemi'
-    elif entity_type == 'company_person':
-        if entity.person_name and query_lower in entity.person_name.lower():
-            return 'person_name'
-        elif entity.business_name and query_lower in entity.business_name.lower():
-            return 'business_name'
-        elif entity.role and query_lower in entity.role.lower():
-            return 'role'
-    
-    return 'other'
-
+import json
 
 def get_search_data_for_api(query, **kwargs):
     """
@@ -325,6 +254,155 @@ def get_search_data_for_api(query, **kwargs):
         results['total_count'] += doc_results['count']
     
     return results
+
+
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[
+        openapi.Parameter('q', openapi.IN_QUERY, description="Search query", type=openapi.TYPE_STRING, required=True),
+        openapi.Parameter('types', openapi.IN_QUERY, description="Comma-separated entity types (organization,signer,unit,company,company_person)", type=openapi.TYPE_STRING, required=False),
+        openapi.Parameter('limit', openapi.IN_QUERY, description="Results limit per type", type=openapi.TYPE_INTEGER),
+    ]
+)
+@api_view(['GET'])
+@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+def entities_fast_search_api(request):
+    """
+    Fast entity-only search API
+    Returns organizations, signers, units, companies, and company persons quickly
+    without including slow document search
+    
+    Use this for real-time search-as-you-type functionality
+    """
+    query = request.GET.get('q', '')
+    types_param = request.GET.get('types', 'organization,signer,unit,company,company_person')
+    limit = int(request.GET.get('limit', 5))
+    
+    # Parse entity types
+    entity_types = [t.strip() for t in types_param.split(',') if t.strip()]
+    
+    # Use the fast utility function
+    results = get_entities_fast(
+        query,
+        entity_types=entity_types,
+        limit=limit
+    )
+    
+    return Response(results)
+
+
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[
+        openapi.Parameter('q', openapi.IN_QUERY, description="Search query", type=openapi.TYPE_STRING, required=True),
+        openapi.Parameter('include_documents', openapi.IN_QUERY, description="Include document search", type=openapi.TYPE_BOOLEAN),
+        openapi.Parameter('limit', openapi.IN_QUERY, description="Results limit per type", type=openapi.TYPE_INTEGER),
+    ]
+)
+@api_view(['GET'])
+@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+def search_stream_api(request):
+    """
+    SSE (Server-Sent Events) streaming search API
+    Returns entities first (fast), then documents (slow) incrementally
+    
+    Usage:
+        const eventSource = new EventSource('/api/search/stream/?q=ΔΗΜΟΣ&limit=5');
+        eventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'entities') { ... }
+            if (data.type === 'documents') { ... }
+            if (data.type === 'done') { eventSource.close(); }
+        };
+    """
+    query = request.GET.get('q', '')
+    include_documents = request.GET.get('include_documents', 'true').lower() == 'true'
+    limit = int(request.GET.get('limit', 5))
+    
+    def event_stream():
+        """Generator function that yields SSE-formatted data"""
+        try:
+            # Phase 1: Fast entity search (organizations, signers, units, companies, company_persons)
+            entity_results = get_entities_fast(
+                query,
+                entity_types=['organization', 'signer', 'unit', 'company', 'company_person'],
+                limit=limit
+            )
+            
+            # Send entity results immediately
+            yield f"data: {json.dumps(entity_results)}\n\n"
+            
+            # Phase 2: Slow document search (if requested)
+            if include_documents:
+                document_results = get_documents_slow(query, limit=limit)
+                yield f"data: {json.dumps(document_results)}\n\n"
+            
+            # Send completion signal
+            yield f"data: {json.dumps({'type': 'done', 'query': query})}\n\n"
+            
+        except Exception as e:
+            # Send error event
+            error_data = {
+                'type': 'error',
+                'message': str(e),
+                'query': query
+            }
+            yield f"data: {json.dumps(error_data)}\n\n"
+    
+    response = StreamingHttpResponse(
+        event_stream(),
+        content_type='text/event-stream'
+    )
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'  # Disable buffering in nginx
+    
+    return response
+
+
+
+
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[
+        openapi.Parameter('q', openapi.IN_QUERY, description="Search query prefix", type=openapi.TYPE_STRING, required=False),
+        openapi.Parameter('category', openapi.IN_QUERY, description="Filter by category (organization, company)", type=openapi.TYPE_STRING, required=False),
+    ]
+)
+@api_view(['GET'])
+@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+def autocomplete_suggestions_api(request):
+    """
+    Autocomplete suggestions API
+    Returns common Greek administrative terms that match the query
+    
+    This is designed to help users quickly find organizations by typing
+    common prefixes like "ΔΗΜΟΣ", "ΠΕΡΙΦΕΡΕΙΑ", "ΥΠΟΥΡΓΕΙΟ", etc.
+    
+    Future enhancement: Use analytics to find most common terms in entity names
+    """
+    query = request.GET.get('q', '').strip().upper()
+    category = request.GET.get('category', '').lower()
+    
+    # Filter terms based on query and category
+    suggestions = []
+    common_administrative_terms = get_administrative_terms_autocomplete()
+    for term in common_administrative_terms:
+        # Apply category filter if specified
+        if category and term['category'] != category:
+            continue
+        
+        # Match query prefix if provided
+        if query and not term['text'].startswith(query):
+            continue
+        
+        suggestions.append(term)
+    
+    return Response({
+        'query': query,
+        'suggestions': suggestions,
+        'count': len(suggestions)
+    })
+
 
 @swagger_auto_schema(
     method='get',

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getSearchSuggestions, getFullSearchResults } from '../api/searchApi';
+import { streamSearch, getAutocompleteSuggestions } from '../api/searchApi';
 import './SuperSearch.css';
 
 const SuperSearch = ({ 
@@ -15,11 +15,14 @@ const SuperSearch = ({
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
+  const [autocompleteResults, setAutocompleteResults] = useState([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
   
   const navigate = useNavigate();
   const inputRef = useRef(null);
   const resultsRef = useRef(null);
   const searchTimeoutRef = useRef(null);
+  const sseCleanupRef = useRef(null);
   
   // Auto focus if requested
   useEffect(() => {
@@ -28,31 +31,138 @@ const SuperSearch = ({
     }
   }, [autoFocus]);
 
-  // Debounced search function
+  // Cleanup SSE connection on unmount
+  useEffect(() => {
+    return () => {
+      if (sseCleanupRef.current) {
+        sseCleanupRef.current();
+      }
+    };
+  }, []);
+
+  // Fetch autocomplete suggestions for Greek administrative terms
+  const fetchAutocompleteSuggestions = useCallback(async (searchQuery) => {
+    if (!searchQuery.trim() || searchQuery.length < 2) {
+      setAutocompleteResults([]);
+      return;
+    }
+
+    try {
+      const suggestions = await getAutocompleteSuggestions(searchQuery);
+      setAutocompleteResults(suggestions.suggestions || []);
+    } catch (error) {
+      console.error('Failed to fetch autocomplete suggestions:', error);
+      setAutocompleteResults([]);
+    }
+  }, []);
+
+  // Debounced search function using SSE
   const performSearch = useCallback(async (searchQuery) => {
     if (!searchQuery.trim()) {
       setResults(null);
       setShowResults(false);
+      setAutocompleteResults([]);
       return;
     }
 
+    // Cancel any existing SSE connection
+    if (sseCleanupRef.current) {
+      sseCleanupRef.current();
+      sseCleanupRef.current = null;
+    }
+
     setIsLoading(true);
+    setDocumentsLoading(false);
+    
+    // Fetch autocomplete suggestions in parallel
+    fetchAutocompleteSuggestions(searchQuery);
+
     try {
-      const searchResults = showFullResults 
-        ? await getFullSearchResults(searchQuery, 5)
-        : await getSearchSuggestions(searchQuery, 5);
+      // Start SSE streaming search
+      const cleanup = streamSearch(searchQuery, {
+        includeDocuments: showFullResults,
+        limit: 5,
+        
+        // Handle entity results (fast)
+        onEntities: (entityData) => {
+          setResults(prevResults => {
+            // Merge entity results with existing results
+            const newResults = {
+              query: entityData.query,
+              results: { ...entityData.results },
+              total_count: entityData.total_count
+            };
+            
+            // If we already have document results, merge them
+            if (prevResults?.results?.documents) {
+              newResults.results.documents = prevResults.results.documents;
+              newResults.total_count += prevResults.results.documents.length;
+            }
+            
+            return newResults;
+          });
+          
+          setShowResults(true);
+          setIsLoading(false);
+          setDocumentsLoading(showFullResults); // Start loading documents indicator
+        },
+        
+        // Handle document results (slow)
+        onDocuments: (documentData) => {
+          setResults(prevResults => {
+            if (!prevResults) return documentData;
+            
+            // Merge document results with entity results
+            return {
+              query: prevResults.query,
+              results: {
+                ...prevResults.results,
+                documents: documentData.results.documents || []
+              },
+              total_count: prevResults.total_count + (documentData.results.documents?.length || 0)
+            };
+          });
+          
+          setDocumentsLoading(false);
+        },
+        
+        // Handle completion
+        onDone: () => {
+          setDocumentsLoading(false);
+          setIsLoading(false);
+          sseCleanupRef.current = null;
+        },
+        
+        // Handle errors
+        onError: (error) => {
+          console.error('Search stream failed:', error);
+          setIsLoading(false);
+          setDocumentsLoading(false);
+          sseCleanupRef.current = null;
+          
+          // Show error state but don't hide existing results
+          if (!results) {
+            setResults({
+              query: searchQuery,
+              results: {},
+              total_count: 0,
+              error: error.message
+            });
+          }
+        }
+      });
       
-      setResults(searchResults);
-      setShowResults(true);
-      setSelectedIndex(-1);
+      // Store cleanup function
+      sseCleanupRef.current = cleanup;
+      
     } catch (error) {
-      console.error('Search failed:', error);
+      console.error('Search initialization failed:', error);
+      setIsLoading(false);
+      setDocumentsLoading(false);
       setResults(null);
       setShowResults(false);
-    } finally {
-      setIsLoading(false);
     }
-  }, [showFullResults]);
+  }, [showFullResults, fetchAutocompleteSuggestions]);
 
   // Handle input changes with debouncing
   const handleInputChange = (e) => {
@@ -307,6 +417,11 @@ const SuperSearch = ({
         />
         {isLoading && (
           <div className="super-search-loading">
+            <div className="super-search-loading-spinner" />
+          </div>
+        )}
+        {!isLoading && documentsLoading && (
+          <div className="super-search-loading" title="Loading documents...">
             <div className="super-search-loading-spinner" />
           </div>
         )}

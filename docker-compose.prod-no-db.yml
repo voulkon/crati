@@ -192,6 +192,7 @@ services:
       - STEALTH_ALLOWLIST=${STEALTH_ALLOWLIST:-false}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_STORAGE_BUCKET_NAME=${AWS_STORAGE_BUCKET_NAME:-crati-backups}
     networks:
       - diavgeia-prod-net
     depends_on:
@@ -230,6 +231,7 @@ services:
       - LIGHT_WORKER=${LIGHT_WORKER:-false}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_STORAGE_BUCKET_NAME=${AWS_STORAGE_BUCKET_NAME:-crati-backups}
   beat:
     build:
       context: .

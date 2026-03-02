@@ -1,4 +1,62 @@
-/* Compact bookmark button for TopControls */
+/* ── Split button wrapper ─────────────────────────────────── */
+.bookmark-split-btn {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: 0 2px 8px var(--shadow);
+  backdrop-filter: blur(10px);
+}
+
+/* Divider line between the two halves */
+.bookmark-split-btn > .bookmark-button {
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+  box-shadow: none;
+  min-width: 40px;
+}
+
+/* Chevron half */
+.bookmark-chevron {
+  position: relative;
+  background-color: transparent;
+  color: var(--text-color);
+  border: 1px solid transparent;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 0 var(--spacing-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 50px;
+  transition: all var(--transition-fast);
+  box-shadow: none;
+}
+
+.bookmark-chevron:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.bookmark-chevron.active {
+  background-color: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+}
+
+.bookmark-chevron.active:hover {
+  filter: brightness(1.1);
+}
+
+.bookmark-chevron-icon {
+  font-size: var(--font-md);
+  line-height: 1;
+}
+
+.bookmark-split-btn.library-open > .bookmark-button {
+  border-right-color: rgba(255, 255, 255, 0.25);
+}
+
+/* ── Star half ────────────────────────────────────────────── */
 .bookmark-button {
   background-color: transparent;
   color: var(--text-color);
@@ -93,10 +151,15 @@
 /* Responsive */
 @media (max-width: 768px) {
   .bookmark-button {
-    min-width: 40px;
+    min-width: 36px;
     height: 40px;
     padding: var(--spacing-xs) var(--spacing-sm);
     font-size: var(--font-md);
+  }
+
+  .bookmark-chevron {
+    height: 40px;
+    padding: 0 var(--spacing-xs);
   }
   
   .bookmark-toast {

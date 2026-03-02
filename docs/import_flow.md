@@ -1,1 +1,0 @@
-import_decisions.py → DecisionIngestionService → DecisionImporter → Decision saved → Signal triggers → DocumentExtraction → Signal should index to OpenSearch

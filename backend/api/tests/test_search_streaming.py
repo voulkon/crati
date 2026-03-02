@@ -7,11 +7,13 @@ from django.test import TestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from unittest.mock import patch, MagicMock
 from api.views.search.entity_search import (
+    autocomplete_suggestions_api,
+    search_stream_api
+)
+from api.views.search.entity_search_utils import (
     get_entities_fast,
     get_documents_slow,
-    search_stream_api,
-    autocomplete_suggestions_api,
-    GREEK_ADMINISTRATIVE_TERMS
+    get_administrative_terms_autocomplete
 )
 
 User = get_user_model()
@@ -308,7 +310,7 @@ class TestAutocompleteAPI(TestCase):
         data = response.data
         
         # Should return all administrative terms
-        self.assertEqual(len(data['suggestions']), len(GREEK_ADMINISTRATIVE_TERMS))
+        self.assertEqual(len(data['suggestions']), len(get_administrative_terms_autocomplete()))
     
     def test_autocomplete_with_category(self):
         """Test autocomplete with category filter"""
@@ -375,21 +377,3 @@ class TestSearchPerformance(TestCase):
         
         # This demonstrates entities can be processed independently of documents
         # In the SSE stream, these arrive first
-
-
-# Integration test for the full SSE flow
-@pytest.mark.skipif(
-    not pytest.config.getoption("--run-integration"),
-    reason="Only run with --run-integration flag"
-)
-class TestSSEIntegration(TestCase):
-    """Integration tests for SSE streaming (requires running server)"""
-    
-    def test_sse_real_connection(self):
-        """
-        Test real SSE connection (requires running server)
-        This is an integration test, not a unit test
-        """
-        # This would test the actual SSE connection
-        # Skip in unit tests, only run in integration tests
-        pass

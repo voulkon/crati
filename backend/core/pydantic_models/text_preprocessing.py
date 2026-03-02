@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer, ConfigDict
 from typing import Dict, Any, Optional
 from enum import Enum
 
@@ -11,13 +11,15 @@ class CorruptionDetectionStrategy(Enum):
 class PreprocessingResult(BaseModel):
     """Result of text preprocessing operations."""
     
+    model_config = ConfigDict()
+    
     processed_text: str = Field(..., description="The text after preprocessing (stopwords removed, etc.)")
     is_corrupted: bool = Field(..., description="True if the text appears to be corrupted or garbled")
     confidence_score: Optional[float] = Field(None, description="Confidence score for corruption detection (0.0-1.0)")
     performance_stats: Dict[str, Any] = Field(default_factory=dict, description="Performance metrics for the preprocessing")
     corruption_indicators: Dict[str, Any] = Field(default_factory=dict, description="Details about what triggered corruption detection")
 
-    class Config:
-        json_encoders = {
-            float: lambda v: round(v, 4)  # Round floats to 4 decimal places
-        }
+    @field_serializer('confidence_score')
+    def serialize_confidence_score(self, value: Optional[float]) -> Optional[float]:
+        """Round confidence score to 4 decimal places."""
+        return round(value, 4) if value is not None else None

@@ -1,4 +1,5 @@
 from core.services.search_service import SearchService
+from core.services.greek_transliteration_service import GreekTransliterationService
 import re
 
 def determine_matched_field(entity_type, entity, query):
@@ -78,8 +79,19 @@ def highlight_query_in_text(text, query, max_length=300):
     return highlighted_text
 
 # TODO: Protocol on response to be able to replace it with a function that searches the db
-def get_administrative_terms_autocomplete():
-# Common Greek administrative terms for autocomplete
+def get_administrative_terms_autocomplete(query_prefix=''):
+    """
+    Get autocomplete suggestions for Greek administrative terms.
+    
+    Args:
+        query_prefix: Optional prefix to filter suggestions (automatically transliterated)
+    
+    # Common Greek administrative terms for autocomplete
+    """
+    # Transliterate the query prefix if provided
+    if query_prefix:
+        query_prefix = GreekTransliterationService.transliterate_query(query_prefix).upper()
+    
     GREEK_ADMINISTRATIVE_TERMS = [
         {'text': 'ΔΗΜΟΣ', 'category': 'organization', 'description': 'Municipality'},
         {'text': 'ΠΕΡΙΦΕΡΕΙΑ', 'category': 'organization', 'description': 'Region'},
@@ -102,7 +114,12 @@ def get_entities_fast(query, **kwargs):
     """
     Fast entity search - returns organizations, signers, units, companies, and company_persons
     This uses PostgreSQL queries and is typically much faster than document search
+    
+    Automatically transliterates English letters to Greek (e.g., "DHMOS" -> "ΔΗΜΟΣ")
     """
+    # Transliterate English letters to Greek if needed
+    query = GreekTransliterationService.transliterate_query(query)
+    
     search_service = SearchService()
     
     # Extract parameters
@@ -267,7 +284,14 @@ def get_documents_slow(query, limit=5):
     """
     Slow document search - queries OpenSearch for document content
     This is typically slower than entity search and may not always be needed
+    
+    Automatically transliterates English letters to Greek (e.g., "DHMOS" -> "ΔΗΜΟΣ")
     """
+    # Transliterate English letters to Greek if needed
+    # I'm not sure I want this here. If someone is looking for "mydata", I don't want to transliterate it to "μυδατα". Maybe we should only transliterate if the query is all uppercase and matches common patterns for Greek words?
+    # Yet again, there time that I want it
+    # query = GreekTransliterationService.transliterate_query(query)
+    
     search_service = SearchService()
     
     results = {

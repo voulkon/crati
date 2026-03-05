@@ -16,7 +16,7 @@ Usage:
 
 import sys
 import logging
-from pythonjsonlogger.json import jsonlogger
+from pythonjsonlogger import jsonlogger
 
 
 class CustomJsonFormatter(jsonlogger.JsonFormatter):

@@ -22,7 +22,7 @@ import {
 } from '../components/Icons';
 
 const DecisionDetailPage = () => {
-  const { id } = useParams();
+  const { ada: id } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
   

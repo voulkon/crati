@@ -1,23 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { SignInButton } from '@clerk/clerk-react';
-import { useAuth } from '@clerk/clerk-react';
+import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from '../contexts/TranslationContext';
 import { useTheme } from '../contexts/ThemeContext';
+
+// Check if Clerk is available
+const isClerkAvailable = () => {
+  return !!process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+};
+
+// Lazy load SignInButton only if Clerk is available
+let SignInButton;
+if (isClerkAvailable()) {
+  const clerkReact = require('@clerk/clerk-react');
+  SignInButton = clerkReact.SignInButton;
+}
 
 /**
  * Modal that prompts users to sign in when they try to access protected features
  */
 function AuthPromptModal() {
   const { t } = useTranslation();
-  const { isLoaded, isSignedIn } = useAuth();
+  const { isLoaded, isSignedIn, isClerkAuth } = useAuth();
   const { getCurrentPaletteColor } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     const handleAuthRequired = (event) => {
-      // Only show if user is not already signed in
-      if (isLoaded && !isSignedIn) {
+      // Only show if Clerk is available and user is not already signed in
+      if (isClerkAuth && isLoaded && !isSignedIn) {
         setMessage(event.detail?.message || t('auth.signInRequired') || 'Please sign in to access this feature');
         setIsOpen(true);
       }
@@ -28,9 +39,10 @@ function AuthPromptModal() {
     return () => {
       window.removeEventListener('authRequired', handleAuthRequired);
     };
-  }, [isLoaded, isSignedIn, t]);
+  }, [isLoaded, isSignedIn, isClerkAuth, t]);
 
-  if (!isOpen) return null;
+  // Don't render if Clerk is not available
+  if (!isClerkAuth || !isOpen) return null;
 
   return (
     <div style={{

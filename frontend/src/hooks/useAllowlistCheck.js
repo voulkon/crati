@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '@clerk/clerk-react';
+import { useAuth } from '../contexts/AuthContext';
 
 /**
  * Hook to check if the authenticated user is in the allowlist
@@ -8,12 +8,19 @@ import { useAuth } from '@clerk/clerk-react';
  * will return 403 if the user is not allowed.
  */
 export function useAllowlistCheck() {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { isLoaded, isSignedIn, getToken, isClerkAuth } = useAuth();
   const [isAllowed, setIsAllowed] = useState(null); // null = checking, true = allowed, false = denied
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
     async function checkAccess() {
+      // If Clerk is not available, skip allowlist check
+      if (!isClerkAuth) {
+        setIsAllowed(true);
+        setIsChecking(false);
+        return;
+      }
+      
       // Only check if auth is loaded and user is signed in
       if (!isLoaded || !isSignedIn) {
         setIsChecking(false);

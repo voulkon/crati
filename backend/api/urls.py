@@ -20,6 +20,7 @@ from .views.organization_entity_relationships import (
     temporal_top_relationship_pairs_api
     )
 from users.views import UserDataViewSet
+from .auth_views import django_login, django_logout, current_user
 
 router = DefaultRouter()
 # Register your viewsets
@@ -30,6 +31,11 @@ urlpatterns = [
     path("public/", public_endpoint, name="public"),
     path("protected/", protected_endpoint, name="protected"),
     path("usage/", check_api_usage, name="check_api_usage"),
+    
+    # Django authentication endpoints (for when Clerk is not configured)
+    path("auth/login/", django_login, name="django_login"),
+    path("auth/logout/", django_logout, name="django_logout"),
+    path("auth/me/", current_user, name="current_user"),
     
     # System configuration
     path("system/config/", system_views.system_config, name="system_config"),

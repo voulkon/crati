@@ -41,19 +41,24 @@ if USE_ORCHESTRATOR_MODE:
 
 CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY")
 
-try:
-    CLERK_JWT_PUBLIC_KEY = validate_and_format_public_key(
-        os.getenv("CLERK_JWT_PUBLIC_KEY")
-    )
-except ValueError as e:
-    logger.error(f"❌ Failed to load CLERK_JWT_PUBLIC_KEY: {e}")
-    logger.error(
-        "Please check your Coolify environment variable configuration. "
-        "The key should be pasted as-is with actual newlines, not escaped \\n. "
-        "Alternatively, you can paste it as a single line (without the newlines in the middle)."
-    )
-    # Set to None to prevent authentication from silently failing
+# Only validate Clerk public key if it's provided
+raw_clerk_key = os.getenv("CLERK_JWT_PUBLIC_KEY")
+if raw_clerk_key:
+    try:
+        CLERK_JWT_PUBLIC_KEY = validate_and_format_public_key(raw_clerk_key)
+        logger.info("Clerk authentication configured")
+    except ValueError as e:
+        logger.error(f"Failed to load CLERK_JWT_PUBLIC_KEY: {e}")
+        logger.error(
+            "Please check your environment variable configuration. "
+            "The key should be pasted as-is with actual newlines, not escaped \\n. "
+            "Alternatively, you can paste it as a single line (without the newlines in the middle)."
+        )
+        # Set to None to prevent authentication from silently failing
+        CLERK_JWT_PUBLIC_KEY = None
+else:
     CLERK_JWT_PUBLIC_KEY = None
+    logger.info("ℹ️  Clerk authentication not configured (missing CLERK_JWT_PUBLIC_KEY). Using Django default authentication.")
 
 # Use the first frontend hostname, or localhost:3000 in debug
 # Auto-derive from frontend domains

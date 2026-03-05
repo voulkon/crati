@@ -1,14 +1,28 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { SignInButton, SignOutButton } from '@clerk/clerk-react';
 import { useTranslation } from '../contexts/TranslationContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import DjangoLoginForm from './DjangoLoginForm';
 import './UserMenu.css';
+
+// Check if Clerk is available
+const isClerkAvailable = () => {
+  return !!process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+};
+
+// Lazy load Clerk components only if available
+let SignInButton, SignOutButton;
+if (isClerkAvailable()) {
+  const clerkReact = require('@clerk/clerk-react');
+  SignInButton = clerkReact.SignInButton;
+  SignOutButton = clerkReact.SignOutButton;
+}
 
 const UserMenu = () => {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
+  const [showLoginForm, setShowLoginForm] = useState(false);
   const { t, language, switchLanguage, availableLanguages } = useTranslation();
   const { 
     theme, 
@@ -20,7 +34,7 @@ const UserMenu = () => {
     currentThemeName,
     currentPaletteName
   } = useTheme();
-  const { user, isSignedIn } = useAuth();
+  const { user, isSignedIn, isClerkAuth, signOut } = useAuth();
 
   const handleLanguageChange = (langCode) => {
     switchLanguage(langCode);
@@ -188,21 +202,49 @@ const UserMenu = () => {
 
           {/* Authentication Section */}
           <div className="menu-section">
-            {isSignedIn ? (
+            {isSignedIn && isClerkAuth ? (
               <SignOutButton>
                 <button className="menu-action danger" onClick={() => setIsOpen(false)}>
                   🚪 {t('common.signOut')}
                 </button>
               </SignOutButton>
-            ) : (
+            ) : isSignedIn && !isClerkAuth ? (
+              <button 
+                className="menu-action danger" 
+                onClick={() => {
+                  setIsOpen(false);
+                  signOut();
+                }}
+              >
+                🚪 {t('common.signOut')}
+              </button>
+            ) : isClerkAuth ? (
               <SignInButton mode="modal">
                 <button className="menu-action primary" onClick={() => setIsOpen(false)}>
                   🔑 {t('common.signIn')}
                 </button>
               </SignInButton>
+            ) : (
+              <button 
+                className="menu-action primary" 
+                onClick={() => {
+                  setIsOpen(false);
+                  setShowLoginForm(true);
+                }}
+              >
+                🔑 {t('common.signIn')}
+              </button>
             )}
           </div>
         </div>
+      )}
+      
+      {/* Django Login Form Modal */}
+      {showLoginForm && !isClerkAuth && (
+        <DjangoLoginForm 
+          onSuccess={() => setShowLoginForm(false)}
+          onCancel={() => setShowLoginForm(false)}
+        />
       )}
     </div>
   );

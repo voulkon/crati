@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { SignedIn, SignedOut, RedirectToSignIn, useAuth } from '@clerk/clerk-react';
+import { SignedIn, SignedOut, RedirectToSignIn } from "@clerk/clerk-react";
 import HomePage from "./pages/HomePage";
 import DevPage from "./pages/OrganizationsPage";
 import EntityDetailPage from "./pages/EntityDetailPage";
@@ -24,10 +24,16 @@ import RateLimitModal from './components/RateLimitModal';
 import AuthPromptModal from './components/AuthPromptModal';
 import { setTokenGetter } from './api/client';
 import { useTranslation } from './contexts/TranslationContext';
+import { useAuth } from './contexts/AuthContext';
 
-// Authentication wrapper component with allowlist check
+// Check if Clerk is available
+const isClerkAvailable = () => {
+  return !!process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+};
+
+// Separate component to access auth context
 function AuthenticatedApp({ controlsLayout }) {
-  const { getToken } = useAuth();
+  const { getToken, isClerkAuth } = useAuth();
   const { t } = useTranslation(); // OK here - this component is inside TranslationProvider
   const stealthAllowlist = process.env.REACT_APP_STEALTH_ALLOWLIST === 'true';
   const { isAllowed, isChecking } = useAllowlistCheck();
@@ -38,9 +44,9 @@ function AuthenticatedApp({ controlsLayout }) {
   
   // Set up the token getter for API client
   useEffect(() => {
-    setTokenGetter(getToken);
+    setTokenGetter(getToken, isClerkAuth);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getToken]);
+  }, [getToken, isClerkAuth]);
   
   // If allowlist is enabled, check if user is allowed
   if (stealthAllowlist) {
@@ -102,31 +108,43 @@ function AuthenticatedApp({ controlsLayout }) {
         <Route path="/search-example" element={<SuperSearchExample />} />
         
         <Route path="/entity/:entityType/:entityId" element={<EntityDetailPage />} />
+        <Route path="/decision/:ada" element={<DecisionDetailPage />} />
         <Route path="/health" element={<Clock />} />
         <Route path="/entity/afm/:afm" element={<AFMEntityDetailPage />} />
         
         {/* Relationship page - Entity × Organization */}
         <Route path="/relationship/entity/:afm/org/:orgUid" element={<RelationshipDetailPage />} />
-        
-        {/* Temporal exploration routes */}
-        <Route path="/explore/temporal/:date" element={<EntityDetailPage />} />
-        <Route path="/explore/temporal/:startDate/:endDate" element={<EntityDetailPage />} />
-        <Route path="/explore/month/:year/:month" element={<EntityDetailPage />} />
-        <Route path="/explore/week/:year/:week" element={<EntityDetailPage />} />
-        <Route path="/decision/:id" element={<DecisionDetailPage />} />
       </Routes>
     </>
   );
 }
 
-function App() {
-  // Easy way to switch layouts - just change this value!
-  const controlsLayout = 'horizontal-right'; // Options: 'horizontal-right', 'vertical-right', 'split-corners', 'horizontal-left'
-  const { isLoaded } = useAuth();
+// Main App component
+function App({ controlsLayout = 'horizontal-right' }) {
   // NOTE: Cannot use useTranslation here - this component creates the TranslationProvider
   
   // Stealth mode toggle - set REACT_APP_STEALTH_MODE=true to require authentication
   const stealthMode = process.env.REACT_APP_STEALTH_MODE === 'true';
+  const clerkAvailable = isClerkAvailable();
+
+  return (
+    <TranslationProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppContent 
+            controlsLayout={controlsLayout} 
+            stealthMode={stealthMode} 
+            clerkAvailable={clerkAvailable}
+          />
+        </AuthProvider>
+      </ThemeProvider>
+    </TranslationProvider>
+  );
+}
+
+// Separate component to access auth context
+function AppContent({ controlsLayout, stealthMode, clerkAvailable }) {
+  const { isLoaded } = useAuth();
 
   // Show loading state while checking authentication
   if (!isLoaded) {
@@ -147,35 +165,29 @@ function App() {
   }
 
   return (
-    <TranslationProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          <Router>
-            <div className="App" style={{ 
-              backgroundColor: 'var(--bg-color)', 
-              color: 'var(--text-color)', 
-              minHeight: '100vh',
-              transition: 'background-color 0.3s ease, color 0.3s ease'
-            }}>
-              {stealthMode ? (
-                // Stealth mode ON - require authentication
-                <>
-                  <SignedIn>
-                    <AuthenticatedApp controlsLayout={controlsLayout} />
-                  </SignedIn>
-                  <SignedOut>
-                    <RedirectToSignIn />
-                  </SignedOut>
-                </>
-              ) : (
-                // Stealth mode OFF - public access
-                <AuthenticatedApp controlsLayout={controlsLayout} />
-              )}
-            </div>
-          </Router>
-        </AuthProvider>
-      </ThemeProvider>
-    </TranslationProvider>
+    <Router>
+      <div className="App" style={{ 
+        backgroundColor: 'var(--bg-color)', 
+        color: 'var(--text-color)', 
+        minHeight: '100vh',
+        transition: 'background-color 0.3s ease, color 0.3s ease'
+      }}>
+        {stealthMode && clerkAvailable ? (
+          // Stealth mode ON with Clerk - require Clerk authentication
+          <>
+            <SignedIn>
+              <AuthenticatedApp controlsLayout={controlsLayout} />
+            </SignedIn>
+            <SignedOut>
+              <RedirectToSignIn />
+            </SignedOut>
+          </>
+        ) : (
+          // Stealth mode OFF or Clerk not available - public access or Django auth
+          <AuthenticatedApp controlsLayout={controlsLayout} />
+        )}
+      </div>
+    </Router>
   );
 }
 

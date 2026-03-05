@@ -150,7 +150,7 @@ const HomePage = () => {
                 <div 
                   key={decision.ada} 
                   className="decision-item compact clickable"
-                  onClick={() => navigate(`/decision/${decision.ada}`)}
+                  onClick={() => navigate(`/decision/${decision.id}`)}
                 >
                   <div className="card-rank">#{index + 1}</div>
                   <div className="decision-content">

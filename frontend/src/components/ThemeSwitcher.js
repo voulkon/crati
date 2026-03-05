@@ -39,7 +39,8 @@ const ThemeSwitcher = ({ compact = false }) => {
   const getCurrentPaletteColor = () => {
     const currentPalette = palettes.find(p => p.id === palette);
     if (!currentPalette) return '#4299E1';
-    return theme === 'dark' ? currentPalette.darkColor : currentPalette.color;
+    const isDarkTheme = theme === 'dark' || theme === 'solarized-dark';
+    return isDarkTheme ? currentPalette.darkColor : currentPalette.color;
   };
 
   if (compact) {
@@ -102,7 +103,7 @@ const ThemeSwitcher = ({ compact = false }) => {
                     className={`palette-button ${palette === p.id ? 'active' : ''}`}
                     title={`${p.name} color palette`}
                     style={{ 
-                      backgroundColor: theme === 'dark' ? p.darkColor : p.color 
+                      backgroundColor: (theme === 'dark' || theme === 'solarized-dark') ? p.darkColor : p.color 
                     }}
                   >
                     {palette === p.id && <span className="check-mark">✓</span>}
@@ -157,12 +158,12 @@ const ThemeSwitcher = ({ compact = false }) => {
                 key={p.id}
                 onClick={() => changePalette(p.id)}
                 className={`palette-button ${palette === p.id ? 'active' : ''}`}
-                title={`${p.name} - ${theme === 'dark' ? 'Dark' : 'Light'} Mode`}
+                title={`${p.name} - ${(theme === 'dark' || theme === 'solarized-dark') ? 'Dark' : 'Light'} Mode`}
               >
                 <div 
                   className="palette-color-preview"
                   style={{ 
-                    backgroundColor: theme === 'dark' ? p.darkColor : p.color 
+                    backgroundColor: (theme === 'dark' || theme === 'solarized-dark') ? p.darkColor : p.color 
                   }}
                 >
                   {palette === p.id && <span className="check-mark">✓</span>}

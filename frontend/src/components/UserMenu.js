@@ -53,7 +53,8 @@ const UserMenu = () => {
   const getCurrentPaletteColor = () => {
     const currentPalette = palettes.find(p => p.id === palette);
     if (!currentPalette) return '#4299E1';
-    return theme === 'dark' ? currentPalette.darkColor : currentPalette.color;
+    const isDarkTheme = theme === 'dark' || theme === 'solarized-dark';
+    return isDarkTheme ? currentPalette.darkColor : currentPalette.color;
   };
 
   return (
@@ -179,7 +180,7 @@ const UserMenu = () => {
                   onClick={() => handlePaletteChange(paletteOption.id)}
                   title={paletteOption.name}
                   style={{
-                    backgroundColor: theme === 'dark' ? paletteOption.darkColor : paletteOption.color
+                    backgroundColor: (theme === 'dark' || theme === 'solarized-dark') ? paletteOption.darkColor : paletteOption.color
                   }}
                 >
                   {paletteOption.id === palette && <span className="palette-check">✓</span>}

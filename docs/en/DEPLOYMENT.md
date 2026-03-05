@@ -239,9 +239,9 @@ app.example.com {
 
 ---
 
-### Multi-Server Production (Recommended)
+### Multi-Server Production (Advanced)
 
-Split services across multiple servers for better performance and isolation.
+For better performance and isolation, you can split services across multiple servers. This configuration uses the `docker-compose.prod-no-db.yml` file on the application server and connects to external PostgreSQL and OpenSearch instances.
 
 #### Architecture
 
@@ -258,57 +258,22 @@ Split services across multiple servers for better performance and isolation.
          │
          ├─────────► ┌──────────────────┐
          │           │  Database Server │
-         │           │  - PostgreSQL    │
+         │           │  - PostgreSQL    │  (External/Managed)
          │           └──────────────────┘
          │
          └─────────► ┌──────────────────┐
                      │  Search Server   │
-                     │  - OpenSearch    │
+                     │  - OpenSearch    │  (External/Managed)
                      └──────────────────┘
 ```
 
-#### Server 1: Database Server
+#### Prerequisites
 
-```bash
-# On database server (e.g., 46.225.177.17)
-cd crati
-docker-compose -f docker-compose.prod-only-db.yml --env-file=.env_files/.env.db.secrets up -d
-```
+You'll need to set up PostgreSQL and OpenSearch separately:
+- **PostgreSQL**: Use a managed service (AWS RDS, DigitalOcean, etc.) or deploy manually with pgvector extension
+- **OpenSearch**: Use AWS OpenSearch Service, or deploy manually using Docker/Kubernetes
 
-**Environment variables** (`.env_files/.env.db.secrets`):
-```bash
-POSTGRES_USER=prod_user
-POSTGRES_PASSWORD=<strong-password>
-POSTGRES_DB=crati_production
-```
-
-Expose PostgreSQL to app server:
-```yaml
-# In docker-compose.prod-only-db.yml
-services:
-  db:
-    ports:
-      - "5432:5432"  # Restrict via firewall to app server IP only
-```
-
-#### Server 2: Search Server
-
-```bash
-# On search server
-cd crati
-docker-compose -f docker-compose.prod-only-opensearch.yml --env-file=.env_files/.env.search.secrets up -d
-```
-
-**Environment variables** (`.env_files/.env.search.secrets`):
-```bash
-AWS_ACCESS_KEY_ID=AKIA...
-AWS_SECRET_ACCESS_KEY=...
-AWS_DEFAULT_REGION=eu-north-1
-```
-
-Nginx configuration exposes OpenSearch on port 9200 (restrict to app server).
-
-#### Server 3: Application Server
+#### Application Server Setup
 
 ```bash
 # On application server (e.g., 49.13.136.52)
@@ -318,29 +283,37 @@ docker-compose -f docker-compose.prod-no-db.yml --env-file=.env_files/.env.app.s
 
 **Environment variables** (`.env_files/.env.app.secrets`):
 ```bash
-# Database (remote)
+# Database (external)
 POSTGRES_USER=prod_user
-POSTGRES_PASSWORD=<same-as-db-server>
+POSTGRES_PASSWORD=<strong-password>
 POSTGRES_DB=crati_production
-DB_HOST=46.225.177.17  # Database server IP
+DB_HOST=<database-host-or-ip>  # Your PostgreSQL server
 DB_PORT=5432
 
-# OpenSearch (remote)
-OPENSEARCH_URL=http://search-server-ip:9200
+# OpenSearch (external)
+OPENSEARCH_URL=http://<opensearch-host-or-ip>:9200
 INDEX_THE_OPENSEARCH=true
 
+# Redis, RabbitMQ, etc. (running locally in app server)
 # ... rest of configuration ...
 ```
+
+#### Database Setup
+
+Ensure your PostgreSQL database has:
+- pgvector extension installed
+- User with appropriate permissions
+- Network access from application server
 
 #### Networking & Security
 
 1. **Firewall Rules**:
 ```bash
 # Database server: Allow PostgreSQL only from app server
-sudo ufw allow from 49.13.136.52 to any port 5432
+sudo ufw allow from <app-server-ip> to any port 5432
 
-# Search server: Allow OpenSearch only from app server
-sudo ufw allow from 49.13.136.52 to any port 9200
+# Search server: Allow OpenSearch only from app server  
+sudo ufw allow from <app-server-ip> to any port 9200
 
 # App server: Allow HTTP/HTTPS from anywhere
 sudo ufw allow 80/tcp
@@ -349,7 +322,9 @@ sudo ufw allow 443/tcp
 
 2. **SSL/TLS**: Use Caddy or Let's Encrypt for automatic HTTPS
 
-3. **VPN/Private Network**: Use a VPN or cloud provider's private network for inter-server communication
+3. **Private Network**: Use a VPN or cloud provider's private network for inter-server communication
+
+4. **Managed Services**: Consider using managed PostgreSQL (AWS RDS, DigitalOcean) and OpenSearch services for easier setup and maintenance
 
 ---
 

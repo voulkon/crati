@@ -167,17 +167,15 @@ See [Environment Variables Reference](docs/en/ENVIRONMENT_VARIABLES.md) for comp
 docker-compose -f docker-compose.prod.yml --env-file=.env_files/.env.production.secrets up -d
 ```
 
-### Multi-Server Deployment (Recommended)
+### Multi-Server Deployment (Advanced)
 
-Split services across multiple servers for better performance:
+For larger deployments, split services across multiple servers:
 
 - **App Server**: Backend, workers, Redis, RabbitMQ, observability
-- **Database Server**: PostgreSQL with PgBouncer
-- **Search Server**: OpenSearch cluster
+- **Database**: External PostgreSQL instance (managed service or self-hosted)
+- **Search**: External OpenSearch instance (AWS OpenSearch or self-hosted)
 
-Use the provided docker-compose files:
-- `docker-compose.prod-no-db.yml` - Application server
-- `docker-compose.prod-only-opensearch.yml` - Search server
+Use `docker-compose.prod-no-db.yml` on the application server and configure external database/search connections.
 
 **See [Deployment Guide](docs/en/DEPLOYMENT.md) for detailed instructions.**
 
@@ -385,7 +383,7 @@ Contributions are welcome! Please follow these steps:
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU AGPL v3 License - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 

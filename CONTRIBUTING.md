@@ -176,13 +176,18 @@ git push origin translate/greek-deployment-guide
 
 ### Prerequisites
 
+**Essential:**
 - Docker 20.10+
 - Docker Compose 2.0+
 - Git
-- Python 3.11+ (for local backend development)
-- Node 18+ (for local frontend development)
 
-### Local Development Setup
+**Optional (for local development without Docker):**
+- Python 3.11+
+- Node 18+
+
+### Quick Start
+
+The simplest way to contribute is using Docker, which sets up everything you need:
 
 1. **Clone the repository**
    ```bash
@@ -193,9 +198,10 @@ git push origin translate/greek-deployment-guide
 2. **Create environment file**
    ```bash
    cp .env_files/.env.local.secrets.example .env_files/.env.local.secrets
+   # Edit the file if needed, but defaults work for development
    ```
 
-3. **Start services**
+3. **Start all services**
    ```bash
    docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets up -d
    ```
@@ -205,10 +211,26 @@ git push origin translate/greek-deployment-guide
    docker-compose exec backend python manage.py migrate
    ```
 
-5. **Create superuser**
+5. **Create superuser (optional)**
    ```bash
    docker-compose exec backend python manage.py createsuperuser
    ```
+
+6. **Access the application**
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:8000
+   - Admin panel: http://localhost:8000/admin
+
+### Minimal Setup (Pocket Version)
+
+For contributors focusing on specific features, you can run a minimal setup:
+
+```bash
+# Start only essential services
+docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets up backend db redis
+```
+
+This starts only the backend, database, and Redis - enough for API development and testing.
 
 ### Running Tests
 
@@ -432,10 +454,8 @@ Contributors will be recognized in:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions will be licensed under the GNU AGPL v3 License.
 
 ---
 
 **Thank you for contributing to Crati.Co! 🎉**
-
-**Ευχαριστούμε που συνεισφέρετε στο Διαύγεια/Crati! 🎉**

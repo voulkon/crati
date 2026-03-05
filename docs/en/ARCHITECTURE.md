@@ -139,29 +139,27 @@ docker-compose.yml - Full stack on single machine
 ```
 All services including database, OpenSearch, and observability stack.
 
-### Production (Separated)
+### Production
 
-#### Application Server
+#### Single-Server Production
+```
+docker-compose.prod.yml
+```
+- All services on one server (suitable for small/medium deployments)
+- Frontend, Backend, Workers
+- PostgreSQL with pgvector
+- Redis, RabbitMQ
+- Observability stack
+
+#### Multi-Server Production
 ```
 docker-compose.prod-no-db.yml
 ```
-- Frontend, Backend, Workers
+- Application server with frontend, backend, workers
 - Redis, RabbitMQ, PgBouncer
 - Observability stack
-- Connects to remote DB and OpenSearch
-
-#### Database Server
-```
-docker-compose.prod-only-db.yml (not shown but implied)
-```
-- PostgreSQL with pgvector
-
-#### Search Server
-```
-docker-compose.prod-only-opensearch.yml
-```
-- OpenSearch cluster
-- OpenSearch Dashboards
+- Connects to external PostgreSQL and OpenSearch instances
+- **Note**: External database and search services must be configured separately
 
 ## Data Flow
 

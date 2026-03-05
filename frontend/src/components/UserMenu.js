@@ -4,6 +4,8 @@ import { useTranslation } from '../contexts/TranslationContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import DjangoLoginForm from './DjangoLoginForm';
+import { UserIcon, BookOpenIcon, GlobeIcon } from './Icons';
+import { Moon, Sun, Palette, LogOut, LogIn } from 'lucide-react';
 import './UserMenu.css';
 
 // Check if Clerk is available
@@ -69,7 +71,7 @@ const UserMenu = () => {
             <img src={user.imageUrl} alt={user.firstName} className="avatar-image" />
           ) : (
             <div className="avatar-placeholder">
-              {isSignedIn && user?.firstName ? user.firstName.charAt(0).toUpperCase() : '👤'}
+              {isSignedIn && user?.firstName ? user.firstName.charAt(0).toUpperCase() : <UserIcon size={16} />}
             </div>
           )}
         </div>
@@ -111,7 +113,7 @@ const UserMenu = () => {
                 gap: '8px'
               }}
             >
-              <span>📚</span>
+              <BookOpenIcon size={16} />
               <span>{t('library.myLibrary')}</span>
             </button>
           </div>
@@ -143,7 +145,7 @@ const UserMenu = () => {
           {/* Theme Mode Section */}
           <div className="menu-section">
             <div className="menu-section-label">
-              <span className="section-icon">🌓</span>
+              <span className="section-icon">{theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}</span>
               {t('common.themeMode')}
             </div>
             <div className="menu-options">
@@ -166,7 +168,7 @@ const UserMenu = () => {
           {/* Color Palette Section */}
           <div className="menu-section">
             <div className="menu-section-label">
-              <span className="section-icon">🎨</span>
+              <span className="section-icon"><Palette size={16} /></span>
               {t('common.colorPalette')}
             </div>
             <div className="palette-grid">
@@ -205,7 +207,7 @@ const UserMenu = () => {
             {isSignedIn && isClerkAuth ? (
               <SignOutButton>
                 <button className="menu-action danger" onClick={() => setIsOpen(false)}>
-                  🚪 {t('common.signOut')}
+                  <LogOut size={16} /> {t('common.signOut')}
                 </button>
               </SignOutButton>
             ) : isSignedIn && !isClerkAuth ? (
@@ -216,12 +218,12 @@ const UserMenu = () => {
                   signOut();
                 }}
               >
-                🚪 {t('common.signOut')}
+                <LogOut size={16} /> {t('common.signOut')}
               </button>
             ) : isClerkAuth ? (
               <SignInButton mode="modal">
                 <button className="menu-action primary" onClick={() => setIsOpen(false)}>
-                  🔑 {t('common.signIn')}
+                  <LogIn size={16} /> {t('common.signIn')}
                 </button>
               </SignInButton>
             ) : (
@@ -232,7 +234,7 @@ const UserMenu = () => {
                   setShowLoginForm(true);
                 }}
               >
-                🔑 {t('common.signIn')}
+                <LogIn size={16} /> {t('common.signIn')}
               </button>
             )}
           </div>

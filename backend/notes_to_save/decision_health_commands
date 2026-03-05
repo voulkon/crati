@@ -1,8 +1,0 @@
-# Check specific decision
-python manage.py check_decision_health --ada "SOME_ADA" --verbose
-
-# Check recent decisions  
-python manage.py check_decision_health --days 7 --limit 20
-
-# Investigate problems
-python manage.py investigate_decision_issues --component opensearch --limit 10

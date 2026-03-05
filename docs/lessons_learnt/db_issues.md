@@ -1,6 +1,5 @@
 # PostgreSQL Memory Crisis - Diagnosis & Resolution Guide
 
-**Date:** February 2-7, 2026  
 **Server:** ubuntu-16gb-fsn1-1 (16GB RAM, 0GB Swap initially)  
 **Database:** PostgreSQL 17 with pgvector (Container: ts8kss040c8sckso4kgssccs)
 

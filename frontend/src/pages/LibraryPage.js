@@ -1,15 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  Folder,
+  Star,
+  BookOpen,
+  Clock,
+  Edit2,
+  Trash2,
+  FileText,
+  X,
+  Eye,
+  ArrowRight,
+  Plus
+} from 'lucide-react';
+import {
   getBookmarks,
   getFolders,
   createFolder,
   updateFolder,
   deleteFolder,
-  createBookmark,
   updateBookmark,
   deleteBookmark
 } from '../api/bookmarks';
+import './LibraryPage.css';
 
 /**
  * Library Page - Full-featured bookmark and folder management
@@ -32,8 +45,8 @@ export default function LibraryPage() {
   const [folderFormData, setFolderFormData] = useState({
     name: '',
     description: '',
-    color: '#3b82f6',
-    icon: '📁'
+    color: '',
+    icon: ''
   });
 
   useEffect(() => {
@@ -42,6 +55,7 @@ export default function LibraryPage() {
 
   useEffect(() => {
     loadBookmarks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedFolder, viewMode]);
 
   async function loadData() {
@@ -120,25 +134,13 @@ export default function LibraryPage() {
     }
   }
 
-  async function handleSaveBookmarkNotes(bookmarkId, notes) {
-    try {
-      await updateBookmark(bookmarkId, { notes });
-      loadBookmarks();
-      if (selectedBookmark?.id === bookmarkId) {
-        setSelectedBookmark({ ...selectedBookmark, notes });
-      }
-    } catch (error) {
-      console.error('Failed to save notes:', error);
-    }
-  }
-
   function openFolderModal(folder = null) {
     setEditingFolder(folder);
     setFolderFormData(folder || {
       name: '',
       description: '',
-      color: '#3b82f6',
-      icon: '📁'
+      color: '',
+      icon: ''
     });
     setShowFolderModal(true);
   }
@@ -173,53 +175,30 @@ export default function LibraryPage() {
 
   if (isLoading) {
     return (
-      <div style={{ padding: '40px', textAlign: 'center' }}>
-        <div style={{ fontSize: '18px', color: 'var(--text-secondary)' }}>
-          Loading your library...
-        </div>
+      <div className="library-loading">
+        <div className="library-loading-spinner"></div>
+        <div>Loading your library...</div>
       </div>
     );
   }
 
   return (
-    <div style={{
-      display: 'flex',
-      height: 'calc(100vh - 60px)',
-      backgroundColor: 'var(--bg-color)',
-      color: 'var(--text-color)'
-    }}>
+    <div className="library-page">
       {/* LEFT: Folders Sidebar */}
-      <div style={{
-        width: '280px',
-        borderRight: '1px solid var(--border-color, #e5e7eb)',
-        padding: '20px',
-        overflowY: 'auto'
-      }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px'
-        }}>
-          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>Folders</h2>
+      <div className="library-folders-sidebar">
+        <div className="library-sidebar-header">
+          <h2 className="library-sidebar-title">Folders</h2>
           <button
             onClick={() => openFolderModal()}
-            style={{
-              padding: '6px 12px',
-              backgroundColor: 'var(--accent-color, #3b82f6)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontSize: '14px'
-            }}
+            className="library-new-folder-btn"
           >
-            + New
+            <Plus size={16} />
+            New
           </button>
         </div>
 
         {/* View Mode Filter */}
-        <div style={{ marginBottom: '16px' }}>
+        <div className="library-view-modes">
           {['all', 'favorites', 'recent'].map(mode => (
             <button
               key={mode}
@@ -227,234 +206,136 @@ export default function LibraryPage() {
                 setViewMode(mode);
                 setSelectedFolder(null);
               }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 12px',
-                marginBottom: '4px',
-                backgroundColor: viewMode === mode ? 'var(--accent-color, #3b82f6)' : 'transparent',
-                color: viewMode === mode ? 'white' : 'var(--text-color)',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                textAlign: 'left',
-                fontSize: '14px'
-              }}
+              className={`library-view-mode-btn ${viewMode === mode ? 'active' : ''}`}
             >
-              {mode === 'all' && '📚 All Bookmarks'}
-              {mode === 'favorites' && '⭐ Favorites'}
-              {mode === 'recent' && '🕒 Recent'}
+              <span className="library-view-mode-icon">
+                {mode === 'all' && <BookOpen size={18} />}
+                {mode === 'favorites' && <Star size={18} />}
+                {mode === 'recent' && <Clock size={18} />}
+              </span>
+              {mode === 'all' && 'All Bookmarks'}
+              {mode === 'favorites' && 'Favorites'}
+              {mode === 'recent' && 'Recent'}
             </button>
           ))}
         </div>
 
-        <div style={{
-          height: '1px',
-          backgroundColor: 'var(--border-color, #e5e7eb)',
-          margin: '16px 0'
-        }} />
+        <div className="library-divider" />
 
         {/* Folder List */}
-        {folders.map(folder => (
-          <div
-            key={folder.id}
-            style={{
-              padding: '10px 12px',
-              marginBottom: '4px',
-              backgroundColor: selectedFolder?.id === folder.id ? 'var(--bg-secondary, #f3f4f6)' : 'transparent',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: '8px'
-            }}
-            onClick={() => handleFolderClick(folder)}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
-              <span style={{ fontSize: '18px' }}>{folder.icon || '📁'}</span>
-              <span style={{
-                fontSize: '14px',
-                fontWeight: '500',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                {folder.name}
-              </span>
-              <span style={{
-                fontSize: '12px',
-                color: 'var(--text-secondary)',
-                marginLeft: 'auto'
-              }}>
-                {folder.bookmark_count}
-              </span>
+        <div className="library-folder-list">
+          {folders.map(folder => (
+            <div
+              key={folder.id}
+              className={`library-folder-item ${selectedFolder?.id === folder.id ? 'active' : ''}`}
+              onClick={() => handleFolderClick(folder)}
+            >
+              <div className="library-folder-main">
+                <span className="library-folder-icon">
+                  <Folder size={18} />
+                </span>
+                <span className="library-folder-name">
+                  {folder.name}
+                </span>
+                <span className="library-folder-count">
+                  {folder.bookmark_count}
+                </span>
+              </div>
+              <div className="library-folder-actions">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openFolderModal(folder);
+                  }}
+                  className="library-folder-action-btn"
+                  title="Edit folder"
+                >
+                  <Edit2 size={14} />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteFolder(folder.id);
+                  }}
+                  className="library-folder-action-btn delete"
+                  title="Delete folder"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: '4px' }}>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openFolderModal(folder);
-                }}
-                style={{
-                  padding: '4px 8px',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-                title="Edit folder"
-              >
-                ✏️
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteFolder(folder.id);
-                }}
-                style={{
-                  padding: '4px 8px',
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontSize: '12px'
-                }}
-                title="Delete folder"
-              >
-                🗑️
-              </button>
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
 
       {/* CENTER: Bookmarks List */}
-      <div style={{
-        flex: 1,
-        padding: '20px',
-        overflowY: 'auto'
-      }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px'
-        }}>
-          <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>
+      <div className="library-bookmarks-main">
+        <div className="library-bookmarks-header">
+          <h2 className="library-bookmarks-title">
             {selectedFolder ? `${selectedFolder.name}` : viewMode === 'all' ? 'All Bookmarks' : viewMode === 'favorites' ? 'Favorites' : 'Recent'}
           </h2>
-          <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
+          <span className="library-bookmarks-count">
             {bookmarks.length} bookmark{bookmarks.length !== 1 ? 's' : ''}
           </span>
         </div>
 
         {bookmarks.length === 0 ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '60px 20px',
-            color: 'var(--text-secondary)'
-          }}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>📑</div>
-            <div style={{ fontSize: '16px', marginBottom: '8px' }}>No bookmarks yet</div>
-            <div style={{ fontSize: '14px' }}>
+          <div className="library-empty-state">
+            <div className="library-empty-icon">
+              <FileText size={48} />
+            </div>
+            <div className="library-empty-title">No bookmarks yet</div>
+            <div className="library-empty-hint">
               Use the ☆ button on any page to create your first bookmark
             </div>
           </div>
         ) : (
-          <div style={{ display: 'grid', gap: '12px' }}>
+          <div className="library-bookmarks-grid">
             {bookmarks.map(bookmark => (
               <div
                 key={bookmark.id}
                 onClick={() => handleBookmarkClick(bookmark)}
-                style={{
-                  padding: '16px',
-                  backgroundColor: selectedBookmark?.id === bookmark.id ? 'var(--bg-secondary, #f3f4f6)' : 'var(--bg-card, white)',
-                  border: '1px solid var(--border-color, #e5e7eb)',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedBookmark?.id !== bookmark.id) {
-                    e.currentTarget.style.borderColor = 'var(--accent-color, #3b82f6)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedBookmark?.id !== bookmark.id) {
-                    e.currentTarget.style.borderColor = 'var(--border-color, #e5e7eb)';
-                  }
-                }}
+                className={`library-bookmark-card ${selectedBookmark?.id === bookmark.id ? 'selected' : ''}`}
               >
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <div className="library-bookmark-card-content">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       handleToggleFavorite(bookmark);
                     }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      fontSize: '20px',
-                      cursor: 'pointer',
-                      padding: '0'
-                    }}
+                    className={`library-bookmark-favorite-btn ${bookmark.is_favorite ? 'favorited' : ''}`}
                   >
-                    {bookmark.is_favorite ? '⭐' : '☆'}
+                    <Star size={20} fill={bookmark.is_favorite ? 'currentColor' : 'none'} />
                   </button>
                   
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontSize: '16px',
-                      fontWeight: '600',
-                      marginBottom: '4px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
+                  <div className="library-bookmark-info">
+                    <div className="library-bookmark-title">
                       {bookmark.title}
                     </div>
                     
-                    <div style={{
-                      fontSize: '13px',
-                      color: 'var(--text-secondary)',
-                      marginBottom: '8px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
+                    <div className="library-bookmark-url">
                       {bookmark.url}
                     </div>
                     
                     {bookmark.notes && (
-                      <div style={{
-                        fontSize: '14px',
-                        color: 'var(--text-secondary)',
-                        marginTop: '8px',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical'
-                      }}>
+                      <div className="library-bookmark-notes">
                         {bookmark.notes}
                       </div>
                     )}
                     
-                    <div style={{
-                      display: 'flex',
-                      gap: '12px',
-                      marginTop: '8px',
-                      fontSize: '12px',
-                      color: 'var(--text-secondary)'
-                    }}>
+                    <div className="library-bookmark-meta">
                       {bookmark.folder_name && (
-                        <span>📁 {bookmark.folder_name}</span>
+                        <span className="library-bookmark-meta-item">
+                          <Folder size={12} /> {bookmark.folder_name}
+                        </span>
                       )}
                       {bookmark.visit_count > 0 && (
-                        <span>👁️ {bookmark.visit_count}</span>
+                        <span className="library-bookmark-meta-item">
+                          <Eye size={12} /> {bookmark.visit_count}
+                        </span>
                       )}
                       {bookmark.last_visited && (
-                        <span>
+                        <span className="library-bookmark-meta-item">
                           Last: {new Date(bookmark.last_visited).toLocaleDateString()}
                         </span>
                       )}
@@ -466,18 +347,9 @@ export default function LibraryPage() {
                       e.stopPropagation();
                       handleNavigateToBookmark(bookmark);
                     }}
-                    style={{
-                      padding: '8px 16px',
-                      backgroundColor: 'var(--accent-color, #3b82f6)',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      whiteSpace: 'nowrap'
-                    }}
+                    className="library-bookmark-open-btn"
                   >
-                    Open →
+                    Open <ArrowRight size={14} />
                   </button>
                 </div>
               </div>
@@ -503,142 +375,51 @@ export default function LibraryPage() {
 
       {/* Folder Modal */}
       {showFolderModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: 'var(--bg-card, white)',
-            borderRadius: '12px',
-            padding: '24px',
-            width: '90%',
-            maxWidth: '500px',
-            maxHeight: '80vh',
-            overflow: 'auto'
-          }}>
-            <h3 style={{ marginTop: 0, marginBottom: '20px' }}>
+        <div className="library-modal-overlay" onClick={() => setShowFolderModal(false)}>
+          <div className="library-modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="library-modal-title">
               {editingFolder ? 'Edit Folder' : 'New Folder'}
             </h3>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>
+            <div className="library-form-group">
+              <label className="library-form-label">
                 Name *
               </label>
               <input
                 type="text"
                 value={folderFormData.name}
                 onChange={(e) => setFolderFormData({ ...folderFormData, name: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color, #e5e7eb)',
-                  fontSize: '14px',
-                  backgroundColor: 'var(--bg-color)',
-                  color: 'var(--text-color)'
-                }}
+                className="library-form-input"
                 placeholder="Work Research"
               />
             </div>
 
-            <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>
+            <div className="library-form-group">
+              <label className="library-form-label">
                 Description
               </label>
               <textarea
                 value={folderFormData.description}
                 onChange={(e) => setFolderFormData({ ...folderFormData, description: e.target.value })}
-                style={{
-                  width: '100%',
-                  padding: '10px',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border-color, #e5e7eb)',
-                  fontSize: '14px',
-                  backgroundColor: 'var(--bg-color)',
-                  color: 'var(--text-color)',
-                  minHeight: '80px',
-                  resize: 'vertical'
-                }}
+                className="library-form-textarea"
                 placeholder="Optional description..."
               />
             </div>
 
-            <div style={{ marginBottom: '16px', display: 'flex', gap: '16px' }}>
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>
-                  Icon
-                </label>
-                <input
-                  type="text"
-                  value={folderFormData.icon}
-                  onChange={(e) => setFolderFormData({ ...folderFormData, icon: e.target.value })}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color, #e5e7eb)',
-                    fontSize: '14px',
-                    backgroundColor: 'var(--bg-color)',
-                    color: 'var(--text-color)'
-                  }}
-                  placeholder="📁 or emoji"
-                />
-              </div>
-
-              <div style={{ flex: 1 }}>
-                <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>
-                  Color
-                </label>
-                <input
-                  type="color"
-                  value={folderFormData.color}
-                  onChange={(e) => setFolderFormData({ ...folderFormData, color: e.target.value })}
-                  style={{
-                    width: '100%',
-                    height: '42px',
-                    borderRadius: '6px',
-                    border: '1px solid var(--border-color, #e5e7eb)',
-                    cursor: 'pointer'
-                  }}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px' }}>
+            <div className="library-form-actions">
               <button
                 onClick={() => setShowFolderModal(false)}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: 'transparent',
-                  border: '1px solid var(--border-color, #e5e7eb)',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  color: 'var(--text-color)'
-                }}
+                className="library-form-btn secondary"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveFolder}
                 disabled={!folderFormData.name.trim()}
+                className="library-form-btn"
                 style={{
-                  padding: '10px 20px',
-                  backgroundColor: 'var(--accent-color, #3b82f6)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '6px',
-                  cursor: folderFormData.name.trim() ? 'pointer' : 'not-allowed',
-                  fontSize: '14px',
-                  opacity: folderFormData.name.trim() ? 1 : 0.5
+                  opacity: folderFormData.name.trim() ? 1 : 0.5,
+                  cursor: folderFormData.name.trim() ? 'pointer' : 'not-allowed'
                 }}
               >
                 {editingFolder ? 'Save' : 'Create'}
@@ -669,174 +450,101 @@ function BookmarkEditor({ bookmark, folders, onSave, onDelete, onClose }) {
   }
 
   return (
-    <div style={{
-      width: '400px',
-      borderLeft: '1px solid var(--border-color, #e5e7eb)',
-      padding: '20px',
-      overflowY: 'auto',
-      backgroundColor: 'var(--bg-card, white)'
-    }}>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '20px'
-      }}>
-        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>Details</h3>
+    <div className="library-editor-panel">
+      <div className="library-editor-header">
+        <h3 className="library-editor-title">Details</h3>
         <button
           onClick={onClose}
-          style={{
-            background: 'none',
-            border: 'none',
-            fontSize: '20px',
-            cursor: 'pointer',
-            padding: '0'
-          }}
+          className="library-editor-close-btn"
         >
-          ✕
+          <X size={20} />
         </button>
       </div>
 
       {isEditing ? (
         <>
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>
+          <div className="library-form-group">
+            <label className="library-form-label">
               Title
             </label>
             <input
               type="text"
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color, #e5e7eb)',
-                fontSize: '14px',
-                backgroundColor: 'var(--bg-color)',
-                color: 'var(--text-color)'
-              }}
+              className="library-form-input"
             />
           </div>
 
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>
+          <div className="library-form-group">
+            <label className="library-form-label">
               Folder
             </label>
             <select
               value={formData.folder_id || ''}
               onChange={(e) => setFormData({ ...formData, folder_id: e.target.value || null })}
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color, #e5e7eb)',
-                fontSize: '14px',
-                backgroundColor: 'var(--bg-color)',
-                color: 'var(--text-color)'
-              }}
+              className="library-form-select"
             >
               <option value="">No folder</option>
               {folders.map(f => (
-                <option key={f.id} value={f.id}>{f.icon} {f.name}</option>
+                <option key={f.id} value={f.id}>{f.name}</option>
               ))}
             </select>
           </div>
 
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '500' }}>
+          <div className="library-form-group">
+            <label className="library-form-label">
               Notes
             </label>
             <textarea
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              style={{
-                width: '100%',
-                padding: '10px',
-                borderRadius: '6px',
-                border: '1px solid var(--border-color, #e5e7eb)',
-                fontSize: '14px',
-                backgroundColor: 'var(--bg-color)',
-                color: 'var(--text-color)',
-                minHeight: '200px',
-                resize: 'vertical'
-              }}
+              className="library-form-textarea"
               placeholder="Add your research notes here..."
             />
           </div>
 
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div className="library-form-actions">
             <button
               onClick={() => setIsEditing(false)}
-              style={{
-                flex: 1,
-                padding: '10px',
-                backgroundColor: 'transparent',
-                border: '1px solid var(--border-color, #e5e7eb)',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
+              className="library-form-btn secondary"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
-              style={{
-                flex: 1,
-                padding: '10px',
-                backgroundColor: 'var(--accent-color, #3b82f6)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
+              className="library-form-btn"
             >
               Save
             </button>
           </div>
         </>
       ) : (
-        <>
-          <div style={{ marginBottom: '20px' }}>
-            <h4 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '8px' }}>
+        <div className="library-editor-view">
+          <div className="library-editor-section">
+            <h4 className="library-editor-bookmark-title">
               {bookmark.title}
             </h4>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>
+            <div className="library-editor-bookmark-url">
               {bookmark.url}
             </div>
           </div>
 
           {bookmark.folder_name && (
-            <div style={{ marginBottom: '16px', fontSize: '14px' }}>
+            <div className="library-editor-section">
               <span style={{ fontWeight: '500' }}>Folder:</span> {bookmark.folder_name}
             </div>
           )}
 
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '14px', fontWeight: '500', marginBottom: '8px' }}>
+          <div className="library-editor-section">
+            <div className="library-editor-section-title">
               Notes
             </div>
-            <div style={{
-              padding: '12px',
-              backgroundColor: 'var(--bg-secondary, #f3f4f6)',
-              borderRadius: '6px',
-              fontSize: '14px',
-              whiteSpace: 'pre-wrap',
-              minHeight: '100px'
-            }}>
-              {bookmark.notes || <span style={{ color: 'var(--text-secondary)' }}>No notes yet</span>}
+            <div className="library-editor-notes-display">
+              {bookmark.notes || <span className="library-editor-notes-empty">No notes yet</span>}
             </div>
           </div>
 
-          <div style={{
-            padding: '12px',
-            backgroundColor: 'var(--bg-secondary, #f3f4f6)',
-            borderRadius: '6px',
-            fontSize: '13px',
-            marginBottom: '16px'
-          }}>
+          <div className="library-editor-stats">
             <div>Views: {bookmark.visit_count}</div>
             <div>Created: {new Date(bookmark.created_at).toLocaleString()}</div>
             {bookmark.last_visited && (
@@ -844,39 +552,23 @@ function BookmarkEditor({ bookmark, folders, onSave, onDelete, onClose }) {
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div className="library-form-actions">
             <button
               onClick={() => setIsEditing(true)}
-              style={{
-                flex: 1,
-                padding: '10px',
-                backgroundColor: 'var(--accent-color, #3b82f6)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
+              className="library-form-btn"
             >
-              Edit
+              <Edit2 size={16} /> Edit
             </button>
             <button
               onClick={onDelete}
-              style={{
-                padding: '10px 16px',
-                backgroundColor: '#ef4444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
+              className="library-form-btn danger"
             >
-              🗑️
+              <Trash2 size={16} />
             </button>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
 }
+

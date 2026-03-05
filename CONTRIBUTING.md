@@ -449,7 +449,6 @@ Contributors will be recognized in:
 ## Questions?
 
 - Open a [GitHub Discussion](https://github.com/voulkon/crati/discussions)
-- Join our community chat (if available)
 - Contact maintainers directly
 
 ## License

@@ -167,11 +167,11 @@ docker-compose.prod-no-db.yml
 ```
 Diavgeia API → Worker → PostgreSQL → (Optional) OpenSearch
                   ↓
-              PDF Storage (S3)
+              PDF Storage (Ephemeral Storage) - S3 Not Available yet
                   ↓
               Text Extraction
                   ↓
-              PostgreSQL + Vector Embeddings
+              PostgreSQL (+ placeholder for Vector Embeddings included in data modelling)
 ```
 
 ### 2. User Request Flow

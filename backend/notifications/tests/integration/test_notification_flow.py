@@ -196,13 +196,14 @@ class TestMultipleSubscriptionTypes:
         sub.last_checked = timezone.now() - timedelta(days=1)
         sub.save()
         
-        # Create decision with entity in signer
-        from core.models import Signer
+        # Create decision with entity relationship
+        from core.models.entities import DecisionEntityRelationship, EntityRole
         decision = DecisionFactory()
-        Signer.objects.create(
+        DecisionEntityRelationship.objects.create(
             decision=decision,
-            afm=afm_entity.afm,
-            name=afm_entity.name
+            entity=afm_entity,
+            role=EntityRole.SPONSOR,
+            parent_key_path='sponsor[0].sponsorAFMName'
         )
         
         # Check subscription
@@ -257,12 +258,12 @@ class TestNotificationManagement:
     
     def test_mark_all_as_read(self, authenticated_client, unread_notifications):
         """Test marking all notifications as read"""
-        response = authenticated_client.post('/api/notifications/mark_all_read/')
+        response = authenticated_client.post('/api/notifications/mark-all-read/')
         assert response.status_code == status.HTTP_200_OK
         assert response.data['marked_read'] == len(unread_notifications)
         
         # Verify all are marked read
-        response = authenticated_client.get('/api/notifications/unread_count/')
+        response = authenticated_client.get('/api/notifications/unread-count/')
         assert response.data['unread_count'] == 0
     
     def test_dismiss_notification(

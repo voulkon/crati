@@ -201,19 +201,10 @@ class NotificationFactory(DjangoModelFactory):
     match_reason = 'organization_match'
     is_read = False
     is_dismissed = False
-    
-    @factory.post_generation
-    def match_details(self, create, extracted, **kwargs):
-        """Handle match_details JSONField"""
-        if not create:
-            return
-        if extracted:
-            self.match_details = extracted
-        else:
-            self.match_details = {
-                'matched_on': 'organization',
-                'organization_uid': self.decision.organization.uid if self.decision else None
-            }
+    match_details = factory.LazyAttribute(lambda obj: {
+        'matched_on': 'organization',
+        'organization_uid': obj.decision.organization.uid if obj.decision and obj.decision.organization else None
+    })
 
 
 # ============================================================================

@@ -139,23 +139,18 @@ def find_matching_decisions(subscription, check_since):
         queryset = queryset.filter(organization=subscription.organization)
     
     elif subscription.subscription_type == 'entity':
-        # Check if entity appears in signer, buyer, or extra_fields
+        # Check if entity appears in any decision through entity_relationships
         entity_afm = subscription.entity.afm
         queryset = queryset.filter(
-            models.Q(signer__afm=entity_afm) |
-            models.Q(buyer__afm=entity_afm) |
-            models.Q(seller__afm=entity_afm)
+            entity_relationships__entity__afm=entity_afm
         )
     
     elif subscription.subscription_type == 'relationship':
         # Check for relationship between org and entity
         entity_afm = subscription.relationship_entity.afm
         queryset = queryset.filter(
-            organization=subscription.relationship_org
-        ).filter(
-            models.Q(signer__afm=entity_afm) |
-            models.Q(buyer__afm=entity_afm) |
-            models.Q(seller__afm=entity_afm)
+            organization=subscription.relationship_org,
+            entity_relationships__entity__afm=entity_afm
         )
     
     # Apply optional filters

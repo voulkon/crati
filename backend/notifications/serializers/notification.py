@@ -133,8 +133,7 @@ class DecisionDetailSerializer(serializers.ModelSerializer):
             'organization_uid',
             'decision_type_label',
             'decision_type_code',
-            'private_data',
-            'government_gazette_number',
+            'has_private_data',
         ]
         read_only_fields = fields
 

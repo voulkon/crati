@@ -3,12 +3,16 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
+from django.utils import timezone
 
-from notifications.models import NotificationSubscription
+from notifications.models import NotificationSubscription, Notification
 from notifications.serializers import (
     NotificationSubscriptionSerializer,
     NotificationSubscriptionCreateSerializer,
     NotificationSubscriptionListSerializer,
+    NotificationSerializer,
+    NotificationDetailSerializer,
+    NotificationListSerializer,
 )
 from core.models.organizations import Organization
 from core.models.entities import AFMEntity
@@ -243,3 +247,182 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
                 "subscribed": False,
                 "subscription": None
             })
+
+
+class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for reading and managing notifications.
+    
+    Notifications are read-only from the API perspective (created by background tasks).
+    Users can only see their own notifications.
+    
+    Provides read operations:
+    - list: GET /api/notifications/
+    - retrieve: GET /api/notifications/{id}/
+    
+    Custom actions:
+    - unread_count: Get count of unread notifications
+    - mark_read: Mark a notification as read
+    - mark_unread: Mark a notification as unread
+    - dismiss: Dismiss a notification
+    - mark_all_read: Mark all notifications as read
+    - dismiss_all: Dismiss all notifications
+    
+    Query parameters for list:
+    - is_read: Filter by read status (true/false)
+    - is_dismissed: Filter by dismissed status (true/false)
+    - subscription_type: Filter by subscription type (organization/entity/relationship/person/signer/filter)
+    """
+    
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Filter queryset to only show current user's notifications.
+        Apply query parameter filters.
+        Optimize with select_related for nested relationships.
+        """
+        queryset = Notification.objects.filter(user=self.request.user)
+        
+        # Filter by read status
+        is_read = self.request.query_params.get('is_read')
+        if is_read is not None:
+            queryset = queryset.filter(is_read=is_read.lower() == 'true')
+        
+        # Filter by dismissed status
+        is_dismissed = self.request.query_params.get('is_dismissed')
+        if is_dismissed is not None:
+            queryset = queryset.filter(is_dismissed=is_dismissed.lower() == 'true')
+        
+        # Filter by subscription type
+        subscription_type = self.request.query_params.get('subscription_type')
+        if subscription_type:
+            if subscription_type == 'organization':
+                queryset = queryset.filter(subscription__organization__isnull=False)
+            elif subscription_type == 'entity':
+                queryset = queryset.filter(subscription__entity__isnull=False)
+            elif subscription_type == 'relationship':
+                queryset = queryset.filter(
+                    subscription__relationship_org__isnull=False,
+                    subscription__relationship_entity__isnull=False
+                )
+            elif subscription_type == 'person':
+                queryset = queryset.filter(subscription__person_name__isnull=False)
+            elif subscription_type == 'signer':
+                queryset = queryset.filter(subscription__signer_name__isnull=False)
+            elif subscription_type == 'filter':
+                # Filter-only subscriptions have no target
+                queryset = queryset.filter(
+                    subscription__organization__isnull=True,
+                    subscription__entity__isnull=True,
+                    subscription__relationship_org__isnull=True,
+                    subscription__person_name__isnull=True,
+                    subscription__signer_name__isnull=True
+                )
+        
+        return queryset.select_related(
+            'subscription',
+            'subscription__organization',
+            'subscription__entity',
+            'subscription__relationship_org',
+            'subscription__relationship_entity',
+            'decision',
+            'decision__organization',
+            'decision__decision_type'
+        ).order_by('-created_at')
+    
+    def get_serializer_class(self):
+        """
+        Use different serializers for different actions.
+        """
+        if self.action == 'list':
+            return NotificationListSerializer
+        elif self.action == 'retrieve':
+            return NotificationDetailSerializer
+        else:
+            return NotificationSerializer
+    
+    @action(detail=False, methods=['get'], url_path='unread-count')
+    def unread_count(self, request):
+        """
+        Get count of unread notifications for the current user.
+        
+        Returns:
+            {"unread_count": <number>}
+        """
+        count = Notification.objects.filter(
+            user=request.user,
+            is_read=False,
+            is_dismissed=False
+        ).count()
+        return Response({'unread_count': count})
+    
+    @action(detail=True, methods=['post'], url_path='mark-read')
+    def mark_read(self, request, pk=None):
+        """
+        Mark a notification as read.
+        
+        Returns:
+            {"status": "marked as read"}
+        """
+        notification = self.get_object()
+        notification.is_read = True
+        notification.read_at = timezone.now()
+        notification.save()
+        return Response({'status': 'marked as read'})
+    
+    @action(detail=True, methods=['post'], url_path='mark-unread')
+    def mark_unread(self, request, pk=None):
+        """
+        Mark a notification as unread.
+        
+        Returns:
+            {"status": "marked as unread"}
+        """
+        notification = self.get_object()
+        notification.is_read = False
+        notification.read_at = None
+        notification.save()
+        return Response({'status': 'marked as unread'})
+    
+    @action(detail=True, methods=['post'])
+    def dismiss(self, request, pk=None):
+        """
+        Dismiss a notification.
+        
+        Returns:
+            {"status": "dismissed"}
+        """
+        notification = self.get_object()
+        notification.is_dismissed = True
+        notification.save()
+        return Response({'status': 'dismissed'})
+    
+    @action(detail=False, methods=['post'], url_path='mark-all-read')
+    def mark_all_read(self, request):
+        """
+        Mark all unread notifications as read for the current user.
+        
+        Returns:
+            {"marked_read": <count>}
+        """
+        count = Notification.objects.filter(
+            user=request.user,
+            is_read=False,
+            is_dismissed=False
+        ).update(is_read=True, read_at=timezone.now())
+        return Response({'marked_read': count})
+    
+    @action(detail=False, methods=['post'], url_path='dismiss-all')
+    def dismiss_all(self, request):
+        """
+        Dismiss all notifications for the current user.
+        
+        Returns:
+            {"dismissed": <count>}
+        """
+        count = Notification.objects.filter(
+            user=request.user,
+            is_dismissed=False
+        ).update(is_dismissed=True)
+        return Response({'dismissed': count})

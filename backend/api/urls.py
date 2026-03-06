@@ -21,12 +21,13 @@ from .views.organization_entity_relationships import (
     )
 from users.views import UserDataViewSet
 from .auth_views import django_login, django_logout, current_user
-from notifications.views import NotificationSubscriptionViewSet
+from notifications.views import NotificationSubscriptionViewSet, NotificationViewSet
 
 router = DefaultRouter()
 # Register viewsets
 router.register('user-data', UserDataViewSet, basename='user-data')
 router.register('notifications/subscriptions', NotificationSubscriptionViewSet, basename='notification-subscription')
+router.register('notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
     path("", include(router.urls)),

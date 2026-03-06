@@ -5,6 +5,13 @@ from .notification_subscription import (
     OrganizationNestedSerializer,
     AFMEntityNestedSerializer,
 )
+from .notification import (
+    NotificationSerializer,
+    NotificationDetailSerializer,
+    NotificationListSerializer,
+    DecisionNestedSerializer,
+    SubscriptionNestedSerializer,
+)
 
 __all__ = [
     'NotificationSubscriptionSerializer',
@@ -12,4 +19,9 @@ __all__ = [
     'NotificationSubscriptionListSerializer',
     'OrganizationNestedSerializer',
     'AFMEntityNestedSerializer',
+    'NotificationSerializer',
+    'NotificationDetailSerializer',
+    'NotificationListSerializer',
+    'DecisionNestedSerializer',
+    'SubscriptionNestedSerializer',
 ]

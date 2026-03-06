@@ -105,6 +105,21 @@ class NotificationSubscription(models.Model):
     
     # Status and metadata
     is_active = models.BooleanField(default=True, verbose_name=_("Active"))
+    
+    CHECK_FREQUENCY_CHOICES = [
+        ('daily', _('Daily')),
+        ('weekly', _('Weekly')),
+        ('manual', _('Manual only')),
+    ]
+    
+    check_frequency = models.CharField(
+        max_length=20,
+        choices=CHECK_FREQUENCY_CHOICES,
+        default='daily',
+        verbose_name=_("Check frequency"),
+        help_text=_("How often to automatically check for new matching decisions")
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True, verbose_name=_("Created at"))
     last_checked = models.DateTimeField(
         null=True,

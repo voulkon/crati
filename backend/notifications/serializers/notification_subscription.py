@@ -58,6 +58,7 @@ class NotificationSubscriptionSerializer(serializers.ModelSerializer):
             'amount_max',
             'decision_types',
             'is_active',
+            'check_frequency',
             'subscription_type',
             'created_at',
             'last_checked',
@@ -154,6 +155,7 @@ class NotificationSubscriptionCreateSerializer(serializers.ModelSerializer):
             'amount_max',
             'decision_types',
             'is_active',
+            'check_frequency',
         ]
     
     def validate_keywords(self, value):
@@ -305,6 +307,7 @@ class NotificationSubscriptionListSerializer(serializers.ModelSerializer):
             'person_name',
             'signer_name',
             'is_active',
+            'check_frequency',
             'created_at',
         ]
         read_only_fields = fields

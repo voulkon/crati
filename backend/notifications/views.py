@@ -68,10 +68,15 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         """
         Create a new subscription for the current user.
+        Optionally triggers an immediate check for matching decisions.
         """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         subscription = serializer.save()
+        
+        # Trigger immediate check for existing matching decisions
+        from notifications.tasks import check_single_subscription
+        check_single_subscription.delay(subscription.id, lookback_days=30)
         
         # Return full details using the detail serializer
         output_serializer = NotificationSubscriptionSerializer(subscription)
@@ -93,6 +98,35 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         subscription = serializer.save()
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], url_path='check-now')
+    def check_now(self, request, pk=None):
+        """
+        Manually trigger a check for new matching decisions.
+        
+        POST /api/notifications/subscriptions/{id}/check-now/
+        
+        Optional query params:
+        - lookback_days: How many days back to check (default: 30)
+        
+        Returns:
+            {"status": "check started", "task_id": "<task_id>", "subscription_id": <id>}
+        """
+        subscription = self.get_object()
+        
+        # Get lookback_days from query params (default 30)
+        lookback_days = int(request.query_params.get('lookback_days', 30))
+        
+        # Trigger the check task
+        from notifications.tasks import check_single_subscription
+        task = check_single_subscription.delay(subscription.id, lookback_days=lookback_days)
+        
+        return Response({
+            'status': 'check started',
+            'task_id': task.id,
+            'subscription_id': subscription.id,
+            'lookback_days': lookback_days
+        })
     
     @action(detail=False, methods=['get'], url_path='check-organization/(?P<org_uid>[^/.]+)')
     def check_organization_subscription(self, request, org_uid=None):

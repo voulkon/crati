@@ -1,0 +1,310 @@
+from rest_framework import serializers
+from django.core.exceptions import ValidationError as DjangoValidationError
+from notifications.models import NotificationSubscription
+from core.models.organizations import Organization
+from core.models.entities import AFMEntity
+
+
+class OrganizationNestedSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for nested organization details."""
+    
+    class Meta:
+        model = Organization
+        fields = ['uid', 'label', 'latin_name']
+        read_only_fields = fields
+
+
+class AFMEntityNestedSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for nested AFM entity details."""
+    
+    class Meta:
+        model = AFMEntity
+        fields = ['afm', 'name', 'entity_type']
+        read_only_fields = fields
+
+
+class NotificationSubscriptionSerializer(serializers.ModelSerializer):
+    """
+    Full serializer for NotificationSubscription with nested details.
+    Used for retrieve and list operations.
+    """
+    
+    # Nested serializers for read operations
+    organization_details = OrganizationNestedSerializer(source='organization', read_only=True)
+    entity_details = AFMEntityNestedSerializer(source='entity', read_only=True)
+    relationship_org_details = OrganizationNestedSerializer(source='relationship_org', read_only=True)
+    relationship_entity_details = AFMEntityNestedSerializer(source='relationship_entity', read_only=True)
+    
+    # Computed field
+    subscription_type = serializers.CharField(read_only=True)
+    
+    class Meta:
+        model = NotificationSubscription
+        fields = [
+            'id',
+            'user',
+            'organization',
+            'organization_details',
+            'entity',
+            'entity_details',
+            'relationship_org',
+            'relationship_org_details',
+            'relationship_entity',
+            'relationship_entity_details',
+            'person_name',
+            'signer_name',
+            'keywords',
+            'amount_min',
+            'amount_max',
+            'decision_types',
+            'is_active',
+            'subscription_type',
+            'created_at',
+            'last_checked',
+        ]
+        read_only_fields = ['id', 'user', 'created_at', 'last_checked', 'subscription_type']
+    
+    def validate_keywords(self, value):
+        """Ensure keywords is a list if provided."""
+        if value is not None and not isinstance(value, list):
+            raise serializers.ValidationError("Keywords must be a list.")
+        return value
+    
+    def validate_decision_types(self, value):
+        """Ensure decision_types is a list if provided."""
+        if value is not None and not isinstance(value, list):
+            raise serializers.ValidationError("Decision types must be a list.")
+        return value
+    
+    def validate(self, data):
+        """
+        Validate that:
+        1. At least one target OR at least one filter is provided
+        2. amount_min < amount_max if both provided
+        """
+        # Check for targets
+        has_target = any([
+            data.get('organization') is not None,
+            data.get('entity') is not None,
+            data.get('relationship_org') is not None and data.get('relationship_entity') is not None,
+            data.get('person_name'),
+            data.get('signer_name'),
+        ])
+        
+        # Check for filters
+        has_filter = any([
+            data.get('keywords'),
+            data.get('amount_min') is not None,
+            data.get('amount_max') is not None,
+            data.get('decision_types'),
+        ])
+        
+        if not has_target and not has_filter:
+            raise serializers.ValidationError(
+                "Must specify at least one of: target (organization, entity, relationship, person, or signer) "
+                "OR at least one filter (keywords, amounts, decision types)."
+            )
+        
+        # Validate amount range
+        amount_min = data.get('amount_min')
+        amount_max = data.get('amount_max')
+        if amount_min is not None and amount_max is not None:
+            if amount_min >= amount_max:
+                raise serializers.ValidationError(
+                    {"amount_min": "amount_min must be less than amount_max"}
+                )
+        
+        # Validate relationship subscription has both org and entity
+        relationship_org = data.get('relationship_org')
+        relationship_entity = data.get('relationship_entity')
+        if relationship_org is not None and relationship_entity is None:
+            raise serializers.ValidationError(
+                "Relationship subscription requires both organization and entity."
+            )
+        if relationship_entity is not None and relationship_org is None:
+            raise serializers.ValidationError(
+                "Relationship subscription requires both organization and entity."
+            )
+        
+        return data
+
+
+class NotificationSubscriptionCreateSerializer(serializers.ModelSerializer):
+    """
+    Simplified serializer for creating subscriptions.
+    Accepts organization UID and entity AFM as strings and converts them.
+    """
+    
+    organization_uid = serializers.CharField(required=False, allow_null=True, write_only=True)
+    entity_afm = serializers.CharField(required=False, allow_null=True, write_only=True)
+    relationship_org_uid = serializers.CharField(required=False, allow_null=True, write_only=True)
+    relationship_entity_afm = serializers.CharField(required=False, allow_null=True, write_only=True)
+    
+    class Meta:
+        model = NotificationSubscription
+        fields = [
+            'organization_uid',
+            'entity_afm',
+            'relationship_org_uid',
+            'relationship_entity_afm',
+            'person_name',
+            'signer_name',
+            'keywords',
+            'amount_min',
+            'amount_max',
+            'decision_types',
+            'is_active',
+        ]
+    
+    def validate_keywords(self, value):
+        """Ensure keywords is a list if provided."""
+        if value is not None and not isinstance(value, list):
+            raise serializers.ValidationError("Keywords must be a list.")
+        return value
+    
+    def validate_decision_types(self, value):
+        """Ensure decision_types is a list if provided."""
+        if value is not None and not isinstance(value, list):
+            raise serializers.ValidationError("Decision types must be a list.")
+        return value
+    
+    def validate(self, data):
+        """
+        Validate that:
+        1. At least one target OR at least one filter is provided
+        2. amount_min < amount_max if both provided
+        3. UIDs and AFMs are valid
+        """
+        # Check for targets
+        has_target = any([
+            data.get('organization_uid'),
+            data.get('entity_afm'),
+            data.get('relationship_org_uid') and data.get('relationship_entity_afm'),
+            data.get('person_name'),
+            data.get('signer_name'),
+        ])
+        
+        # Check for filters
+        has_filter = any([
+            data.get('keywords'),
+            data.get('amount_min') is not None,
+            data.get('amount_max') is not None,
+            data.get('decision_types'),
+        ])
+        
+        if not has_target and not has_filter:
+            raise serializers.ValidationError(
+                "Must specify at least one of: target (organization, entity, relationship, person, or signer) "
+                "OR at least one filter (keywords, amounts, decision types)."
+            )
+        
+        # Validate amount range
+        amount_min = data.get('amount_min')
+        amount_max = data.get('amount_max')
+        if amount_min is not None and amount_max is not None:
+            if amount_min >= amount_max:
+                raise serializers.ValidationError(
+                    {"amount_min": "amount_min must be less than amount_max"}
+                )
+        
+        # Validate relationship subscription has both org and entity
+        relationship_org_uid = data.get('relationship_org_uid')
+        relationship_entity_afm = data.get('relationship_entity_afm')
+        if relationship_org_uid and not relationship_entity_afm:
+            raise serializers.ValidationError(
+                "Relationship subscription requires both organization and entity."
+            )
+        if relationship_entity_afm and not relationship_org_uid:
+            raise serializers.ValidationError(
+                "Relationship subscription requires both organization and entity."
+            )
+        
+        # Validate organization UID if provided
+        if data.get('organization_uid'):
+            try:
+                Organization.objects.get(uid=data['organization_uid'])
+            except Organization.DoesNotExist:
+                raise serializers.ValidationError(
+                    {"organization_uid": f"Organization with UID '{data['organization_uid']}' does not exist."}
+                )
+        
+        # Validate entity AFM if provided
+        if data.get('entity_afm'):
+            try:
+                AFMEntity.objects.get(afm=data['entity_afm'])
+            except AFMEntity.DoesNotExist:
+                raise serializers.ValidationError(
+                    {"entity_afm": f"Entity with AFM '{data['entity_afm']}' does not exist."}
+                )
+        
+        # Validate relationship org UID if provided
+        if data.get('relationship_org_uid'):
+            try:
+                Organization.objects.get(uid=data['relationship_org_uid'])
+            except Organization.DoesNotExist:
+                raise serializers.ValidationError(
+                    {"relationship_org_uid": f"Organization with UID '{data['relationship_org_uid']}' does not exist."}
+                )
+        
+        # Validate relationship entity AFM if provided
+        if data.get('relationship_entity_afm'):
+            try:
+                AFMEntity.objects.get(afm=data['relationship_entity_afm'])
+            except AFMEntity.DoesNotExist:
+                raise serializers.ValidationError(
+                    {"relationship_entity_afm": f"Entity with AFM '{data['relationship_entity_afm']}' does not exist."}
+                )
+        
+        return data
+    
+    def create(self, validated_data):
+        """
+        Convert UIDs/AFMs to FK relationships and create subscription.
+        """
+        # Extract and convert UIDs/AFMs
+        organization_uid = validated_data.pop('organization_uid', None)
+        entity_afm = validated_data.pop('entity_afm', None)
+        relationship_org_uid = validated_data.pop('relationship_org_uid', None)
+        relationship_entity_afm = validated_data.pop('relationship_entity_afm', None)
+        
+        # Convert to FK relationships
+        if organization_uid:
+            validated_data['organization'] = Organization.objects.get(uid=organization_uid)
+        if entity_afm:
+            validated_data['entity'] = AFMEntity.objects.get(afm=entity_afm)
+        if relationship_org_uid:
+            validated_data['relationship_org'] = Organization.objects.get(uid=relationship_org_uid)
+        if relationship_entity_afm:
+            validated_data['relationship_entity'] = AFMEntity.objects.get(afm=relationship_entity_afm)
+        
+        # Add user from request context
+        validated_data['user'] = self.context['request'].user
+        
+        # Create subscription
+        return NotificationSubscription.objects.create(**validated_data)
+
+
+class NotificationSubscriptionListSerializer(serializers.ModelSerializer):
+    """
+    Optimized serializer for list view with lighter payload.
+    """
+    
+    subscription_type = serializers.CharField(read_only=True)
+    
+    # Simple string fields for targets
+    organization_label = serializers.CharField(source='organization.label', read_only=True)
+    entity_name = serializers.CharField(source='entity.name', read_only=True)
+    
+    class Meta:
+        model = NotificationSubscription
+        fields = [
+            'id',
+            'subscription_type',
+            'organization_label',
+            'entity_name',
+            'person_name',
+            'signer_name',
+            'is_active',
+            'created_at',
+        ]
+        read_only_fields = fields

@@ -42,6 +42,9 @@ function AuthenticatedApp({ controlsLayout }) {
   const [isLibraryOpen, setIsLibraryOpen] = React.useState(false);
   const [bookmarkCount, setBookmarkCount] = React.useState(0);
   
+  // Notification sidebar state
+  const [isNotificationSidebarOpen, setIsNotificationSidebarOpen] = React.useState(false);
+  
   // Set up the token getter for API client
   useEffect(() => {
     setTokenGetter(getToken, isClerkAuth);
@@ -77,6 +80,8 @@ function AuthenticatedApp({ controlsLayout }) {
         onLibraryToggle={() => setIsLibraryOpen(!isLibraryOpen)}
         isLibraryOpen={isLibraryOpen}
         bookmarkCount={bookmarkCount}
+        onNotificationSidebarToggle={() => setIsNotificationSidebarOpen(!isNotificationSidebarOpen)}
+        isNotificationSidebarOpen={isNotificationSidebarOpen}
       />
       
       {/* Library Sidebar */}

@@ -1,0 +1,348 @@
+import apiClient from './client';
+
+/**
+ * Notification system API functions
+ * 
+ * This module provides functions for managing notification subscriptions
+ * and notifications in the user's account.
+ */
+
+// ============ API BASE PATHS ============
+const NOTIFICATIONS_BASE = '/notifications';
+const SUBSCRIPTIONS_BASE = `${NOTIFICATIONS_BASE}/subscriptions`;
+const METADATA_BASE = '/notifications-meta/metadata';
+
+// ============ SUBSCRIPTIONS ============
+
+/**
+ * Get all notification subscriptions for the current user
+ * @returns {Promise<Array>} Array of subscription objects
+ */
+export async function getSubscriptions() {
+  const response = await apiClient.get(`${SUBSCRIPTIONS_BASE}/`);
+  return response.data;
+}
+
+/**
+ * Get a specific subscription by ID
+ * @param {number} id - Subscription ID
+ * @returns {Promise<Object>} Subscription object
+ */
+export async function getSubscription(id) {
+  const response = await apiClient.get(`${SUBSCRIPTIONS_BASE}/${id}/`);
+  return response.data;
+}
+
+/**
+ * Create a new notification subscription
+ * @param {Object} data - Subscription data
+ * @param {string} data.subscription_type - Type: 'organization', 'entity', 'relationship', 'person', 'signer', 'filter_only'
+ * @param {string} [data.organization_uid] - Organization UID (for organization/relationship types)
+ * @param {string} [data.entity_afm] - Entity AFM (for entity/relationship types)
+ * @param {string} [data.person_name] - Person name (for person/signer types)
+ * @param {Array<string>} [data.keywords] - Keywords to filter by
+ * @param {number} [data.amount_min] - Minimum amount
+ * @param {number} [data.amount_max] - Maximum amount
+ * @param {Array<string>} [data.decision_types] - Decision type UIDs to filter by
+ * @returns {Promise<Object>} Created subscription object
+ */
+export async function createSubscription(data) {
+  const response = await apiClient.post(`${SUBSCRIPTIONS_BASE}/`, data);
+  return response.data;
+}
+
+/**
+ * Update an existing subscription
+ * @param {number} id - Subscription ID
+ * @param {Object} data - Fields to update
+ * @returns {Promise<Object>} Updated subscription object
+ */
+export async function updateSubscription(id, data) {
+  const response = await apiClient.patch(`${SUBSCRIPTIONS_BASE}/${id}/`, data);
+  return response.data;
+}
+
+/**
+ * Delete a subscription
+ * @param {number} id - Subscription ID
+ * @returns {Promise<void>}
+ */
+export async function deleteSubscription(id) {
+  await apiClient.delete(`${SUBSCRIPTIONS_BASE}/${id}/`);
+}
+
+/**
+ * Check if user is subscribed to an organization
+ * @param {string} organizationUid - Organization UID
+ * @returns {Promise<Object>} Object with { subscribed: boolean, subscription: Object|null }
+ */
+export async function checkOrganizationSubscription(organizationUid) {
+  const response = await apiClient.get(`${SUBSCRIPTIONS_BASE}/check-organization/${organizationUid}/`);
+  return response.data;
+}
+
+/**
+ * Check if user is subscribed to an entity
+ * @param {string} afm - Entity AFM
+ * @returns {Promise<Object>} Object with { subscribed: boolean, subscription: Object|null }
+ */
+export async function checkEntitySubscription(afm) {
+  const response = await apiClient.get(`${SUBSCRIPTIONS_BASE}/check-entity/${afm}/`);
+  return response.data;
+}
+
+/**
+ * Check if user is subscribed to a relationship
+ * @param {string} organizationUid - Organization UID
+ * @param {string} afm - Entity AFM
+ * @returns {Promise<Object>} Object with { subscribed: boolean, subscription: Object|null }
+ */
+export async function checkRelationshipSubscription(organizationUid, afm) {
+  const response = await apiClient.get(`${SUBSCRIPTIONS_BASE}/check-relationship/`, {
+    params: { org_uid: organizationUid, afm }
+  });
+  return response.data;
+}
+
+/**
+ * Check if user is subscribed to a signer
+ * @param {string} name - Signer name
+ * @returns {Promise<Object>} Object with { subscribed: boolean, subscription: Object|null }
+ */
+export async function checkSignerSubscription(name) {
+  const encodedName = encodeURIComponent(name);
+  const response = await apiClient.get(`${SUBSCRIPTIONS_BASE}/check-signer/${encodedName}/`);
+  return response.data;
+}
+
+/**
+ * Trigger an immediate check for a subscription
+ * @param {number} id - Subscription ID
+ * @param {number} [lookbackDays] - Number of days to look back (default: subscription's check_frequency)
+ * @returns {Promise<Object>} Object with results of the check
+ */
+export async function triggerCheckNow(id, lookbackDays = null) {
+  const params = lookbackDays ? { lookback_days: lookbackDays } : {};
+  const response = await apiClient.post(`${SUBSCRIPTIONS_BASE}/${id}/check-now/`, params);
+  return response.data;
+}
+
+// ============ NOTIFICATIONS ============
+
+/**
+ * Get all notifications for the current user
+ * @param {Object} [filters] - Filter options
+ * @param {boolean} [filters.is_read] - Filter by read status
+ * @param {boolean} [filters.is_dismissed] - Filter by dismissed status
+ * @param {number} [filters.subscription] - Filter by subscription ID
+ * @param {string} [filters.subscription_type] - Filter by subscription type
+ * @returns {Promise<Array>} Array of notification objects
+ */
+export async function getNotifications(filters = {}) {
+  const response = await apiClient.get(`${NOTIFICATIONS_BASE}/`, { params: filters });
+  return response.data;
+}
+
+/**
+ * Get a specific notification by ID
+ * @param {number} id - Notification ID
+ * @returns {Promise<Object>} Notification object
+ */
+export async function getNotification(id) {
+  const response = await apiClient.get(`${NOTIFICATIONS_BASE}/${id}/`);
+  return response.data;
+}
+
+/**
+ * Mark a notification as read
+ * @param {number} id - Notification ID
+ * @returns {Promise<Object>} Updated notification object
+ */
+export async function markNotificationRead(id) {
+  const response = await apiClient.post(`${NOTIFICATIONS_BASE}/${id}/mark-read/`);
+  return response.data;
+}
+
+/**
+ * Mark a notification as unread
+ * @param {number} id - Notification ID
+ * @returns {Promise<Object>} Updated notification object
+ */
+export async function markNotificationUnread(id) {
+  const response = await apiClient.post(`${NOTIFICATIONS_BASE}/${id}/mark-unread/`);
+  return response.data;
+}
+
+/**
+ * Dismiss a notification
+ * @param {number} id - Notification ID
+ * @returns {Promise<Object>} Updated notification object
+ */
+export async function dismissNotification(id) {
+  const response = await apiClient.post(`${NOTIFICATIONS_BASE}/${id}/dismiss/`);
+  return response.data;
+}
+
+/**
+ * Mark all notifications as read
+ * @returns {Promise<Object>} Object with { marked_read: number }
+ */
+export async function markAllNotificationsRead() {
+  const response = await apiClient.post(`${NOTIFICATIONS_BASE}/mark-all-read/`);
+  return response.data;
+}
+
+/**
+ * Dismiss all notifications
+ * @returns {Promise<Object>} Object with { dismissed: number }
+ */
+export async function dismissAllNotifications() {
+  const response = await apiClient.post(`${NOTIFICATIONS_BASE}/dismiss-all/`);
+  return response.data;
+}
+
+/**
+ * Get count of unread notifications
+ * @returns {Promise<Object>} Object with { unread_count: number }
+ */
+export async function getUnreadCount() {
+  const response = await apiClient.get(`${NOTIFICATIONS_BASE}/unread-count/`);
+  return response.data;
+}
+
+// ============ METADATA ============
+
+/**
+ * Get system metadata (subscription types, filter options, etc.)
+ * @returns {Promise<Object>} System metadata object
+ */
+export async function getSystemMetadata() {
+  const response = await apiClient.get(`${METADATA_BASE}/`);
+  return response.data;
+}
+
+/**
+ * Get decision types
+ * @param {Object} [params] - Query parameters
+ * @param {boolean} [params.allowed_in_decisions] - Filter by allowed in decisions
+ * @param {boolean} [params.has_children] - Filter by has children
+ * @param {string} [params.parent_uid] - Filter by parent UID
+ * @param {number} [params.limit] - Limit results
+ * @returns {Promise<Object>} Object with { results: Array, count: number }
+ */
+export async function getDecisionTypes(params = {}) {
+  const response = await apiClient.get(`${METADATA_BASE}/decision-types/`, { params });
+  return response.data;
+}
+
+/**
+ * Get popular decision types
+ * @param {number} [limit=20] - Number of results
+ * @returns {Promise<Object>} Object with { results: Array }
+ */
+export async function getPopularDecisionTypes(limit = 20) {
+  const response = await apiClient.get(`${METADATA_BASE}/popular-decision-types/`, { params: { limit } });
+  return response.data;
+}
+
+// ============ SEARCH ============
+
+/**
+ * Search for entities (organizations, signers, companies, persons)
+ * @param {string} query - Search query
+ * @param {Object} [options] - Search options
+ * @param {Array<string>} [options.types] - Entity types to search for
+ * @param {number} [options.limit] - Limit results per type
+ * @returns {Promise<Object>} Object with results grouped by type
+ */
+export async function searchEntities(query, options = {}) {
+  const params = {
+    q: query,
+    ...(options.types && { types: options.types.join(',') }),
+    ...(options.limit && { limit: options.limit })
+  };
+  
+  const response = await apiClient.get('/search/entities-fast', { params });
+  return response.data;
+}
+
+// ============ HELPER FUNCTIONS ============
+
+/**
+ * Check if a subscription with given parameters already exists
+ * Helper function to prevent duplicate subscriptions
+ * 
+ * @param {Object} subscriptionData - Subscription parameters to check
+ * @returns {Promise<Object|null>} Existing subscription or null
+ */
+export async function findExistingSubscription(subscriptionData) {
+  const subscriptions = await getSubscriptions();
+  
+  return subscriptions.find(sub => {
+    // Match by type first
+    if (sub.subscription_type !== subscriptionData.subscription_type) {
+      return false;
+    }
+    
+    // Match type-specific fields
+    switch (subscriptionData.subscription_type) {
+      case 'organization':
+        return sub.organization_uid === subscriptionData.organization_uid;
+      case 'entity':
+        return sub.entity_afm === subscriptionData.entity_afm;
+      case 'relationship':
+        return sub.organization_uid === subscriptionData.organization_uid &&
+               sub.entity_afm === subscriptionData.entity_afm;
+      case 'person':
+      case 'signer':
+        return sub.person_name === subscriptionData.person_name;
+      case 'filter_only':
+        // Filter-only subscriptions are unique by their filter combination
+        return JSON.stringify(sub.keywords) === JSON.stringify(subscriptionData.keywords) &&
+               sub.amount_min === subscriptionData.amount_min &&
+               sub.amount_max === subscriptionData.amount_max &&
+               JSON.stringify(sub.decision_types) === JSON.stringify(subscriptionData.decision_types);
+      default:
+        return false;
+    }
+  }) || null;
+}
+
+/**
+ * Toggle subscription for an entity
+ * Creates if doesn't exist, deletes if exists
+ * 
+ * @param {Object} subscriptionData - Subscription data
+ * @returns {Promise<Object>} Object with { action: 'created'|'deleted', subscription: Object }
+ */
+export async function toggleSubscription(subscriptionData) {
+  const existing = await findExistingSubscription(subscriptionData);
+  
+  if (existing) {
+    await deleteSubscription(existing.id);
+    return { action: 'deleted', subscription: existing };
+  } else {
+    const created = await createSubscription(subscriptionData);
+    return { action: 'created', subscription: created };
+  }
+}
+
+/**
+ * Get subscription summary stats
+ * @returns {Promise<Object>} Object with counts by type and total
+ */
+export async function getSubscriptionStats() {
+  const subscriptions = await getSubscriptions();
+  
+  const stats = {
+    total: subscriptions.length,
+    by_type: {}
+  };
+  
+  subscriptions.forEach(sub => {
+    const type = sub.subscription_type;
+    stats.by_type[type] = (stats.by_type[type] || 0) + 1;
+  });
+  
+  return stats;
+}

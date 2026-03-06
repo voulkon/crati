@@ -2,9 +2,17 @@ import React from 'react';
 import Logo from './Logo';
 import UserMenu from './UserMenu';
 import BookmarkButton from './BookmarkButton';
+import NotificationButton from './NotificationButton';
 import './TopControls.css';
 
-const TopControls = ({ layout = 'horizontal-right', onLibraryToggle, isLibraryOpen, bookmarkCount }) => {
+const TopControls = ({ 
+  layout = 'horizontal-right', 
+  onLibraryToggle, 
+  isLibraryOpen, 
+  bookmarkCount,
+  onNotificationSidebarToggle,
+  isNotificationSidebarOpen 
+}) => {
   return (
     <>
       {/* Left side: Logo (shifts right when sidebar is open) */}
@@ -14,8 +22,12 @@ const TopControls = ({ layout = 'horizontal-right', onLibraryToggle, isLibraryOp
         </div>
       </div>
       
-      {/* Right side: Split bookmark+chevron button, then User Menu */}
+      {/* Right side: Notification button, Bookmark button, then User Menu */}
       <div className={`top-controls ${layout}`}>
+        <NotificationButton
+          onSidebarToggle={onNotificationSidebarToggle}
+          isSidebarOpen={isNotificationSidebarOpen}
+        />
         <BookmarkButton
           onLibraryToggle={onLibraryToggle}
           isLibraryOpen={isLibraryOpen}

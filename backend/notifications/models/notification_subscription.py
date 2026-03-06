@@ -205,6 +205,38 @@ class NotificationSubscription(models.Model):
             models.Index(fields=['person_name']),
             models.Index(fields=['signer_name']),
         ]
+        constraints = [
+            # Prevent duplicate organization subscriptions
+            models.UniqueConstraint(
+                fields=['user', 'organization'],
+                condition=models.Q(organization__isnull=False),
+                name='unique_user_organization'
+            ),
+            # Prevent duplicate entity subscriptions
+            models.UniqueConstraint(
+                fields=['user', 'entity'],
+                condition=models.Q(entity__isnull=False),
+                name='unique_user_entity'
+            ),
+            # Prevent duplicate relationship subscriptions
+            models.UniqueConstraint(
+                fields=['user', 'relationship_org', 'relationship_entity'],
+                condition=models.Q(relationship_org__isnull=False, relationship_entity__isnull=False),
+                name='unique_user_relationship'
+            ),
+            # Prevent duplicate person subscriptions
+            models.UniqueConstraint(
+                fields=['user', 'person_name'],
+                condition=models.Q(person_name__isnull=False),
+                name='unique_user_person'
+            ),
+            # Prevent duplicate signer subscriptions
+            models.UniqueConstraint(
+                fields=['user', 'signer_name'],
+                condition=models.Q(signer_name__isnull=False),
+                name='unique_user_signer'
+            ),
+        ]
     
     def __str__(self):
         # Use alias if provided

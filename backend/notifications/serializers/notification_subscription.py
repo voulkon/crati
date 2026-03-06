@@ -29,6 +29,32 @@ class NotificationSubscriptionSerializer(serializers.ModelSerializer):
     Used for retrieve and list operations.
     """
     
+    # Use slug fields to return natural keys (uid/afm) instead of IDs
+    organization = serializers.SlugRelatedField(
+        slug_field='uid',
+        queryset=Organization.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    entity = serializers.SlugRelatedField(
+        slug_field='afm',
+        queryset=AFMEntity.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    relationship_org = serializers.SlugRelatedField(
+        slug_field='uid',
+        queryset=Organization.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    relationship_entity = serializers.SlugRelatedField(
+        slug_field='afm',
+        queryset=AFMEntity.objects.all(),
+        required=False,
+        allow_null=True
+    )
+    
     # Nested serializers for read operations
     organization_details = OrganizationNestedSerializer(source='organization', read_only=True)
     entity_details = AFMEntityNestedSerializer(source='entity', read_only=True)
@@ -281,8 +307,12 @@ class NotificationSubscriptionCreateSerializer(serializers.ModelSerializer):
         if relationship_entity_afm:
             validated_data['relationship_entity'] = AFMEntity.objects.get(afm=relationship_entity_afm)
         
-        # Add user from request context
-        validated_data['user'] = self.context['request'].user
+        # Add user from request context if not already provided
+        # (user can be provided via serializer.save(user=user) for testing)
+        if 'user' not in validated_data:
+            # Get user from request context (for production API calls)
+            if 'request' in self.context:
+                validated_data['user'] = self.context['request'].user
         
         # Create subscription
         return NotificationSubscription.objects.create(**validated_data)

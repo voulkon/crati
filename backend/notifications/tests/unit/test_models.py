@@ -40,7 +40,7 @@ class TestNotificationSubscriptionModel:
         assert sub.is_active is True
         assert sub.check_frequency == 'daily'
         assert sub.last_checked is None
-        assert sub.keywords is None
+        assert sub.keywords == []
         assert sub.amount_min is None
         assert sub.amount_max is None
     

@@ -22,6 +22,11 @@ from .views.organization_entity_relationships import (
 from users.views import UserDataViewSet
 from .auth_views import django_login, django_logout, current_user
 from notifications.views import NotificationSubscriptionViewSet, NotificationViewSet
+from notifications.views_metadata import (
+    subscription_metadata,
+    decision_types_list,
+    popular_decision_types
+)
 
 router = DefaultRouter()
 # Register viewsets
@@ -30,6 +35,11 @@ router.register('notifications/subscriptions', NotificationSubscriptionViewSet, 
 router.register('notifications', NotificationViewSet, basename='notification')
 
 urlpatterns = [
+    # Notification metadata endpoints (must be before router to avoid conflicts with notifications/<pk>/)
+    path("notifications-meta/metadata/", subscription_metadata, name="subscription_metadata"),
+    path("notifications-meta/metadata/decision-types/", decision_types_list, name="decision_types_list"),
+    path("notifications-meta/metadata/popular-decision-types/", popular_decision_types, name="popular_decision_types"),
+    
     path("", include(router.urls)),
     path("public/", public_endpoint, name="public"),
     path("protected/", protected_endpoint, name="protected"),

@@ -53,6 +53,7 @@ class NotificationSubscriptionSerializer(serializers.ModelSerializer):
             'relationship_entity_details',
             'person_name',
             'signer_name',
+            'alias',
             'keywords',
             'amount_min',
             'amount_max',
@@ -150,6 +151,7 @@ class NotificationSubscriptionCreateSerializer(serializers.ModelSerializer):
             'relationship_entity_afm',
             'person_name',
             'signer_name',
+            'alias',
             'keywords',
             'amount_min',
             'amount_max',
@@ -302,6 +304,7 @@ class NotificationSubscriptionListSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'subscription_type',
+            'alias',
             'organization_label',
             'entity_name',
             'person_name',

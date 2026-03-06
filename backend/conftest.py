@@ -18,6 +18,35 @@ User = get_user_model()
 
 
 # ============================================================================
+# Auto-use Fixtures (run automatically for all tests)
+# ============================================================================
+
+@pytest.fixture(autouse=True)
+def clear_rate_limit_cache(db):
+    """
+    Clear rate limit cache before each test to prevent rate limit errors.
+    This runs automatically for all tests that use the database.
+    """
+    try:
+        from django.core.cache import cache
+        from django_redis import get_redis_connection
+        
+        # Clear all rate limit keys from cache
+        cache.delete_pattern("ratelimit:*")
+        
+        # Also clear from Redis directly
+        redis = get_redis_connection("default")
+        for key in redis.scan_iter("ratelimit:*"):
+            redis.delete(key)
+    except Exception:
+        # If Redis is not available or there's any error, just skip
+        # This ensures tests can run even without Redis
+        pass
+    
+    yield
+
+
+# ============================================================================
 # User Factories
 # ============================================================================
 

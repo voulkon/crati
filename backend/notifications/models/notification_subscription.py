@@ -74,6 +74,15 @@ class NotificationSubscription(models.Model):
         help_text=_("Watch decisions signed by this person")
     )
     
+    # User-defined alias for the subscription
+    alias = models.CharField(
+        max_length=200,
+        null=True,
+        blank=True,
+        verbose_name=_("Alias"),
+        help_text=_("Optional custom name for this subscription")
+    )
+    
     # Filter fields (optional criteria)
     keywords = models.JSONField(
         null=True,
@@ -198,6 +207,11 @@ class NotificationSubscription(models.Model):
         ]
     
     def __str__(self):
+        # Use alias if provided
+        if self.alias:
+            return f"{self.user.username} → {self.alias}"
+        
+        # Otherwise, use descriptive label based on subscription type
         type_label = self.subscription_type
         if type_label == "organization":
             return f"{self.user.username} → Org: {self.organization.label if self.organization else 'N/A'}"

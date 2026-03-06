@@ -35,11 +35,14 @@ export async function getSubscription(id) {
 
 /**
  * Create a new notification subscription
+ * Note: subscription_type is determined by backend based on which fields are provided
  * @param {Object} data - Subscription data
- * @param {string} data.subscription_type - Type: 'organization', 'entity', 'relationship', 'person', 'signer', 'filter_only'
- * @param {string} [data.organization_uid] - Organization UID (for organization/relationship types)
- * @param {string} [data.entity_afm] - Entity AFM (for entity/relationship types)
- * @param {string} [data.person_name] - Person name (for person/signer types)
+ * @param {string} [data.organization_uid] - Organization UID (for organization subscriptions)
+ * @param {string} [data.entity_afm] - Entity AFM (for entity subscriptions)
+ * @param {string} [data.relationship_org_uid] - Organization UID (for relationship subscriptions)
+ * @param {string} [data.relationship_entity_afm] - Entity AFM (for relationship subscriptions)
+ * @param {string} [data.person_name] - Person name (for person subscriptions)
+ * @param {string} [data.signer_name] - Signer name (for signer subscriptions)
  * @param {Array<string>} [data.keywords] - Keywords to filter by
  * @param {number} [data.amount_min] - Minimum amount
  * @param {number} [data.amount_max] - Maximum amount
@@ -99,7 +102,7 @@ export async function checkEntitySubscription(afm) {
  */
 export async function checkRelationshipSubscription(organizationUid, afm) {
   const response = await apiClient.get(`${SUBSCRIPTIONS_BASE}/check-relationship/`, {
-    params: { org_uid: organizationUid, afm }
+    params: { org_uid: organizationUid, entity_afm: afm }
   });
   return response.data;
 }
@@ -279,32 +282,44 @@ export async function findExistingSubscription(subscriptionData) {
   const subscriptions = await getSubscriptions();
   
   return subscriptions.find(sub => {
-    // Match by type first
-    if (sub.subscription_type !== subscriptionData.subscription_type) {
-      return false;
+    // Determine type from fields present in subscriptionData
+    if (subscriptionData.organization_uid) {
+      return sub.subscription_type === 'organization' && 
+             sub.organization === subscriptionData.organization_uid;
     }
     
-    // Match type-specific fields
-    switch (subscriptionData.subscription_type) {
-      case 'organization':
-        return sub.organization_uid === subscriptionData.organization_uid;
-      case 'entity':
-        return sub.entity_afm === subscriptionData.entity_afm;
-      case 'relationship':
-        return sub.organization_uid === subscriptionData.organization_uid &&
-               sub.entity_afm === subscriptionData.entity_afm;
-      case 'person':
-      case 'signer':
-        return sub.person_name === subscriptionData.person_name;
-      case 'filter_only':
-        // Filter-only subscriptions are unique by their filter combination
-        return JSON.stringify(sub.keywords) === JSON.stringify(subscriptionData.keywords) &&
-               sub.amount_min === subscriptionData.amount_min &&
-               sub.amount_max === subscriptionData.amount_max &&
-               JSON.stringify(sub.decision_types) === JSON.stringify(subscriptionData.decision_types);
-      default:
-        return false;
+    if (subscriptionData.entity_afm) {
+      return sub.subscription_type === 'entity' && 
+             sub.entity === subscriptionData.entity_afm;
     }
+    
+    if (subscriptionData.relationship_org_uid && subscriptionData.relationship_entity_afm) {
+      return sub.subscription_type === 'relationship' &&
+             sub.relationship_org === subscriptionData.relationship_org_uid &&
+             sub.relationship_entity === subscriptionData.relationship_entity_afm;
+    }
+    
+    if (subscriptionData.person_name) {
+      return (sub.subscription_type === 'person' || sub.subscription_type === 'signer') &&
+             sub.person_name === subscriptionData.person_name;
+    }
+    
+    if (subscriptionData.signer_name) {
+      return sub.subscription_type === 'signer' &&
+             sub.signer_name === subscriptionData.signer_name;
+    }
+    
+    // Filter-only subscriptions
+    if (subscriptionData.keywords || subscriptionData.amount_min || 
+        subscriptionData.amount_max || subscriptionData.decision_types) {
+      return sub.subscription_type === 'filter_only' &&
+             JSON.stringify(sub.keywords) === JSON.stringify(subscriptionData.keywords) &&
+             sub.amount_min === subscriptionData.amount_min &&
+             sub.amount_max === subscriptionData.amount_max &&
+             JSON.stringify(sub.decision_types) === JSON.stringify(subscriptionData.decision_types);
+    }
+    
+    return false;
   }) || null;
 }
 

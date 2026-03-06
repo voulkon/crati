@@ -96,9 +96,7 @@ export default function NotificationButton({ onSidebarToggle, isSidebarOpen }) {
 
   // Build subscription data from context
   const buildSubscriptionData = (ctx) => {
-    const data = {
-      subscription_type: capabilities.subscriptionType
-    };
+    const data = {};
 
     switch (ctx.type) {
       case 'organization':
@@ -108,14 +106,14 @@ export default function NotificationButton({ onSidebarToggle, isSidebarOpen }) {
         data.entity_afm = ctx.afm;
         break;
       case 'signer':
-        data.person_name = ctx.signerName;
+        data.signer_name = ctx.signerName;
         break;
       case 'person':
         data.person_name = ctx.personName;
         break;
       case 'relationship':
-        data.organization_uid = ctx.organizationUid;
-        data.entity_afm = ctx.afm;
+        data.relationship_org_uid = ctx.organizationUid;
+        data.relationship_entity_afm = ctx.afm;
         break;
       default:
         break;

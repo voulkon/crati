@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useLocation, useParams, matchPath } from 'react-router-dom';
+import { useLocation, matchPath } from 'react-router-dom';
 
 /**
  * @typedef {Object} OrganizationContext
@@ -83,13 +83,12 @@ import { useLocation, useParams, matchPath } from 'react-router-dom';
  */
 export function useNotificationContext(options = {}) {
     const location = useLocation();
-    const params = useParams();
     const { entityData } = options;
 
     // Detect context from current route
     const context = useMemo(() => {
-        return detectContextFromRoute(location.pathname, params, entityData);
-    }, [location.pathname, params, entityData]);
+        return detectContextFromRoute(location.pathname, entityData);
+    }, [location.pathname, entityData]);
 
     // Calculate capabilities based on context
     const capabilities = useMemo(() => {
@@ -167,36 +166,38 @@ export function useNotificationContext(options = {}) {
  * Detects notification context from the current route
  * 
  * @param {string} pathname - Current pathname
- * @param {Record<string, string>} params - Route parameters
  * @param {any} [entityData] - Entity data from page state
  * @returns {NotificationContext}
  */
-function detectContextFromRoute(pathname, params, entityData) {
+function detectContextFromRoute(pathname, entityData) {
     // Match patterns in order of specificity
 
     // Relationship page: /relationship/entity/:afm/org/:orgUid
-    if (matchPath('/relationship/entity/:afm/org/:orgUid', pathname)) {
+    const relationshipMatch = matchPath('/relationship/entity/:afm/org/:orgUid', pathname);
+    if (relationshipMatch) {
         return {
             type: 'relationship',
-            organizationUid: params.orgUid,
-            afm: params.afm,
+            organizationUid: relationshipMatch.params.orgUid,
+            afm: relationshipMatch.params.afm,
             organizationName: entityData?.organization?.label || entityData?.organization?.name,
             entityName: entityData?.entity?.label || entityData?.entity?.name
         };
     }
 
     // AFM Entity page: /entity/afm/:afm
-    if (matchPath('/entity/afm/:afm', pathname)) {
+    const afmEntityMatch = matchPath('/entity/afm/:afm', pathname);
+    if (afmEntityMatch) {
         return {
             type: 'entity',
-            afm: params.afm,
+            afm: afmEntityMatch.params.afm,
             entityName: entityData?.label || entityData?.name
         };
     }
 
     // Generic Entity page: /entity/:entityType/:entityId
-    if (matchPath('/entity/:entityType/:entityId', pathname)) {
-        const { entityType, entityId } = params;
+    const entityMatch = matchPath('/entity/:entityType/:entityId', pathname);
+    if (entityMatch) {
+        const { entityType, entityId } = entityMatch.params;
 
         // Organization
         if (entityType === 'organization') {

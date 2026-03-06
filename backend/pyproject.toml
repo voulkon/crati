@@ -80,6 +80,9 @@ pytest-django = "^4.8.0"
 ipython = "^8.20.0"
 pytest-vcr = "^1.0.2"
 vcrpy = "^7.0.0"
+factory-boy = "^3.3.3"
+pytest-cov = "^7.0.0"
+isort = "^8.0.1"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

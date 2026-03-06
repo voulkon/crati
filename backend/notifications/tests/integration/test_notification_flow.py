@@ -155,6 +155,14 @@ class TestCompleteNotificationFlow:
 class TestMultipleSubscriptionTypes:
     """
     Test different subscription types work correctly.
+    
+    NOTE: This class provides basic coverage of the main subscription types.
+    For comprehensive testing of all subscription type combinations and filters,
+    see test_subscription_types_comprehensive.py which covers:
+    - All 6 target types: organization, entity, relationship, person, signer, filter-only
+    - All 4 filter types: keywords, amount_min/max, decision_types
+    - Complex combinations: target + multiple filters
+    - Edge cases: case-insensitive matching, duplicate prevention, etc.
     """
     
     def test_organization_subscription(

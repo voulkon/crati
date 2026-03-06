@@ -94,6 +94,20 @@ class AFMEntityFactory(DjangoModelFactory):
     entity_type = factory.Faker('random_element', elements=['company', 'person', 'organization'])
 
 
+class SignerFactory(DjangoModelFactory):
+    """Factory for Signer model"""
+    
+    class Meta:
+        model = 'core.Signer'
+    
+    uid = factory.Sequence(lambda n: f"SIGNER{n:06d}")
+    first_name = factory.Faker('first_name')
+    last_name = factory.Faker('last_name')
+    active = True
+    organization = factory.SubFactory(OrganizationFactory)
+    has_organization_sign_rights = True
+
+
 class DecisionTypeFactory(DjangoModelFactory):
     """Factory for ActType model (referenced as decision_type in Decision)"""
     
@@ -159,21 +173,10 @@ class NotificationSubscriptionFactory(DjangoModelFactory):
     # Most subscriptions are for organizations
     organization = factory.SubFactory(OrganizationFactory)
     
-    @factory.post_generation
-    def keywords(self, create, extracted, **kwargs):
-        """Handle keywords list field"""
-        if not create:
-            return
-        if extracted:
-            self.keywords = extracted
-    
-    @factory.post_generation
-    def decision_types(self, create, extracted, **kwargs):
-        """Handle decision_types list field"""
-        if not create:
-            return
-        if extracted:
-            self.decision_types = extracted
+    # List fields - default to empty but can be overridden
+    # Using LazyFunction to ensure each instance gets its own list
+    keywords = factory.LazyFunction(list)
+    decision_types = factory.LazyFunction(list)
 
 
 class EntitySubscriptionFactory(NotificationSubscriptionFactory):
@@ -239,6 +242,12 @@ def afm_entity():
 def decision_type():
     """Create a test decision type"""
     return DecisionTypeFactory()
+
+
+@pytest.fixture
+def signer(organization):
+    """Create a test signer"""
+    return SignerFactory(organization=organization)
 
 
 @pytest.fixture

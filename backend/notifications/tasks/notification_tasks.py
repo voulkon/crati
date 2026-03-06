@@ -153,16 +153,87 @@ def find_matching_decisions(subscription, check_since):
             entity_relationships__entity__afm=entity_afm
         )
     
-    # Apply optional filters
+    elif subscription.subscription_type == 'person':
+        # Find companies where this person is associated
+        from core.models.companies import CompanyPerson
+        
+        # Get AFMs of companies where this person appears
+        company_afms = CompanyPerson.objects.filter(
+            person_name__icontains=subscription.person_name
+        ).values_list('company__afm', flat=True).distinct()
+        
+        # Find decisions involving entities with those AFMs
+        queryset = queryset.filter(
+            entity_relationships__entity__afm__in=company_afms
+        )
+    
+    elif subscription.subscription_type == 'signer':
+        # Find decisions signed by this person
+        # Build a query that matches first_name + last_name against signer_name
+        # The signer_name might be "FirstName LastName" or similar
+        signer_name_parts = subscription.signer_name.split()
+        
+        if len(signer_name_parts) >= 2:
+            # Try to match by building full name from first_name and last_name
+            signer_query = models.Q()
+            
+            # Try different combinations in case name is in different order
+            for i in range(len(signer_name_parts)):
+                for j in range(i+1, len(signer_name_parts) + 1):
+                    name_part = ' '.join(signer_name_parts[i:j])
+                    signer_query |= models.Q(signers__first_name__icontains=name_part)
+                    signer_query |= models.Q(signers__last_name__icontains=name_part)
+            
+            queryset = queryset.filter(signer_query)
+        else:
+            # Single name part - search in both first and last name
+            queryset = queryset.filter(
+                models.Q(signers__first_name__icontains=subscription.signer_name) |
+                models.Q(signers__last_name__icontains=subscription.signer_name)
+            )
+    
+    elif subscription.subscription_type == 'filter':
+        # Filter-only subscription - no target restrictions
+        # queryset already filtered by publish_timestamp, will apply filters below
+        pass
+    
+    # Apply optional filters (keywords, amounts, decision types, signer)
+    # These apply to ALL subscription types
+    
+    # Signer filter - can be used with any subscription type
+    # (e.g., org + signer means "decisions from this org signed by this person")
+    if subscription.signer_name:
+        signer_name_parts = subscription.signer_name.split()
+        
+        if len(signer_name_parts) >= 2:
+            # Try to match by building full name from first_name and last_name
+            signer_query = models.Q()
+            
+            # Try different combinations in case name is in different order
+            for i in range(len(signer_name_parts)):
+                for j in range(i+1, len(signer_name_parts) + 1):
+                    name_part = ' '.join(signer_name_parts[i:j])
+                    signer_query |= models.Q(signers__first_name__icontains=name_part)
+                    signer_query |= models.Q(signers__last_name__icontains=name_part)
+            
+            queryset = queryset.filter(signer_query)
+        else:
+            # Single name part - search in both first and last name
+            queryset = queryset.filter(
+                models.Q(signers__first_name__icontains=subscription.signer_name) |
+                models.Q(signers__last_name__icontains=subscription.signer_name)
+            )
+    
+    # Keyword filter
     if subscription.keywords:
-        # Check keywords in subject
+        # Check keywords in subject (case-insensitive, OR logic)
         keyword_filter = models.Q()
         for keyword in subscription.keywords:
             keyword_filter |= models.Q(subject__icontains=keyword)
         queryset = queryset.filter(keyword_filter)
     
     if subscription.amount_min is not None or subscription.amount_max is not None:
-        # Filter by amount (check where amounts are stored in your model)
+        # Filter by amount
         if subscription.amount_min:
             queryset = queryset.filter(amount__gte=subscription.amount_min)
         if subscription.amount_max:
@@ -208,6 +279,12 @@ def determine_match_reason(subscription, decision):
     """
     match_details = {}
     
+    # Determine primary match reason based on subscription type
+    subscription_type = subscription.subscription_type
+    
+    # Add subscription type to match details
+    match_details['subscription_type'] = subscription_type
+    
     # Check keyword matches
     if subscription.keywords:
         found_keywords = []
@@ -224,13 +301,42 @@ def determine_match_reason(subscription, decision):
             match_details['amount'] = str(decision.amount)
             match_details['amount_in_range'] = True
     
-    # Determine primary match reason
-    if match_details.get('keywords_found'):
-        match_reason = 'keyword_match'
-    elif match_details.get('amount_in_range'):
-        match_reason = 'amount_match'
+    # Check decision type match
+    if subscription.decision_types:
+        if decision.decision_type_id in subscription.decision_types:
+            match_details['decision_type_matched'] = decision.decision_type_id
+    
+    # Determine primary match reason based on subscription type and filters
+    # Priority: subscription type first, then specific filters
+    if subscription_type == 'organization':
+        match_reason = 'organization'
+        match_details['organization_uid'] = subscription.organization.uid if subscription.organization else None
+    elif subscription_type == 'entity':
+        match_reason = 'entity'
+        match_details['entity_afm'] = subscription.entity.afm if subscription.entity else None
+    elif subscription_type == 'relationship':
+        match_reason = 'relationship'
+        match_details['relationship_org_uid'] = subscription.relationship_org.uid if subscription.relationship_org else None
+        match_details['relationship_entity_afm'] = subscription.relationship_entity.afm if subscription.relationship_entity else None
+    elif subscription_type == 'person':
+        match_reason = 'person'
+        match_details['person_name'] = subscription.person_name
+    elif subscription_type == 'signer':
+        match_reason = 'signer'
+        match_details['signer_name'] = subscription.signer_name
+    elif subscription_type == 'filter':
+        # For filter-only subscriptions, determine match reason by what matched
+        if match_details.get('keywords_found'):
+            match_reason = 'keyword_match'
+        elif match_details.get('amount_in_range'):
+            match_reason = 'amount_match'
+        elif match_details.get('decision_type_matched'):
+            match_reason = 'filter'
+        else:
+            match_reason = 'filter'
     else:
-        match_reason = 'new_decision'
+        # Fallback
+        match_reason = 'filter'
     
     return match_reason, match_details
 

@@ -131,7 +131,7 @@ def find_matching_decisions(subscription, check_since):
     since the last check.
     """
     queryset = Decision.objects.filter(
-        upload_timestamp__gte=check_since
+        publish_timestamp__gte=check_since
     )
     
     # Apply subscription type filters
@@ -160,11 +160,10 @@ def find_matching_decisions(subscription, check_since):
     
     # Apply optional filters
     if subscription.keywords:
-        # Check keywords in subject, summary, or extracted text
+        # Check keywords in subject
         keyword_filter = models.Q()
         for keyword in subscription.keywords:
             keyword_filter |= models.Q(subject__icontains=keyword)
-            keyword_filter |= models.Q(subject_summary__icontains=keyword)
         queryset = queryset.filter(keyword_filter)
     
     if subscription.amount_min is not None or subscription.amount_max is not None:
@@ -219,8 +218,6 @@ def determine_match_reason(subscription, decision):
         found_keywords = []
         for keyword in subscription.keywords:
             if keyword.lower() in (decision.subject or '').lower():
-                found_keywords.append(keyword)
-            elif decision.subject_summary and keyword.lower() in decision.subject_summary.lower():
                 found_keywords.append(keyword)
         
         if found_keywords:

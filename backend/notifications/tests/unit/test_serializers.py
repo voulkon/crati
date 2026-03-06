@@ -1,0 +1,246 @@
+"""
+Unit tests for notification serializers.
+
+These tests verify serializer validation, transformation logic, and field behavior.
+"""
+import pytest
+from decimal import Decimal
+from rest_framework.exceptions import ValidationError
+
+
+pytestmark = pytest.mark.django_db
+
+
+class TestNotificationSubscriptionSerializer:
+    """Test NotificationSubscription serializers"""
+    
+    def test_serialize_organization_subscription(self, notification_subscription):
+        """Test serializing an organization subscription"""
+        from notifications.serializers import NotificationSubscriptionSerializer
+        
+        serializer = NotificationSubscriptionSerializer(notification_subscription)
+        data = serializer.data
+        
+        assert data['id'] == notification_subscription.id
+        assert data['organization'] == notification_subscription.organization.uid
+        assert data['subscription_type'] == 'organization'
+        assert 'organization_details' in data
+        assert data['organization_details']['uid'] == notification_subscription.organization.uid
+    
+    def test_serialize_entity_subscription(self, entity_subscription):
+        """Test serializing an entity subscription"""
+        from notifications.serializers import NotificationSubscriptionSerializer
+        
+        serializer = NotificationSubscriptionSerializer(entity_subscription)
+        data = serializer.data
+        
+        assert data['entity'] == entity_subscription.entity.afm
+        assert data['subscription_type'] == 'entity'
+        assert 'entity_details' in data
+    
+    def test_create_subscription_with_valid_data(self, user, organization):
+        """Test creating subscription with valid data"""
+        from notifications.serializers import NotificationSubscriptionCreateSerializer
+        
+        data = {
+            'organization_uid': organization.uid,
+            'keywords': ['test', 'contract'],
+            'is_active': True
+        }
+        
+        serializer = NotificationSubscriptionCreateSerializer(data=data)
+        assert serializer.is_valid(), serializer.errors
+        
+        subscription = serializer.save(user=user)
+        assert subscription.organization == organization
+        assert subscription.keywords == ['test', 'contract']
+        assert subscription.user == user
+    
+    def test_validate_keywords_must_be_list(self, user):
+        """Test that keywords must be a list"""
+        from notifications.serializers import NotificationSubscriptionCreateSerializer
+        from conftest import OrganizationFactory
+        
+        org = OrganizationFactory()
+        
+        data = {
+            'organization_uid': org.uid,
+            'keywords': 'not-a-list'  # Invalid
+        }
+        
+        serializer = NotificationSubscriptionCreateSerializer(data=data)
+        assert not serializer.is_valid()
+        assert 'keywords' in serializer.errors
+    
+    def test_validate_amount_range(self, user, organization):
+        """Test amount_min must be less than amount_max"""
+        from notifications.serializers import NotificationSubscriptionCreateSerializer
+        
+        data = {
+            'organization_uid': organization.uid,
+            'amount_min': '100000.00',
+            'amount_max': '10000.00'  # Less than min - invalid!
+        }
+        
+        serializer = NotificationSubscriptionCreateSerializer(data=data)
+        assert not serializer.is_valid()
+        assert 'amount_min' in serializer.errors or 'non_field_errors' in serializer.errors
+    
+    def test_validate_requires_target_or_filter(self, user):
+        """Test that at least one target or filter is required"""
+        from notifications.serializers import NotificationSubscriptionCreateSerializer
+        
+        # Empty data - no target, no filter
+        data = {}
+        
+        serializer = NotificationSubscriptionCreateSerializer(data=data)
+        assert not serializer.is_valid()
+        # Should have validation error about missing target/filter
+    
+    def test_validate_relationship_requires_both_org_and_entity(self, user):
+        """Test relationship subscription requires both org and entity"""
+        from notifications.serializers import NotificationSubscriptionCreateSerializer
+        from conftest import OrganizationFactory
+        
+        org = OrganizationFactory()
+        
+        # Only org, no entity - invalid
+        data = {
+            'relationship_org_uid': org.uid,
+            # Missing relationship_entity_afm
+        }
+        
+        serializer = NotificationSubscriptionCreateSerializer(data=data)
+        assert not serializer.is_valid()
+    
+    def test_nested_serializers_included(self, notification_subscription):
+        """Test that nested organization/entity details are included"""
+        from notifications.serializers import NotificationSubscriptionSerializer
+        
+        serializer = NotificationSubscriptionSerializer(notification_subscription)
+        data = serializer.data
+        
+        # Should have nested details
+        assert 'organization_details' in data
+        assert data['organization_details']['label'] == notification_subscription.organization.label
+        assert data['organization_details']['uid'] == notification_subscription.organization.uid
+
+
+class TestNotificationSerializer:
+    """Test Notification serializers"""
+    
+    def test_serialize_notification(self, notification):
+        """Test serializing a notification"""
+        from notifications.serializers import NotificationSerializer
+        
+        serializer = NotificationSerializer(notification)
+        data = serializer.data
+        
+        assert data['id'] == notification.id
+        assert data['user'] == notification.user.id
+        assert data['is_read'] == notification.is_read
+        assert data['is_dismissed'] == notification.is_dismissed
+        assert 'decision' in data
+        assert 'subscription' in data
+    
+    def test_notification_detail_serializer_includes_full_info(self, notification):
+        """Test detail serializer includes complete nested information"""
+        from notifications.serializers import NotificationDetailSerializer
+        
+        serializer = NotificationDetailSerializer(notification)
+        data = serializer.data
+        
+        # Should have detailed nested data
+        assert 'decision' in data
+        assert 'organization_label' in data['decision']
+        assert 'subscription' in data
+        assert 'subscription_type' in data['subscription']
+    
+    def test_notification_list_serializer_is_lightweight(self, notification):
+        """Test list serializer has minimal payload"""
+        from notifications.serializers import NotificationListSerializer
+        
+        serializer = NotificationListSerializer(notification)
+        data = serializer.data
+        
+        # Should have minimal fields for list view
+        assert 'id' in data
+        assert 'decision_ada' in data
+        assert 'decision_subject' in data
+        assert 'is_read' in data
+        
+        # Should NOT have full nested objects (performance)
+        assert 'decision' not in data or isinstance(data.get('decision'), str)
+    
+    def test_notification_serializer_read_only_fields(self, notification):
+        """Test that certain fields are read-only"""
+        from notifications.serializers import NotificationSerializer
+        
+        serializer = NotificationSerializer(notification)
+        
+        # These should be in read_only_fields
+        meta = serializer.Meta
+        if hasattr(meta, 'read_only_fields'):
+            read_only = meta.read_only_fields
+            assert 'id' in read_only or 'id' not in serializer.fields
+            assert 'created_at' in read_only or 'created_at' not in serializer.fields
+    
+    def test_match_details_json_serialization(self, notification):
+        """Test that match_details JSONField is properly serialized"""
+        from notifications.serializers import NotificationSerializer
+        
+        notification.match_details = {
+            'matched_on': 'keyword',
+            'keywords': ['test', 'contract'],
+            'score': 0.95
+        }
+        notification.save()
+        
+        serializer = NotificationSerializer(notification)
+        data = serializer.data
+        
+        assert data['match_details']['matched_on'] == 'keyword'
+        assert data['match_details']['score'] == 0.95
+
+
+class TestSerializerValidation:
+    """Test validation logic in serializers"""
+    
+    def test_invalid_organization_uid_rejected(self, user):
+        """Test that invalid organization UID is rejected"""
+        from notifications.serializers import NotificationSubscriptionCreateSerializer
+        
+        data = {
+            'organization_uid': 'INVALID_UID_9999999',
+            'keywords': ['test']
+        }
+        
+        serializer = NotificationSubscriptionCreateSerializer(data=data)
+        assert not serializer.is_valid()
+        assert 'organization_uid' in serializer.errors or 'organization' in serializer.errors
+    
+    def test_invalid_entity_afm_rejected(self, user):
+        """Test that invalid entity AFM is rejected"""
+        from notifications.serializers import NotificationSubscriptionCreateSerializer
+        
+        data = {
+            'entity_afm': 'INVALID_AFM',
+            'keywords': ['test']
+        }
+        
+        serializer = NotificationSubscriptionCreateSerializer(data=data)
+        assert not serializer.is_valid()
+        assert 'entity_afm' in serializer.errors or 'entity' in serializer.errors
+    
+    def test_decision_types_must_be_list(self, user, organization):
+        """Test that decision_types must be a list"""
+        from notifications.serializers import NotificationSubscriptionCreateSerializer
+        
+        data = {
+            'organization_uid': organization.uid,
+            'decision_types': 'not-a-list'  # Invalid
+        }
+        
+        serializer = NotificationSubscriptionCreateSerializer(data=data)
+        assert not serializer.is_valid()
+        assert 'decision_types' in serializer.errors

@@ -1,0 +1,335 @@
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useTranslation } from '../contexts/TranslationContext';
+import { getSubscriptions, getNotifications } from '../api/notifications';
+import SubscriptionCard from './SubscriptionCard';
+import './NotificationSidebar.css';
+import { Bell, ClipboardList, Search, Inbox } from 'lucide-react';
+
+/**
+ * Notification Sidebar - Collapsible notification manager (like LibrarySidebar)
+ * Shows notifications and subscriptions in tabs
+ */
+export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChange }) {
+    const navigate = useNavigate();
+    const { t } = useTranslation();
+
+    // State
+    const [activeTab, setActiveTab] = useState('subscriptions'); // 'notifications' or 'subscriptions'
+    const [subscriptions, setSubscriptions] = useState([]);
+    const [notifications, setNotifications] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filters, setFilters] = useState({
+        status: 'all', // all, active, paused
+        type: 'all', // all, organization, entity, relationship, person, signer, filter_only
+        sortBy: 'recent' // recent, alphabetical, type, notifications
+    });
+
+    // Load data function
+    const loadData = useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const [subsData, notifsData] = await Promise.all([
+                getSubscriptions(),
+                getNotifications()
+            ]);
+
+            setSubscriptions(subsData);
+            setNotifications(notifsData);
+
+            // Update unread count
+            const unreadCount = notifsData.filter(n => !n.is_read).length;
+            onUnreadCountChange?.(unreadCount);
+        } catch (error) {
+            console.error('Failed to load notification data:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [onUnreadCountChange]);
+
+    // Load data when sidebar opens
+    useEffect(() => {
+        if (isOpen) {
+            loadData();
+        }
+        // eslint-disable-next-line
+    }, [isOpen, loadData]);
+
+    // Refetch periodically when open
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const interval = setInterval(() => {
+            loadData();
+        }, 30000); // Every 30 seconds
+
+        return () => clearInterval(interval);
+        // eslint-disable-next-line
+    }, [isOpen, loadData]);
+
+    async function handleRefresh() {
+        setIsLoading(true);
+        try {
+            const [subsData, notifsData] = await Promise.all([
+                getSubscriptions(),
+                getNotifications()
+            ]);
+
+            setSubscriptions(subsData);
+            setNotifications(notifsData);
+
+            // Update unread count
+            const unreadCount = notifsData.filter(n => !n.is_read).length;
+            onUnreadCountChange?.(unreadCount);
+        } catch (error) {
+            console.error('Failed to load notification data:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    // Filter and sort subscriptions
+    const filteredSubscriptions = useMemo(() => {
+        let result = [...subscriptions];
+
+        // Filter by search query
+        if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            result = result.filter(sub =>
+                sub.user_alias?.toLowerCase().includes(query) ||
+                sub.target_name?.toLowerCase().includes(query) ||
+                sub.organization_uid?.toLowerCase().includes(query) ||
+                sub.entity_afm?.toLowerCase().includes(query) ||
+                sub.signer_name?.toLowerCase().includes(query) ||
+                sub.person_name?.toLowerCase().includes(query)
+            );
+        }
+
+        // Filter by status
+        if (filters.status !== 'all') {
+            result = result.filter(sub =>
+                filters.status === 'active' ? sub.is_active : !sub.is_active
+            );
+        }
+
+        // Filter by type
+        if (filters.type !== 'all') {
+            result = result.filter(sub => sub.subscription_type === filters.type);
+        }
+
+        // Sort
+        switch (filters.sortBy) {
+            case 'alphabetical':
+                result.sort((a, b) =>
+                    (a.user_alias || a.target_name || '').localeCompare(b.user_alias || b.target_name || '')
+                );
+                break;
+            case 'type':
+                result.sort((a, b) => a.subscription_type.localeCompare(b.subscription_type));
+                break;
+            case 'notifications':
+                result.sort((a, b) => (b.notification_count || 0) - (a.notification_count || 0));
+                break;
+            case 'recent':
+            default:
+                result.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+                break;
+        }
+
+        return result;
+    }, [subscriptions, searchQuery, filters]);
+
+    // Handle subscription actions (will be expanded later)
+    const handleSubscriptionRefresh = async () => {
+        await handleRefresh();
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <>
+            {/* Overlay */}
+            <div className="notification-overlay" onClick={onClose} />
+
+            {/* Sidebar */}
+            <div className={`notification-sidebar ${isOpen ? 'open' : ''}`}>
+                {/* Header */}
+                <div className="notification-header">
+                    <h2 className="notification-title">
+                        <span className="notification-title-icon"><Bell size={20} /></span>
+                        {t('notifications.myNotifications')}
+                    </h2>
+                    <button className="notification-close" onClick={onClose} title={t('notifications.close')}>
+                        ✕
+                    </button>
+                </div>
+
+                {/* Tabs */}
+                <div className="notification-tabs">
+                    <button
+                        className={`notification-tab ${activeTab === 'notifications' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('notifications')}
+                    >
+                        <Bell size={14} />
+                        <span>{t('notifications.notifications')}</span>
+                        {notifications.filter(n => !n.is_read).length > 0 && (
+                            <span className="tab-badge">{notifications.filter(n => !n.is_read).length}</span>
+                        )}
+                    </button>
+                    <button
+                        className={`notification-tab ${activeTab === 'subscriptions' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('subscriptions')}
+                    >
+                        <ClipboardList size={14} />
+                        <span>{t('notifications.subscriptions')}</span>
+                        <span className="tab-count">{subscriptions.length}</span>
+                    </button>
+                </div>
+
+                {/* Content */}
+                {activeTab === 'subscriptions' && (
+                    <div className="notification-content">
+                        {/* Filters */}
+                        <div className="notification-filters">
+                            <div className="notification-search">
+                                <input
+                                    type="text"
+                                    placeholder={t('notifications.searchPlaceholder')}
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="notification-search-input"
+                                />
+                            </div>
+
+                            <div className="notification-filter-row">
+                                <select
+                                    value={filters.status}
+                                    onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+                                    className="notification-filter-select"
+                                >
+                                    <option value="all">{t('notifications.allStatus')}</option>
+                                    <option value="active">{t('notifications.active')}</option>
+                                    <option value="paused">{t('notifications.paused')}</option>
+                                </select>
+
+                                <select
+                                    value={filters.type}
+                                    onChange={(e) => setFilters({ ...filters, type: e.target.value })}
+                                    className="notification-filter-select"
+                                >
+                                    <option value="all">{t('notifications.allTypes')}</option>
+                                    <option value="organization">{t('notifications.organization')}</option>
+                                    <option value="entity">{t('notifications.entity')}</option>
+                                    <option value="relationship">{t('notifications.relationship')}</option>
+                                    <option value="person">{t('notifications.person')}</option>
+                                    <option value="signer">{t('notifications.signer')}</option>
+                                    <option value="filter_only">{t('notifications.filterOnly')}</option>
+                                </select>
+
+                                <select
+                                    value={filters.sortBy}
+                                    onChange={(e) => setFilters({ ...filters, sortBy: e.target.value })}
+                                    className="notification-filter-select"
+                                >
+                                    <option value="recent">{t('notifications.mostRecent')}</option>
+                                    <option value="alphabetical">{t('notifications.alphabetical')}</option>
+                                    <option value="type">{t('notifications.byType')}</option>
+                                    <option value="notifications">{t('notifications.byCount')}</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Subscriptions List */}
+                        <div className="notification-list">
+                            {isLoading ? (
+                                <div className="notification-loading">
+                                    <div className="loading-spinner"></div>
+                                    <p>{t('notifications.loadingSubscriptions')}</p>
+                                </div>
+                            ) : filteredSubscriptions.length === 0 ? (
+                                <div className="notification-empty">
+                                    {searchQuery || filters.status !== 'all' || filters.type !== 'all' ? (
+                                        <>
+                                            <Search size={48} className="empty-icon" />
+                                            <h3>{t('notifications.noMatchingSubscriptions')}</h3>
+                                            <p>{t('notifications.tryAdjustingFilters')}</p>
+                                            <button
+                                                className="notification-btn-secondary"
+                                                onClick={() => {
+                                                    setSearchQuery('');
+                                                    setFilters({ status: 'all', type: 'all', sortBy: 'recent' });
+                                                }}
+                                            >
+                                                {t('notifications.clearFilters')}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Inbox size={48} className="empty-icon" />
+                                            <h3>{t('notifications.noSubscriptionsYet')}</h3>
+                                            <p>{t('notifications.subscribeToGetNotified')}</p>
+                                            <button
+                                                className="notification-btn-primary"
+                                                onClick={() => navigate('/organizations')}
+                                            >
+                                                {t('notifications.browseOrganizations')}
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="subscriptions-grid">
+                                    {filteredSubscriptions.map(subscription => (
+                                        <SubscriptionCard
+                                            key={subscription.id}
+                                            subscription={subscription}
+                                            onRefresh={handleSubscriptionRefresh}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'notifications' && (
+                    <div className="notification-content">
+                        <div className="notification-list">
+                            {isLoading ? (
+                                <div className="notification-loading">
+                                    <div className="loading-spinner"></div>
+                                    <p>{t('notifications.loadingNotifications')}</p>
+                                </div>
+                            ) : notifications.length === 0 ? (
+                                <div className="notification-empty">
+                                    <Bell size={48} className="empty-icon" />
+                                    <h3>{t('notifications.noNotificationsYet')}</h3>
+                                    <p>{t('notifications.youllSeeNotifications')}</p>
+                                </div>
+                            ) : (
+                                <div className="notifications-list">
+                                    {notifications.map(notification => (
+                                        <div key={notification.id} className={`notification-item ${!notification.is_read ? 'unread' : ''}`}>
+                                            <div className="notification-item-header">
+                                                <span className="notification-item-type">
+                                                    {notification.subscription_type}
+                                                </span>
+                                                <span className="notification-item-time">
+                                                    {new Date(notification.created_at).toLocaleDateString()}
+                                                </span>
+                                            </div>
+                                            <div className="notification-item-content">
+                                                {notification.message || 'New decision available'}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </div>
+        </>
+    );
+}

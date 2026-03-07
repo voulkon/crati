@@ -13,6 +13,7 @@ import LibraryPage from "./pages/LibraryPage";
 import Clock from "./components/Clock";
 import AccessDenied from "./components/AccessDenied";
 import LibrarySidebar from "./components/LibrarySidebar";
+import NotificationSidebar from "./components/NotificationSidebar";
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { TranslationProvider } from './contexts/TranslationContext';
@@ -48,7 +49,7 @@ function AuthenticatedApp({ controlsLayout }) {
   // Set up the token getter for API client
   useEffect(() => {
     setTokenGetter(getToken, isClerkAuth);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line
   }, [getToken, isClerkAuth]);
   
   // If allowlist is enabled, check if user is allowed
@@ -89,6 +90,12 @@ function AuthenticatedApp({ controlsLayout }) {
         isOpen={isLibraryOpen}
         onClose={() => setIsLibraryOpen(false)}
         onBookmarkCountChange={setBookmarkCount}
+      />
+      
+      {/* Notification Sidebar */}
+      <NotificationSidebar 
+        isOpen={isNotificationSidebarOpen}
+        onClose={() => setIsNotificationSidebarOpen(false)}
       />
       
       <RateLimitIndicator />

@@ -18,7 +18,10 @@ import {
     Bell,
     Clock,
     Trash2,
-    RefreshCw
+    RefreshCw,
+    Edit2,
+    Check,
+    X
 } from 'lucide-react';
 import './SubscriptionCard.css';
 
@@ -29,6 +32,8 @@ import './SubscriptionCard.css';
 export default function SubscriptionCard({ subscription, onRefresh }) {
     const navigate = useNavigate();
     const [isActionLoading, setIsActionLoading] = useState(false);
+    const [isEditingAlias, setIsEditingAlias] = useState(false);
+    const [aliasValue, setAliasValue] = useState(subscription.alias || '');
 
     // Get icon for subscription type
     const getTypeIcon = (type) => {
@@ -38,7 +43,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
             relationship: <Users size={16} />,
             person: <User size={16} />,
             signer: <UserCheck size={16} />,
-            filter_only: <Filter size={16} />
+            filter: <Filter size={16} />
         };
         return icons[type] || <FileText size={16} />;
     };
@@ -51,7 +56,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
             relationship: 'Relationship',
             person: 'Person',
             signer: 'Signer',
-            filter_only: 'Filter Only'
+            filter: 'Filter Only'
         };
         return labels[type] || type;
     };
@@ -60,25 +65,27 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
     const getTargetDisplay = () => {
         if (subscription.organization_uid && !subscription.relationship_entity_afm) {
             return {
-                primary: subscription.target_name || subscription.organization_uid,
-                secondary: subscription.organization_uid,
+                primary: subscription.organization_label || subscription.organization_uid,
+                secondary: `UID: ${subscription.organization_uid}`,
                 link: `/entity/organization/${subscription.organization_uid}`
             };
         }
 
         if (subscription.entity_afm && !subscription.relationship_org_uid) {
             return {
-                primary: subscription.target_name || subscription.entity_afm,
+                primary: subscription.entity_name || subscription.entity_afm,
                 secondary: `AFM: ${subscription.entity_afm}`,
                 link: `/entity/afm/${subscription.entity_afm}`
             };
         }
 
         if (subscription.relationship_org_uid && subscription.relationship_entity_afm) {
+            const orgLabel = subscription.relationship_org_label || subscription.relationship_org_uid;
+            const entityName = subscription.relationship_entity_name || subscription.relationship_entity_afm;
             return {
-                primary: subscription.target_name || 'Relationship',
+                primary: `${orgLabel} ↔ ${entityName}`,
                 secondary: `${subscription.relationship_org_uid} × ${subscription.relationship_entity_afm}`,
-                link: `/relationship/${subscription.relationship_org_uid}/${subscription.relationship_entity_afm}`
+                link: `/relationship/entity/${subscription.relationship_entity_afm}/org/${subscription.relationship_org_uid}`
             };
         }
 
@@ -99,10 +106,38 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
         }
 
         return {
-            primary: subscription.user_alias || `Subscription #${subscription.id}`,
-            secondary: 'Filter-based subscription',
+            primary: 'Filter-based subscription',
+            secondary: 'Custom filters',
             link: null
         };
+    };
+
+    // Save alias
+    const handleSaveAlias = async () => {
+        if (aliasValue === subscription.alias) {
+            setIsEditingAlias(false);
+            return;
+        }
+
+        setIsActionLoading(true);
+        try {
+            await updateSubscription(subscription.id, {
+                alias: aliasValue || null
+            });
+            await onRefresh();
+            setIsEditingAlias(false);
+        } catch (error) {
+            console.error('Failed to update alias:', error);
+            alert('Failed to update alias');
+        } finally {
+            setIsActionLoading(false);
+        }
+    };
+
+    // Cancel alias edit
+    const handleCancelAlias = () => {
+        setAliasValue(subscription.alias || '');
+        setIsEditingAlias(false);
     };
 
     // Toggle pause/resume
@@ -185,6 +220,10 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
         subscription.amount_max != null ||
         subscription.decision_types?.length > 0;
 
+    // Determine display title - use alias if available, otherwise use descriptive placeholder
+    const displayTitle = subscription.alias || 'Click to add custom name';
+    const hasCustomAlias = !!subscription.alias;
+
     return (
         <div className={`subscription-card ${!subscription.is_active ? 'paused' : ''}`}>
             {/* Header */}
@@ -204,16 +243,59 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                 </div>
             </div>
 
-            {/* Alias/Name */}
+            {/* Alias/Name - Editable */}
             <div className="subscription-alias">
-                {subscription.user_alias || target.primary}
+                {isEditingAlias ? (
+                    <div className="subscription-alias-edit">
+                        <input
+                            type="text"
+                            value={aliasValue}
+                            onChange={(e) => setAliasValue(e.target.value)}
+                            placeholder="Enter custom name..."
+                            className="subscription-alias-input"
+                            autoFocus
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveAlias();
+                                if (e.key === 'Escape') handleCancelAlias();
+                            }}
+                        />
+                        <div className="subscription-alias-actions">
+                            <button
+                                className="alias-btn alias-btn-save"
+                                onClick={handleSaveAlias}
+                                disabled={isActionLoading}
+                                title="Save"
+                            >
+                                <Check size={14} />
+                            </button>
+                            <button
+                                className="alias-btn alias-btn-cancel"
+                                onClick={handleCancelAlias}
+                                disabled={isActionLoading}
+                                title="Cancel"
+                            >
+                                <X size={14} />
+                            </button>
+                        </div>
+                    </div>
+                ) : (
+                    <div
+                        className={`subscription-alias-display ${!hasCustomAlias ? 'no-alias' : ''}`}
+                        onClick={() => setIsEditingAlias(true)}
+                        title="Click to edit name"
+                    >
+                        <span className="subscription-alias-text">{displayTitle}</span>
+                        <Edit2 size={14} className="subscription-alias-edit-icon" />
+                    </div>
+                )}
             </div>
 
-            {/* Target */}
+            {/* Target - Always show what this subscription is tracking */}
             <div className="subscription-target">
                 <div
                     className={`subscription-target-name ${target.link ? 'clickable' : ''}`}
                     onClick={target.link ? handleNavigateToTarget : undefined}
+                    title={target.link ? 'Click to view details' : ''}
                 >
                     {target.primary}
                 </div>

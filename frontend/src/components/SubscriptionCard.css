@@ -80,6 +80,119 @@
   word-break: break-word;
 }
 
+.subscription-alias-display {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+  padding: 4px;
+  margin: -4px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.subscription-alias-display.no-alias {
+  font-style: italic;
+  color: var(--muted-text);
+}
+
+.subscription-alias-display:hover {
+  background-color: var(--hover-bg);
+}
+
+.subscription-alias-display:hover .subscription-alias-edit-icon {
+  opacity: 1;
+}
+
+.subscription-alias-text {
+  flex: 1;
+}
+
+.subscription-alias-edit-icon {
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  color: var(--muted-text);
+  flex-shrink: 0;
+}
+
+.subscription-alias-display.no-alias .subscription-alias-edit-icon {
+  opacity: 0.3;
+}
+
+.subscription-alias-display.no-alias:hover .subscription-alias-edit-icon {
+  opacity: 1;
+}
+
+.subscription-alias-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.subscription-alias-input {
+  width: 100%;
+  padding: var(--spacing-xs);
+  border: 2px solid var(--primary-blue);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-md);
+  font-weight: var(--font-medium);
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.subscription-alias-input:focus {
+  box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+.subscription-alias-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.alias-btn {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background-color: var(--selection-bg);
+  color: var(--text-color);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+.alias-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.alias-btn-save {
+  background-color: var(--success-bg);
+  color: var(--success-text);
+  border-color: var(--success-text);
+}
+
+.alias-btn-save:hover:not(:disabled) {
+  background-color: var(--success-text);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.alias-btn-cancel {
+  background-color: var(--selection-bg);
+  color: var(--muted-text);
+}
+
+.alias-btn-cancel:hover:not(:disabled) {
+  background-color: var(--hover-bg);
+  border-color: var(--danger-color);
+  color: var(--danger-color);
+}
+
 /* Target */
 .subscription-target {
   display: flex;

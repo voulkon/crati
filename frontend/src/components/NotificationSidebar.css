@@ -308,6 +308,8 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   transition: all var(--transition-fast);
+  position: relative;
+  cursor: pointer;
 }
 
 .notification-item.unread {
@@ -318,6 +320,7 @@
 .notification-item:hover {
   box-shadow: 0 2px 8px var(--shadow);
   transform: translateY(-1px);
+  border-color: var(--primary-blue);
 }
 
 .notification-item-header {
@@ -340,9 +343,96 @@
 }
 
 .notification-item-content {
+  margin-bottom: var(--spacing-xs);
+}
+
+.notification-item-subject {
   font-size: var(--font-sm);
   color: var(--text-color);
   line-height: 1.4;
+  font-weight: var(--font-medium);
+  margin-bottom: var(--spacing-xs);
+}
+
+.notification-item-ada {
+  font-size: var(--font-xs);
+  color: var(--muted-text);
+  font-family: monospace;
+}
+
+.notification-item-reason {
+  font-size: var(--font-xs);
+  color: var(--muted-text);
+  margin-top: var(--spacing-xs);
+  padding-top: var(--spacing-xs);
+  border-top: 1px solid var(--border-color);
+}
+
+/* Dismiss button on notification items */
+.notification-dismiss-btn {
+  position: absolute;
+  top: var(--spacing-sm);
+  right: var(--spacing-sm);
+  background-color: transparent;
+  border: none;
+  color: var(--muted-text);
+  cursor: pointer;
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  opacity: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notification-item:hover .notification-dismiss-btn {
+  opacity: 1;
+}
+
+.notification-dismiss-btn:hover {
+  background-color: var(--danger-color, #dc3545);
+  color: white;
+}
+
+/* Bulk actions */
+.notification-bulk-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  padding-bottom: 0;
+}
+
+.notification-bulk-btn {
+  flex: 1;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-color);
+  font-size: var(--font-xs);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+}
+
+.notification-bulk-btn:hover:not(:disabled) {
+  background-color: var(--hover-bg);
+  border-color: var(--primary-blue);
+}
+
+.notification-bulk-btn.danger:hover:not(:disabled) {
+  background-color: var(--danger-color, #dc3545);
+  border-color: var(--danger-color, #dc3545);
+  color: white;
+}
+
+.notification-bulk-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Responsive */

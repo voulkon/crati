@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../contexts/TranslationContext';
-import { getSubscriptions, getNotifications } from '../api/notifications';
+import { 
+    getSubscriptions, 
+    getNotifications, 
+    dismissNotification, 
+    markNotificationRead,
+    markAllNotificationsRead,
+    dismissAllNotifications
+} from '../api/notifications';
 import SubscriptionCard from './SubscriptionCard';
 import './NotificationSidebar.css';
-import { Bell, ClipboardList, Search, Inbox } from 'lucide-react';
+import { Bell, ClipboardList, Search, Inbox, X, CheckCheck, Trash2 } from 'lucide-react';
 
 /**
  * Notification Sidebar - Collapsible notification manager (like LibrarySidebar)
@@ -143,6 +150,72 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
     // Handle subscription actions (will be expanded later)
     const handleSubscriptionRefresh = async () => {
         await handleRefresh();
+    };
+
+    // Handle notification dismiss
+    const handleDismissNotification = async (notificationId, event) => {
+        event.stopPropagation(); // Prevent navigation when clicking X
+        try {
+            await dismissNotification(notificationId);
+            // Update local state
+            setNotifications(prev => prev.filter(n => n.id !== notificationId));
+            // Update unread count
+            const unreadCount = notifications.filter(n => !n.is_read && n.id !== notificationId).length;
+            onUnreadCountChange?.(unreadCount);
+        } catch (error) {
+            console.error('Failed to dismiss notification:', error);
+        }
+    };
+
+    // Handle notification click (navigate to decision and mark as read)
+    const handleNotificationClick = async (notification) => {
+        try {
+            // Mark as read if not already
+            if (!notification.is_read) {
+                await markNotificationRead(notification.id);
+                // Update local state
+                setNotifications(prev => prev.map(n => 
+                    n.id === notification.id ? { ...n, is_read: true } : n
+                ));
+                // Update unread count
+                const unreadCount = notifications.filter(n => !n.is_read && n.id !== notification.id).length;
+                onUnreadCountChange?.(unreadCount);
+            }
+
+            // Navigate to the decision
+            if (notification.decision_ada) {
+                navigate(`/decisions/${notification.decision_ada}`);
+                onClose?.(); // Close sidebar after navigation
+            }
+        } catch (error) {
+            console.error('Failed to mark notification as read:', error);
+        }
+    };
+
+    // Handle mark all as read
+    const handleMarkAllRead = async () => {
+        try {
+            await markAllNotificationsRead();
+            // Update local state
+            setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+            onUnreadCountChange?.(0);
+        } catch (error) {
+            console.error('Failed to mark all as read:', error);
+        }
+    };
+
+    // Handle dismiss all
+    const handleDismissAll = async () => {
+        if (!window.confirm('Are you sure you want to dismiss all notifications?')) {
+            return;
+        }
+        try {
+            await dismissAllNotifications();
+            setNotifications([]);
+            onUnreadCountChange?.(0);
+        } catch (error) {
+            console.error('Failed to dismiss all:', error);
+        }
     };
 
     if (!isOpen) return null;
@@ -292,6 +365,29 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
 
                 {activeTab === 'notifications' && (
                     <div className="notification-content">
+                        {/* Bulk actions */}
+                        {notifications.length > 0 && (
+                            <div className="notification-bulk-actions">
+                                <button 
+                                    className="notification-bulk-btn"
+                                    onClick={handleMarkAllRead}
+                                    disabled={notifications.filter(n => !n.is_read).length === 0}
+                                    title="Mark all as read"
+                                >
+                                    <CheckCheck size={14} />
+                                    <span>Mark all read</span>
+                                </button>
+                                <button 
+                                    className="notification-bulk-btn danger"
+                                    onClick={handleDismissAll}
+                                    title="Dismiss all notifications"
+                                >
+                                    <Trash2 size={14} />
+                                    <span>Clear all</span>
+                                </button>
+                            </div>
+                        )}
+
                         <div className="notification-list">
                             {isLoading ? (
                                 <div className="notification-loading">
@@ -307,7 +403,20 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
                             ) : (
                                 <div className="notifications-list">
                                     {notifications.map(notification => (
-                                        <div key={notification.id} className={`notification-item ${!notification.is_read ? 'unread' : ''}`}>
+                                        <div 
+                                            key={notification.id} 
+                                            className={`notification-item ${!notification.is_read ? 'unread' : ''}`}
+                                            onClick={() => handleNotificationClick(notification)}
+                                            style={{ cursor: 'pointer' }}
+                                        >
+                                            <button
+                                                className="notification-dismiss-btn"
+                                                onClick={(e) => handleDismissNotification(notification.id, e)}
+                                                title="Dismiss"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                            
                                             <div className="notification-item-header">
                                                 <span className="notification-item-type">
                                                     {notification.subscription_type}
@@ -316,9 +425,23 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
                                                     {new Date(notification.created_at).toLocaleDateString()}
                                                 </span>
                                             </div>
+                                            
                                             <div className="notification-item-content">
-                                                {notification.message || 'New decision available'}
+                                                <div className="notification-item-subject">
+                                                    {notification.decision_subject || 'New decision available'}
+                                                </div>
+                                                {notification.decision_ada && (
+                                                    <div className="notification-item-ada">
+                                                        ADA: {notification.decision_ada}
+                                                    </div>
+                                                )}
                                             </div>
+                                            
+                                            {notification.match_reason && (
+                                                <div className="notification-item-reason">
+                                                    {notification.match_reason}
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>

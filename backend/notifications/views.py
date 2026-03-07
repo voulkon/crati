@@ -88,9 +88,8 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Trigger immediate check for existing matching decisions
-        from notifications.tasks import check_single_subscription
-        check_single_subscription.delay(subscription.id, lookback_days=30)
+        # Don't automatically check for historical matches - only notify about new decisions
+        # Users can manually trigger a check if they want to see past matches using the "check-now" action
         
         # Return full details using the detail serializer
         output_serializer = NotificationSubscriptionSerializer(subscription)

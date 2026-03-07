@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, BellOff, Loader2 } from 'lucide-react';
+import { Bell, Loader2 } from 'lucide-react';
 import SplitButton from './SplitButton';
 import { useNotificationContext } from '../hooks/useNotificationContext';
 import { useUnreadCount } from '../hooks/useUnreadCount';
@@ -161,7 +161,7 @@ export default function NotificationButton({ onSidebarToggle, isSidebarOpen }) {
         badge={displayCount}
       >
         <span className="notification-icon" data-testid="bell-icon">
-          {isLoading ? <Loader2 className="icon-spin" size={18} /> : subscribed ? <Bell size={18} /> : <BellOff size={18} />}
+          {isLoading ? <Loader2 className="icon-spin" size={18} /> : <Bell size={18} />}
         </span>
       </SplitButton>
 

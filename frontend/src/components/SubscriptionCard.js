@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from '../contexts/TranslationContext';
 import {
     updateSubscription,
     deleteSubscription,
@@ -31,6 +32,7 @@ import './SubscriptionCard.css';
  */
 export default function SubscriptionCard({ subscription, onRefresh }) {
     const navigate = useNavigate();
+    const { t } = useTranslation();
     const [isActionLoading, setIsActionLoading] = useState(false);
     const [isEditingAlias, setIsEditingAlias] = useState(false);
     const [aliasValue, setAliasValue] = useState(subscription.alias || '');
@@ -51,12 +53,12 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
     // Get display label for subscription type
     const getTypeLabel = (type) => {
         const labels = {
-            organization: 'Organization',
-            entity: 'Entity',
-            relationship: 'Relationship',
-            person: 'Person',
-            signer: 'Signer',
-            filter: 'Filter Only'
+            organization: t('notifications.organization'),
+            entity: t('notifications.entity'),
+            relationship: t('notifications.relationship'),
+            person: t('notifications.person'),
+            signer: t('notifications.signer'),
+            filter: t('notifications.filterOnly')
         };
         return labels[type] || type;
     };
@@ -66,7 +68,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
         if (subscription.organization_uid && !subscription.relationship_entity_afm) {
             return {
                 primary: subscription.organization_label || subscription.organization_uid,
-                secondary: `UID: ${subscription.organization_uid}`,
+                secondary: `${t('notifications.uid')}: ${subscription.organization_uid}`,
                 link: `/entity/organization/${subscription.organization_uid}`
             };
         }
@@ -74,7 +76,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
         if (subscription.entity_afm && !subscription.relationship_org_uid) {
             return {
                 primary: subscription.entity_name || subscription.entity_afm,
-                secondary: `AFM: ${subscription.entity_afm}`,
+                secondary: `${t('notifications.afm')}: ${subscription.entity_afm}`,
                 link: `/entity/afm/${subscription.entity_afm}`
             };
         }
@@ -92,7 +94,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
         if (subscription.signer_name) {
             return {
                 primary: subscription.signer_name,
-                secondary: 'Signer',
+                secondary: t('notifications.signer'),
                 link: null
             };
         }
@@ -100,14 +102,14 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
         if (subscription.person_name) {
             return {
                 primary: subscription.person_name,
-                secondary: 'Person',
+                secondary: t('notifications.person'),
                 link: null
             };
         }
 
         return {
-            primary: 'Filter-based subscription',
-            secondary: 'Custom filters',
+            primary: t('notifications.filterBasedSubscription'),
+            secondary: t('notifications.customFilters'),
             link: null
         };
     };
@@ -128,7 +130,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
             setIsEditingAlias(false);
         } catch (error) {
             console.error('Failed to update alias:', error);
-            alert('Failed to update alias');
+            alert(t('notifications.failedToUpdateAlias'));
         } finally {
             setIsActionLoading(false);
         }
@@ -150,7 +152,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
             await onRefresh();
         } catch (error) {
             console.error('Failed to toggle subscription:', error);
-            alert('Failed to update subscription');
+            alert(t('notifications.failedToUpdateSubscription'));
         } finally {
             setIsActionLoading(false);
         }
@@ -158,7 +160,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
 
     // Delete subscription
     const handleDelete = async () => {
-        if (!window.confirm('Are you sure you want to delete this subscription?')) {
+        if (!window.confirm(t('notifications.confirmDelete'))) {
             return;
         }
 
@@ -168,7 +170,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
             await onRefresh();
         } catch (error) {
             console.error('Failed to delete subscription:', error);
-            alert('Failed to delete subscription');
+            alert(t('notifications.failedToDeleteSubscription'));
         } finally {
             setIsActionLoading(false);
         }
@@ -179,11 +181,11 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
         setIsActionLoading(true);
         try {
             await triggerCheckNow(subscription.id);
-            alert('Check complete! Refreshing...');
+            alert(t('notifications.checkComplete'));
             await onRefresh();
         } catch (error) {
             console.error('Failed to check subscription:', error);
-            alert('Failed to check subscription');
+            alert(t('notifications.failedToCheckSubscription'));
         } finally {
             setIsActionLoading(false);
         }
@@ -199,7 +201,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
 
     // Format last checked time
     const formatLastChecked = (timestamp) => {
-        if (!timestamp) return 'Never checked';
+        if (!timestamp) return t('notifications.neverChecked');
 
         const date = new Date(timestamp);
         const now = new Date();
@@ -207,9 +209,9 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
         const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
         const diffDays = Math.floor(diffHours / 24);
 
-        if (diffHours < 1) return 'Just now';
-        if (diffHours < 24) return `${diffHours}h ago`;
-        if (diffDays < 7) return `${diffDays}d ago`;
+        if (diffHours < 1) return t('notifications.justNow');
+        if (diffHours < 24) return `${diffHours} ${t('notifications.hoursAgo')}`;
+        if (diffDays < 7) return `${diffDays} ${t('notifications.daysAgo')}`;
 
         return date.toLocaleDateString();
     };
@@ -221,7 +223,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
         subscription.decision_types?.length > 0;
 
     // Determine display title - use alias if available, otherwise use descriptive placeholder
-    const displayTitle = subscription.alias || 'Click to add custom name';
+    const displayTitle = subscription.alias || t('notifications.clickToAddName');
     const hasCustomAlias = !!subscription.alias;
 
     return (
@@ -236,9 +238,9 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                 </div>
                 <div className={`subscription-status ${subscription.is_active ? 'active' : 'paused'}`}>
                     {subscription.is_active ? (
-                        <><Zap size={12} /> Active</>
+                        <><Zap size={12} /> {t('notifications.active')}</>
                     ) : (
-                        <><Pause size={12} /> Paused</>
+                        <><Pause size={12} /> {t('notifications.paused')}</>
                     )}
                 </div>
             </div>
@@ -251,7 +253,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                             type="text"
                             value={aliasValue}
                             onChange={(e) => setAliasValue(e.target.value)}
-                            placeholder="Enter custom name..."
+                            placeholder={t('notifications.enterCustomName')}
                             className="subscription-alias-input"
                             autoFocus
                             onKeyDown={(e) => {
@@ -264,7 +266,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                                 className="alias-btn alias-btn-save"
                                 onClick={handleSaveAlias}
                                 disabled={isActionLoading}
-                                title="Save"
+                                title={t('notifications.save')}
                             >
                                 <Check size={14} />
                             </button>
@@ -272,7 +274,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                                 className="alias-btn alias-btn-cancel"
                                 onClick={handleCancelAlias}
                                 disabled={isActionLoading}
-                                title="Cancel"
+                                title={t('common.cancel')}
                             >
                                 <X size={14} />
                             </button>
@@ -282,7 +284,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                     <div
                         className={`subscription-alias-display ${!hasCustomAlias ? 'no-alias' : ''}`}
                         onClick={() => setIsEditingAlias(true)}
-                        title="Click to edit name"
+                        title={t('notifications.clickToEdit')}
                     >
                         <span className="subscription-alias-text">{displayTitle}</span>
                         <Edit2 size={14} className="subscription-alias-edit-icon" />
@@ -295,7 +297,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                 <div
                     className={`subscription-target-name ${target.link ? 'clickable' : ''}`}
                     onClick={target.link ? handleNavigateToTarget : undefined}
-                    title={target.link ? 'Click to view details' : ''}
+                    title={target.link ? t('notifications.clickToView') : ''}
                 >
                     {target.primary}
                 </div>
@@ -311,17 +313,17 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                 <div className="subscription-filters">
                     {subscription.keywords?.length > 0 && (
                         <div className="filter-item">
-                            <span className="filter-label">Keywords:</span>
+                            <span className="filter-label">{t('notifications.keywords')}:</span>
                             <span className="filter-value">
                                 {subscription.keywords.slice(0, 3).join(', ')}
-                                {subscription.keywords.length > 3 && ` +${subscription.keywords.length - 3} more`}
+                                {subscription.keywords.length > 3 && ` +${subscription.keywords.length - 3} ${t('notifications.more')}`}
                             </span>
                         </div>
                     )}
 
                     {(subscription.amount_min != null || subscription.amount_max != null) && (
                         <div className="filter-item">
-                            <span className="filter-label">Amount:</span>
+                            <span className="filter-label">{t('notifications.amount')}:</span>
                             <span className="filter-value">
                                 {subscription.amount_min != null && `≥ €${subscription.amount_min}`}
                                 {subscription.amount_min != null && subscription.amount_max != null && ' - '}
@@ -332,9 +334,9 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
 
                     {subscription.decision_types?.length > 0 && (
                         <div className="filter-item">
-                            <span className="filter-label">Types:</span>
+                            <span className="filter-label">{t('notifications.types')}:</span>
                             <span className="filter-value">
-                                {subscription.decision_types.length} selected
+                                {subscription.decision_types.length} {t('notifications.selected')}
                             </span>
                         </div>
                     )}
@@ -346,7 +348,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                 <div className="metadata-item">
                     <Bell size={14} className="metadata-icon" />
                     <span className="metadata-text">
-                        {subscription.notification_count || 0} notification{subscription.notification_count !== 1 ? 's' : ''}
+                        {subscription.notification_count || 0} {subscription.notification_count !== 1 ? t('notifications.notifications') : t('notifications.notification')}
                     </span>
                 </div>
                 <div className="metadata-item">
@@ -363,10 +365,10 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                     className="subscription-btn subscription-btn-primary"
                     onClick={handleCheckNow}
                     disabled={isActionLoading}
-                    title="Check for new decisions now"
+                    title={t('notifications.checkNowTitle')}
                 >
                     {isActionLoading ? '...' : (
-                        <><RefreshCw size={14} /> Check Now</>
+                        <><RefreshCw size={14} /> {t('notifications.checkNow')}</>
                     )}
                 </button>
 
@@ -374,12 +376,12 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                     className="subscription-btn subscription-btn-secondary"
                     onClick={handleTogglePause}
                     disabled={isActionLoading}
-                    title={subscription.is_active ? 'Pause subscription' : 'Resume subscription'}
+                    title={subscription.is_active ? t('notifications.pauseSubscription') : t('notifications.resumeSubscription')}
                 >
                     {subscription.is_active ? (
-                        <><Pause size={14} /> Pause</>
+                        <><Pause size={14} /> {t('notifications.pause')}</>
                     ) : (
-                        <><Play size={14} /> Resume</>
+                        <><Play size={14} /> {t('notifications.resume')}</>
                     )}
                 </button>
 
@@ -387,7 +389,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                     className="subscription-btn subscription-btn-danger"
                     onClick={handleDelete}
                     disabled={isActionLoading}
-                    title="Delete subscription"
+                    title={t('notifications.deleteSubscription')}
                 >
                     <Trash2 size={14} />
                 </button>

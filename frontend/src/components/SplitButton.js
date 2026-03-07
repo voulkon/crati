@@ -1,0 +1,85 @@
+import React from 'react';
+import { ChevronUp, ChevronDown } from './Icons';
+import './SplitButton.css';
+
+/**
+ * Reusable split button component with consistent behavior across the app.
+ * 
+ * Features:
+ * - Split button layout (main action + chevron toggle)
+ * - Optional dark overlay when expanded
+ * - Consistent hover and active states
+ * - Customizable styling via className
+ * 
+ * @param {Object} props
+ * @param {React.ReactNode} props.children - Content for the main (left) button
+ * @param {boolean} props.isOpen - Whether the associated content is open
+ * @param {Function} props.onMainClick - Handler for main button click
+ * @param {Function} props.onChevronClick - Handler for chevron button click
+ * @param {boolean} props.mainActive - Whether main button should show active state
+ * @param {boolean} props.showOverlay - Whether to show dark overlay when open (default: true)
+ * @param {string} props.mainClassName - Additional classes for main button
+ * @param {string} props.chevronClassName - Additional classes for chevron button
+ * @param {string} props.className - Additional classes for wrapper
+ * @param {string} props.mainTitle - Tooltip for main button
+ * @param {string} props.chevronTitle - Tooltip for chevron button
+ * @param {boolean} props.disabled - Whether buttons are disabled
+ * @param {number} props.height - Button height in pixels (default: 50)
+ * @param {React.ReactNode} props.badge - Optional badge to display on main button (e.g., unread count)
+ */
+export default function SplitButton({
+  children,
+  isOpen = false,
+  onMainClick,
+  onChevronClick,
+  mainActive = false,
+  showOverlay = true,
+  mainClassName = '',
+  chevronClassName = '',
+  className = '',
+  mainTitle = '',
+  chevronTitle = '',
+  disabled = false,
+  height = 50,
+  badge = null,
+}) {
+  return (
+    <>
+      {/* Dark overlay when open */}
+      {showOverlay && isOpen && (
+        <div 
+          className="split-button-overlay" 
+          onClick={onChevronClick}
+        />
+      )}
+
+      {/* Split button wrapper */}
+      <div className={`split-button ${className}`}>
+        {/* Main action button (left half) */}
+        <button
+          className={`split-button-main ${mainActive ? 'active' : ''} ${mainClassName}`}
+          onClick={onMainClick}
+          disabled={disabled}
+          title={mainTitle}
+          style={{ height: `${height}px` }}
+        >
+          {children}
+          {badge && <div className="split-button-badge">{badge}</div>}
+        </button>
+
+        {/* Chevron toggle button (right half) */}
+        <button
+          className={`split-button-chevron ${isOpen ? 'active' : ''} ${chevronClassName}`}
+          onClick={onChevronClick}
+          disabled={disabled}
+          title={chevronTitle || (isOpen ? 'Close' : 'Open')}
+          style={{ height: `${height}px` }}
+        >
+          <span className="split-button-chevron-icon">
+            {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </span>
+        </button>
+      </div>
+    </>
+  );
+}

@@ -1,12 +1,14 @@
-/* ── Split button wrapper ─────────────────────────────────── */
-.notification-split-btn {
-  display: inline-flex;
-  align-items: stretch;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  box-shadow: 0 2px 8px var(--shadow);
-  backdrop-filter: blur(10px);
-}
+/* ═══════════════════════════════════════════════════════════
+   NOTIFICATION BUTTON - Component-specific styles
+   ═══════════════════════════════════════════════════════════
+   
+   Extends SplitButton base styles with notification-specific
+   styling. Base split button behavior is handled by SplitButton.css.
+   
+   ═══════════════════════════════════════════════════════════ */
+
+/* Import base split button styles */
+@import './SplitButton.css';
 
 /* Spinning animation for loading icon */
 @keyframes spin {
@@ -22,106 +24,17 @@
   animation: spin 1s linear infinite;
 }
 
-/* Divider line between the two halves */
-.notification-split-btn > .notification-button {
-  border-right: 1px solid var(--border-color);
-  border-radius: var(--radius-md) 0 0 var(--radius-md);
-  box-shadow: none;
-  min-width: 40px;
+/* Component-specific overrides if needed */
+.notification-split-btn {
+  /* Add any notification-specific wrapper styles here */
 }
 
-/* Chevron half */
-.notification-chevron {
-  position: relative;
-  background-color: transparent;
-  color: var(--text-color);
-  border: 1px solid transparent;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
-  padding: 0 var(--spacing-sm);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 50px;
-  transition: all var(--transition-fast);
-  box-shadow: none;
-}
-
-.notification-chevron:hover {
-  background-color: var(--hover-bg);
-}
-
-.notification-chevron.active {
-  background-color: var(--primary-blue);
-  color: var(--bg-color);
-  border-color: var(--primary-blue);
-}
-
-.notification-chevron.active:hover {
-  filter: brightness(1.1);
-}
-
-.notification-chevron-icon {
-  font-size: var(--font-md);
-  line-height: 1;
-}
-
-.notification-split-btn.sidebar-open > .notification-button {
-  border-right-color: var(--border-color);
-}
-
-/* ── Bell half ────────────────────────────────────────────── */
 .notification-button {
-  position: relative;
-  background-color: transparent;
-  color: var(--text-color);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  padding: var(--spacing-sm) var(--spacing-md);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--font-lg);
-  transition: all var(--transition-fast);
-  backdrop-filter: none;
-  box-shadow: none;
-  min-width: 50px;
-  height: 50px;
+  /* Notification-specific button styles */
 }
 
-.notification-button:hover:not(:disabled) {
-  background-color: var(--hover-bg);
-  transform: translateY(-2px);
-  box-shadow: none;
-}
-
-.notification-button:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.notification-button.subscribed {
-  background-color: var(--primary-blue);
-  color: var(--bg-color);
-  border-color: var(--primary-blue);
-}
-
-.notification-button.subscribed:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-
-.notification-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.notification-button.disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.notification-button.loading {
-  animation: pulse 1.5s ease-in-out infinite;
+.notification-chevron {
+  /* Notification-specific chevron styles */
 }
 
 .notification-icon {
@@ -129,35 +42,6 @@
   align-items: center;
   justify-content: center;
   font-size: 1.2em;
-}
-
-/* ── Unread badge ─────────────────────────────────────────── */
-.unread-badge {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  background-color: var(--danger-color);
-  color: var(--bg-color);
-  font-size: 0.7em;
-  font-weight: bold;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
-  box-shadow: 0 2px 4px var(--shadow-focus);
-  animation: badgePulse 2s ease-in-out infinite;
-}
-
-@keyframes badgePulse {
-  0%, 100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
 }
 
 /* Toast notification */
@@ -186,15 +70,6 @@
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
   }
 }
 

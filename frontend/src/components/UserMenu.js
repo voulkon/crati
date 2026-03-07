@@ -3,7 +3,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import DjangoLoginForm from './DjangoLoginForm';
 import UserMenuDropdown from './UserMenuDropdown';
-import { UserIcon, ChevronDown } from './Icons';
+import SplitButton from './SplitButton';
+import { UserIcon } from './Icons';
 import './UserMenu.css';
 
 const UserMenu = () => {
@@ -19,43 +20,60 @@ const UserMenu = () => {
     return isDarkTheme ? currentPalette.darkColor : currentPalette.color;
   };
 
-  return (
-    <div className="user-menu">
-      <button 
-        className="user-menu-trigger"
-        onClick={() => setIsOpen(!isOpen)}
-        onBlur={() => setTimeout(() => setIsOpen(false), 150)}
-        style={{
-          borderLeft: `3px solid ${getCurrentPaletteColor()}`
-        }}
-      >
-        <div className="user-avatar">
-          {isSignedIn && user?.imageUrl ? (
-            <img src={user.imageUrl} alt={user.firstName} className="avatar-image" />
-          ) : (
-            <div className="avatar-placeholder">
-              {isSignedIn && user?.firstName ? user.firstName.charAt(0).toUpperCase() : <UserIcon size={16} />}
-            </div>
-          )}
-        </div>
-        <span className="user-menu-arrow"><ChevronDown size={14} /></span>
-      </button>
+  const handleToggleMenu = () => {
+    setIsOpen(!isOpen);
+  };
 
-      {isOpen && (
-        <UserMenuDropdown 
-          onClose={() => setIsOpen(false)}
-          onShowLogin={() => setShowLoginForm(true)} 
-        />
-      )}
-      
-      {/* Django Login Form Modal */}
-      {showLoginForm && !isClerkAuth && (
-        <DjangoLoginForm 
-          onSuccess={() => setShowLoginForm(false)}
-          onCancel={() => setShowLoginForm(false)}
-        />
-      )}
-    </div>
+  const buttonStyle = {
+    borderLeft: `3px solid ${getCurrentPaletteColor()}`
+  };
+
+  return (
+    <>
+      <div className="user-menu">
+        <div 
+          className="user-menu-wrapper"
+          style={buttonStyle}
+        >
+          <SplitButton
+            isOpen={isOpen}
+            onMainClick={handleToggleMenu}
+            onChevronClick={handleToggleMenu}
+            showOverlay={true}
+            mainClassName="user-menu-trigger"
+            chevronClassName="user-menu-chevron"
+            className="user-menu-split-btn"
+            mainTitle={isOpen ? 'Close menu' : 'Open menu'}
+            chevronTitle={isOpen ? 'Close menu' : 'Open menu'}
+          >
+            <div className="user-avatar">
+              {isSignedIn && user?.imageUrl ? (
+                <img src={user.imageUrl} alt={user.firstName} className="avatar-image" />
+              ) : (
+                <div className="avatar-placeholder">
+                  {isSignedIn && user?.firstName ? user.firstName.charAt(0).toUpperCase() : <UserIcon size={16} />}
+                </div>
+              )}
+            </div>
+          </SplitButton>
+        </div>
+
+        {isOpen && (
+          <UserMenuDropdown 
+            onClose={() => setIsOpen(false)}
+            onShowLogin={() => setShowLoginForm(true)} 
+          />
+        )}
+        
+        {/* Django Login Form Modal */}
+        {showLoginForm && !isClerkAuth && (
+          <DjangoLoginForm 
+            onSuccess={() => setShowLoginForm(false)}
+            onCancel={() => setShowLoginForm(false)}
+          />
+        )}
+      </div>
+    </>
   );
 };
 

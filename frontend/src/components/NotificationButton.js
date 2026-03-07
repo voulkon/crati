@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Bell, BellOff, Loader2 } from 'lucide-react';
-import { ChevronUp, ChevronDown } from './Icons';
+import SplitButton from './SplitButton';
 import { useNotificationContext } from '../hooks/useNotificationContext';
 import { useUnreadCount } from '../hooks/useUnreadCount';
 import { useSubscriptionStatus } from '../hooks/useSubscriptionStatus';
@@ -147,40 +147,24 @@ export default function NotificationButton({ onSidebarToggle, isSidebarOpen }) {
 
   return (
     <>
-      <div className={`notification-split-btn ${isSidebarOpen ? 'sidebar-open' : ''}`}>
-        {/* Bell half — subscribe/unsubscribe or open sidebar */}
-        <button
-          className={`notification-button ${subscribed ? 'subscribed' : ''} ${isLoading ? 'loading' : ''} ${isDisabled ? 'disabled' : ''}`}
-          onClick={handleBellClick}
-          disabled={isDisabled || isLoading}
-          title={getTooltipText()}
-          data-testid="bell-button"
-          aria-label={`Notifications${displayCount ? `, ${displayCount} unread` : ''}`}
-        >
-          <span className="notification-icon" data-testid="bell-icon">
-            {isLoading ? <Loader2 className="icon-spin" size={18} /> : subscribed ? <Bell size={18} /> : <BellOff size={18} />}
-          </span>
-          {displayCount && (
-            <span className="unread-badge" data-testid="unread-badge">
-              {displayCount}
-            </span>
-          )}
-        </button>
-
-        {/* Chevron half — open/close notification sidebar */}
-        <button
-          className={`notification-chevron ${isSidebarOpen ? 'active' : ''}`}
-          onClick={handleToggleSidebar}
-          title={isSidebarOpen ? 'Close notifications' : 'Open notifications'}
-          data-testid="chevron-button"
-          aria-label="Toggle notification sidebar"
-          aria-expanded={isSidebarOpen}
-        >
-          <span className="notification-chevron-icon" data-testid="chevron-icon">
-            {isSidebarOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </span>
-        </button>
-      </div>
+      <SplitButton
+        isOpen={isSidebarOpen}
+        onMainClick={handleBellClick}
+        onChevronClick={handleToggleSidebar}
+        mainActive={subscribed}
+        showOverlay={true}
+        mainClassName={`notification-button ${isLoading ? 'loading' : ''} ${isDisabled ? 'disabled' : ''}`}
+        chevronClassName="notification-chevron"
+        className={`notification-split-btn ${isSidebarOpen ? 'sidebar-open' : ''}`}
+        mainTitle={getTooltipText()}
+        chevronTitle={isSidebarOpen ? 'Close notifications' : 'Open notifications'}
+        disabled={isDisabled || isLoading}
+        badge={displayCount}
+      >
+        <span className="notification-icon" data-testid="bell-icon">
+          {isLoading ? <Loader2 className="icon-spin" size={18} /> : subscribed ? <Bell size={18} /> : <BellOff size={18} />}
+        </span>
+      </SplitButton>
 
       {/* Toast notification */}
       {showToast && (

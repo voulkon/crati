@@ -1,32 +1,39 @@
+/* ═══════════════════════════════════════════════════════════
+   USER MENU - Component-specific styles
+   ═══════════════════════════════════════════════════════════
+   
+   Extends SplitButton base styles with user menu-specific
+   styling. Base split button behavior is handled by SplitButton.css.
+   
+   ═══════════════════════════════════════════════════════════ */
+
+/* Import base split button styles */
+@import './SplitButton.css';
+
 .user-menu {
   position: relative;
   display: inline-block;
+  z-index: 1002; /* Above overlay (999) and sidebars (1000) */
+}
+
+/* Wrapper for palette color border */
+.user-menu-wrapper {
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
 .user-menu-trigger {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm);
+  /* Match base button styling without extra spacing */
   background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: var(--transition-fast);
-  color: var(--text-color);
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px var(--shadow);
-  border-left: 3px solid transparent;
 }
 
 .user-menu-trigger:hover {
   background: var(--hover-bg);
-  border-color: var(--primary-blue);
 }
 
 .user-avatar {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   overflow: hidden;
   display: flex;
@@ -35,7 +42,7 @@
   background: var(--primary-blue);
   color: white;
   font-weight: var(--font-bold);
-  font-size: var(--font-sm);
+  font-size: var(--font-xs);
 }
 
 .avatar-image {
@@ -50,15 +57,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.user-menu-arrow {
-  font-size: 0.8em;
-  transition: transform var(--transition-fast);
-}
-
-.user-menu-trigger:hover .user-menu-arrow {
-  transform: rotate(180deg);
 }
 
 .user-menu-dropdown {

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { toggleBookmarkForCurrentPage, isCurrentPageBookmarked } from '../api/bookmarks';
 import { useTranslation } from '../contexts/TranslationContext';
-import { ChevronUp, ChevronDown } from './Icons';
+import SplitButton from './SplitButton';
 import './BookmarkButton.css';
 
 /**
@@ -53,30 +53,23 @@ export default function BookmarkButton({ onLibraryToggle, isLibraryOpen, bookmar
 
   return (
     <>
-      <div className={`bookmark-split-btn ${isLibraryOpen ? 'library-open' : ''}`}>
-        {/* Star half — bookmark current page */}
-        <button
-          className={`bookmark-button ${isBookmarked ? 'bookmarked' : ''} ${isLoading ? 'loading' : ''}`}
-          onClick={handleToggleBookmark}
-          disabled={isLoading}
-          title={isBookmarked ? t('library.removeBookmark') : t('library.bookmarkThisPage')}
-        >
-          <span className="bookmark-icon">
-            {isLoading ? '⋯' : isBookmarked ? '★' : '☆'}
-          </span>
-        </button>
-
-        {/* Chevron half — open/close Library sidebar */}
-        <button
-          className={`bookmark-chevron ${isLibraryOpen ? 'active' : ''}`}
-          onClick={onLibraryToggle}
-          title={isLibraryOpen ? t('library.close') : t('library.myLibrary')}
-        >
-          <span className="bookmark-chevron-icon">
-            {isLibraryOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-          </span>
-        </button>
-      </div>
+      <SplitButton
+        isOpen={isLibraryOpen}
+        onMainClick={handleToggleBookmark}
+        onChevronClick={onLibraryToggle}
+        mainActive={isBookmarked}
+        showOverlay={true}
+        mainClassName={`bookmark-button ${isLoading ? 'loading' : ''}`}
+        chevronClassName="bookmark-chevron"
+        className={`bookmark-split-btn ${isLibraryOpen ? 'library-open' : ''}`}
+        mainTitle={isBookmarked ? t('library.removeBookmark') : t('library.bookmarkThisPage')}
+        chevronTitle={isLibraryOpen ? t('library.close') : t('library.myLibrary')}
+        disabled={isLoading}
+      >
+        <span className="bookmark-icon">
+          {isLoading ? '⋯' : isBookmarked ? '★' : '☆'}
+        </span>
+      </SplitButton>
 
       {/* Toast notification */}
       {showToast && (

@@ -4,7 +4,7 @@ import { useTranslation } from '../contexts/TranslationContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import DjangoLoginForm from './DjangoLoginForm';
-import { UserIcon, BookOpenIcon, GlobeIcon } from './Icons';
+import { UserIcon, BookOpenIcon, GlobeIcon, ChevronDown } from './Icons';
 import { Moon, Sun, Palette, LogOut, LogIn } from 'lucide-react';
 import './UserMenu.css';
 
@@ -76,7 +76,7 @@ const UserMenu = () => {
             </div>
           )}
         </div>
-        <span className="user-menu-arrow">▼</span>
+        <span className="user-menu-arrow"><ChevronDown size={14} /></span>
       </button>
 
       {isOpen && (

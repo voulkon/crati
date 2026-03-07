@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Bell, BellOff, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
+import { Bell, BellOff, Loader2 } from 'lucide-react';
+import { ChevronUp, ChevronDown } from './Icons';
 import { useNotificationContext } from '../hooks/useNotificationContext';
 import { useUnreadCount } from '../hooks/useUnreadCount';
 import { useSubscriptionStatus } from '../hooks/useSubscriptionStatus';

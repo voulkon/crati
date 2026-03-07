@@ -28,28 +28,44 @@
   padding: var(--spacing-sm);
 }
 
+/* Horizontal layout - right aligned (default) */
 .top-controls.horizontal-right {
   top: var(--spacing-md);
   right: var(--spacing-md);
   flex-direction: row;
+  align-items: center;
 }
 
+/* Vertical layout - right aligned, from top to bottom */
 .top-controls.vertical-right {
   top: var(--spacing-md);
   right: var(--spacing-md);
   flex-direction: column;
+  align-items: flex-end;
 }
 
+/* Horizontal layout - left aligned */
 .top-controls.horizontal-left {
   top: var(--spacing-md);
   left: var(--spacing-md);
   flex-direction: row;
+  align-items: center;
 }
 
+/* Vertical layout - left aligned, from top to bottom */
+.top-controls.vertical-left {
+  top: var(--spacing-md);
+  left: var(--spacing-md);
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+/* Split corners layout (horizontal, right side) */
 .top-controls.split-corners {
   top: var(--spacing-md);
   right: var(--spacing-md);
   flex-direction: row;
+  align-items: center;
 }
 
 /* Ensure controls don't interfere with page content */

@@ -125,7 +125,7 @@ function AuthenticatedApp({ controlsLayout }) {
 }
 
 // Main App component
-function App({ controlsLayout = 'horizontal-right' }) {
+function App({ controlsLayout = 'vertical-right' }) {
   // NOTE: Cannot use useTranslation here - this component creates the TranslationProvider
   
   // Stealth mode toggle - set REACT_APP_STEALTH_MODE=true to require authentication

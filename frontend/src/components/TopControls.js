@@ -5,6 +5,16 @@ import BookmarkButton from './BookmarkButton';
 import NotificationButton from './NotificationButton';
 import './TopControls.css';
 
+/**
+ * TopControls - Main navigation bar with logo and action buttons
+ * 
+ * @param {string} layout - Layout mode for the controls:
+ *   - 'horizontal-right': Horizontal layout, aligned to the right (default)
+ *   - 'vertical-right': Vertical layout from top to bottom, aligned to the right
+ *   - 'horizontal-left': Horizontal layout, aligned to the left
+ *   - 'vertical-left': Vertical layout from top to bottom, aligned to the left
+ *   - 'split-corners': Split layout with logo on left, controls on right
+ */
 const TopControls = ({ 
   layout = 'horizontal-right', 
   onLibraryToggle, 
@@ -22,18 +32,18 @@ const TopControls = ({
         </div>
       </div>
       
-      {/* Right side: Notification button, Bookmark button, then User Menu */}
+      {/* Right side: User Menu, Bookmark button, then Notification button */}
       <div className={`top-controls ${layout}`}>
-        <NotificationButton
-          onSidebarToggle={onNotificationSidebarToggle}
-          isSidebarOpen={isNotificationSidebarOpen}
-        />
+        <UserMenu />
         <BookmarkButton
           onLibraryToggle={onLibraryToggle}
           isLibraryOpen={isLibraryOpen}
           bookmarkCount={bookmarkCount}
         />
-        <UserMenu />
+        <NotificationButton
+          onSidebarToggle={onNotificationSidebarToggle}
+          isSidebarOpen={isNotificationSidebarOpen}
+        />
       </div>
     </>
   );

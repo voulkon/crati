@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { toggleBookmarkForCurrentPage, isCurrentPageBookmarked } from '../api/bookmarks';
 import { useTranslation } from '../contexts/TranslationContext';
+import { ChevronUp, ChevronDown } from './Icons';
 import './BookmarkButton.css';
 
 /**
@@ -71,7 +72,9 @@ export default function BookmarkButton({ onLibraryToggle, isLibraryOpen, bookmar
           onClick={onLibraryToggle}
           title={isLibraryOpen ? t('library.close') : t('library.myLibrary')}
         >
-          <span className="bookmark-chevron-icon">{isLibraryOpen ? '▴' : '▾'}</span>
+          <span className="bookmark-chevron-icon">
+            {isLibraryOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </span>
         </button>
       </div>
 

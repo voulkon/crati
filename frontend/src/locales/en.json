@@ -9,6 +9,7 @@
   },
   "homepage": {
     "title": "Crati.Co",
+    "searchPlaceholder": "Search decisions, organizations, entities...",
     "subtitle": "Discover and analyze public decisions across all government organizations",
     "todayActivity": "Today's Activity",
     "exploreTitle": "Explore Government Decisions",

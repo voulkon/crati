@@ -83,7 +83,7 @@ const HomePage = () => {
             {/* Super Search Component - Enhanced as main feature */}
             <div className="hero-search-enhanced">
               <SuperSearch
-                placeholder="Search organizations, documents, companies, signers..."
+                placeholder={t('homepage.searchPlaceholder')}
                 autoFocus={false}
                 showFullResults={true}
                 className="homepage-super-search"

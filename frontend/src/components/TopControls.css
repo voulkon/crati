@@ -3,7 +3,7 @@
   position: fixed;
   top: var(--spacing-md);
   left: var(--spacing-md);
-  z-index: 1001; /* Above library sidebar */
+  z-index: 1003; /* Above unified overlay (1002) - keeps logo visible */
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
@@ -22,7 +22,7 @@
 /* Top controls - Right side UI elements */
 .top-controls {
   position: fixed;
-  z-index: 1000;
+  z-index: 1003; /* Above unified overlay (1002) - keeps buttons visible and accessible */
   display: flex;
   gap: var(--spacing-sm);
   padding: var(--spacing-sm);

@@ -13,7 +13,11 @@
 .user-menu {
   position: relative;
   display: inline-block;
-  z-index: 1002; /* Above overlay (999) and sidebars (1000) */
+  z-index: auto; /* Inherit from parent when closed */
+}
+
+.user-menu.user-menu-open {
+  z-index: 1003; /* Above unified overlay (1002) when open */
 }
 
 /* Wrapper for palette color border */
@@ -63,7 +67,7 @@
   position: absolute;
   top: 0;
   right: 100%;
-  z-index: 1001;
+  z-index: 1003; /* Above unified overlay (1002) */
   min-width: 280px;
   background: var(--card-bg);
   border: 1px solid var(--border-color);

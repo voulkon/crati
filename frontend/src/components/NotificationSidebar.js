@@ -149,9 +149,6 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
 
     return (
         <>
-            {/* Overlay */}
-            <div className="notification-overlay" onClick={onClose} />
-
             {/* Sidebar */}
             <div className={`notification-sidebar ${isOpen ? 'open' : ''}`}>
                 {/* Header */}

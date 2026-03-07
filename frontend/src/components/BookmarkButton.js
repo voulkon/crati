@@ -58,7 +58,6 @@ export default function BookmarkButton({ onLibraryToggle, isLibraryOpen, bookmar
         onMainClick={handleToggleBookmark}
         onChevronClick={onLibraryToggle}
         mainActive={isBookmarked}
-        showOverlay={true}
         mainClassName={`bookmark-button ${isLoading ? 'loading' : ''}`}
         chevronClassName="bookmark-chevron"
         className={`bookmark-split-btn ${isLibraryOpen ? 'library-open' : ''}`}

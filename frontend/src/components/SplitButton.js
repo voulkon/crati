@@ -7,9 +7,10 @@ import './SplitButton.css';
  * 
  * Features:
  * - Split button layout (main action + chevron toggle)
- * - Optional dark overlay when expanded
  * - Consistent hover and active states
  * - Customizable styling via className
+ * 
+ * Note: Overlay is now managed centrally at the App level for consistent behavior.
  * 
  * @param {Object} props
  * @param {React.ReactNode} props.children - Content for the main (left) button
@@ -17,7 +18,6 @@ import './SplitButton.css';
  * @param {Function} props.onMainClick - Handler for main button click
  * @param {Function} props.onChevronClick - Handler for chevron button click
  * @param {boolean} props.mainActive - Whether main button should show active state
- * @param {boolean} props.showOverlay - Whether to show dark overlay when open (default: true)
  * @param {string} props.mainClassName - Additional classes for main button
  * @param {string} props.chevronClassName - Additional classes for chevron button
  * @param {string} props.className - Additional classes for wrapper
@@ -33,7 +33,6 @@ export default function SplitButton({
   onMainClick,
   onChevronClick,
   mainActive = false,
-  showOverlay = true,
   mainClassName = '',
   chevronClassName = '',
   className = '',
@@ -45,16 +44,8 @@ export default function SplitButton({
 }) {
   return (
     <>
-      {/* Dark overlay when open */}
-      {showOverlay && isOpen && (
-        <div 
-          className="split-button-overlay" 
-          onClick={onChevronClick}
-        />
-      )}
-
       {/* Split button wrapper */}
-      <div className={`split-button ${className}`}>
+      <div className={`split-button ${isOpen ? 'split-button-open' : ''} ${className}`}>
         {/* Main action button (left half) */}
         <button
           className={`split-button-main ${mainActive ? 'active' : ''} ${mainClassName}`}

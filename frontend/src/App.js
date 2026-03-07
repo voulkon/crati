@@ -46,6 +46,47 @@ function AuthenticatedApp({ controlsLayout }) {
   // Notification sidebar state
   const [isNotificationSidebarOpen, setIsNotificationSidebarOpen] = React.useState(false);
   
+  // User menu state
+  const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
+  
+  // Toggle handlers with mutual exclusivity - only one can be open at a time
+  const handleLibraryToggle = () => {
+    setIsLibraryOpen(!isLibraryOpen);
+    if (!isLibraryOpen) {
+      // Opening library, close others
+      setIsNotificationSidebarOpen(false);
+      setIsUserMenuOpen(false);
+    }
+  };
+  
+  const handleNotificationToggle = () => {
+    setIsNotificationSidebarOpen(!isNotificationSidebarOpen);
+    if (!isNotificationSidebarOpen) {
+      // Opening notifications, close others
+      setIsLibraryOpen(false);
+      setIsUserMenuOpen(false);
+    }
+  };
+  
+  const handleUserMenuToggle = () => {
+    setIsUserMenuOpen(!isUserMenuOpen);
+    if (!isUserMenuOpen) {
+      // Opening user menu, close others
+      setIsLibraryOpen(false);
+      setIsNotificationSidebarOpen(false);
+    }
+  };
+  
+  // Handler for closing any open component when overlay is clicked
+  const handleOverlayClick = () => {
+    setIsLibraryOpen(false);
+    setIsNotificationSidebarOpen(false);
+    setIsUserMenuOpen(false);
+  };
+  
+  // Check if any component is open
+  const isAnyOpen = isLibraryOpen || isNotificationSidebarOpen || isUserMenuOpen;
+  
   // Set up the token getter for API client
   useEffect(() => {
     setTokenGetter(getToken, isClerkAuth);
@@ -75,14 +116,34 @@ function AuthenticatedApp({ controlsLayout }) {
   
   return (
     <>
+      {/* Unified overlay for all split buttons - shows when any is open */}
+      {isAnyOpen && (
+        <div 
+          className="unified-overlay" 
+          onClick={handleOverlayClick}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.4)',
+            zIndex: 1002,
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+        />
+      )}
+      
       {/* Flexible top controls with library toggle and bookmark button */}
       <TopControls 
         layout={controlsLayout}
-        onLibraryToggle={() => setIsLibraryOpen(!isLibraryOpen)}
+        onLibraryToggle={handleLibraryToggle}
         isLibraryOpen={isLibraryOpen}
         bookmarkCount={bookmarkCount}
-        onNotificationSidebarToggle={() => setIsNotificationSidebarOpen(!isNotificationSidebarOpen)}
+        onNotificationSidebarToggle={handleNotificationToggle}
         isNotificationSidebarOpen={isNotificationSidebarOpen}
+        onUserMenuToggle={handleUserMenuToggle}
+        isUserMenuOpen={isUserMenuOpen}
       />
       
       {/* Library Sidebar */}

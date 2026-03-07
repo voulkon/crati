@@ -21,7 +21,9 @@ const TopControls = ({
   isLibraryOpen, 
   bookmarkCount,
   onNotificationSidebarToggle,
-  isNotificationSidebarOpen 
+  isNotificationSidebarOpen,
+  onUserMenuToggle,
+  isUserMenuOpen
 }) => {
   return (
     <>
@@ -34,7 +36,10 @@ const TopControls = ({
       
       {/* Right side: User Menu, Bookmark button, then Notification button */}
       <div className={`top-controls ${layout}`}>
-        <UserMenu />
+        <UserMenu 
+          isOpen={isUserMenuOpen}
+          onToggle={onUserMenuToggle}
+        />
         <BookmarkButton
           onLibraryToggle={onLibraryToggle}
           isLibraryOpen={isLibraryOpen}

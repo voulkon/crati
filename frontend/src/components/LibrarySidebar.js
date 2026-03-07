@@ -190,9 +190,6 @@ export default function LibrarySidebar({ isOpen, onClose, onBookmarkCountChange 
 
   return (
     <>
-      {/* Overlay */}
-      <div className="library-overlay" onClick={onClose} />
-      
       {/* Sidebar */}
       <div className={`library-sidebar ${isOpen ? 'open' : ''}`}>
         {/* Header */}

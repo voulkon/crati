@@ -8,24 +8,9 @@
    2. Overriding CSS variables
    3. Adding component-specific styles
    
+   Note: Overlay is now managed centrally at the App level.
+   
    ═══════════════════════════════════════════════════════════ */
-
-/* ── Overlay ───────────────────────────────────────────────── */
-.split-button-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.4);
-  z-index: 999;
-  animation: fadeIn var(--transition-fast);
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
 
 /* ── Wrapper ───────────────────────────────────────────────── */
 .split-button {
@@ -36,6 +21,11 @@
   overflow: hidden;
   box-shadow: 0 2px 8px var(--shadow);
   backdrop-filter: blur(10px);
+  z-index: auto;
+}
+
+.split-button-open {
+  z-index: 1003; /* Above unified overlay (1002) when open */
 }
 
 /* ── Main button (left half) ──────────────────────────────── */

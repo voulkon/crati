@@ -7,8 +7,7 @@ import SplitButton from './SplitButton';
 import { UserIcon } from './Icons';
 import './UserMenu.css';
 
-const UserMenu = () => {
-  const [isOpen, setIsOpen] = useState(false);
+const UserMenu = ({ isOpen, onToggle }) => {
   const [showLoginForm, setShowLoginForm] = useState(false);
   const { palette, palettes, theme } = useTheme();
   const { user, isSignedIn, isClerkAuth } = useAuth();
@@ -21,7 +20,13 @@ const UserMenu = () => {
   };
 
   const handleToggleMenu = () => {
-    setIsOpen(!isOpen);
+    onToggle();
+  };
+
+  const handleCloseMenu = () => {
+    if (isOpen) {
+      onToggle();
+    }
   };
 
   const buttonStyle = {
@@ -30,7 +35,7 @@ const UserMenu = () => {
 
   return (
     <>
-      <div className="user-menu">
+      <div className={`user-menu ${isOpen ? 'user-menu-open' : ''}`}>
         <div 
           className="user-menu-wrapper"
           style={buttonStyle}
@@ -39,7 +44,6 @@ const UserMenu = () => {
             isOpen={isOpen}
             onMainClick={handleToggleMenu}
             onChevronClick={handleToggleMenu}
-            showOverlay={true}
             mainClassName="user-menu-trigger"
             chevronClassName="user-menu-chevron"
             className="user-menu-split-btn"
@@ -60,7 +64,7 @@ const UserMenu = () => {
 
         {isOpen && (
           <UserMenuDropdown 
-            onClose={() => setIsOpen(false)}
+            onClose={handleCloseMenu}
             onShowLogin={() => setShowLoginForm(true)} 
           />
         )}

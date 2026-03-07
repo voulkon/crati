@@ -152,7 +152,6 @@ export default function NotificationButton({ onSidebarToggle, isSidebarOpen }) {
         onMainClick={handleBellClick}
         onChevronClick={handleToggleSidebar}
         mainActive={subscribed}
-        showOverlay={true}
         mainClassName={`notification-button ${isLoading ? 'loading' : ''} ${isDisabled ? 'disabled' : ''}`}
         chevronClassName="notification-chevron"
         className={`notification-split-btn ${isSidebarOpen ? 'sidebar-open' : ''}`}

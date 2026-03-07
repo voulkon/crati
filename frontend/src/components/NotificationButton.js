@@ -71,16 +71,27 @@ export default function NotificationButton({ onSidebarToggle, isSidebarOpen }) {
         
         // Show toast
         const action = result.action === 'created' ? 'subscribed' : 'unsubscribed';
-        setToastMessage(
-          action === 'subscribed' 
-            ? `Subscribed to ${capabilities.suggestedName}` 
-            : `Unsubscribed from ${capabilities.suggestedName}`
-        );
+        const message = action === 'subscribed' 
+          ? `Subscribed to ${capabilities.suggestedName}` 
+          : `Unsubscribed from ${capabilities.suggestedName}`;
+        
+        setToastMessage(message);
         setShowToast(true);
-        setTimeout(() => setShowToast(false), 2000);
+        setTimeout(() => setShowToast(false), 3000);
       } catch (error) {
         console.error('Failed to toggle subscription:', error);
-        setToastMessage(`Error: ${error.message}`);
+        
+        // Extract error message from response
+        let errorMessage = 'Failed to update subscription';
+        if (error.response?.data?.error) {
+          errorMessage = error.response.data.error;
+        } else if (error.response?.data?.detail) {
+          errorMessage = error.response.data.detail;
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+        
+        setToastMessage(errorMessage);
         setShowToast(true);
         setTimeout(() => setShowToast(false), 3000);
       } finally {

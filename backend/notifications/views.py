@@ -3,8 +3,10 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Q
+from django.db import IntegrityError
+from django.core.exceptions import ValidationError
 from django.utils import timezone
-
+from loguru import logger
 from notifications.models import NotificationSubscription, Notification
 from notifications.serializers import (
     NotificationSubscriptionSerializer,
@@ -72,7 +74,19 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
         """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        subscription = serializer.save()
+        
+        try:
+            subscription = serializer.save()
+        except (IntegrityError, ValidationError) as e:
+            # Handle duplicate subscription attempts
+            logger.warning(f"Duplicate subscription attempt by user {request.user.id}: {e}")
+            return Response(
+                {
+                    "error": "A notification rule for this already exists.",
+                    "detail": "You are already subscribed to this entity. Please check your existing subscriptions."
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         # Trigger immediate check for existing matching decisions
         from notifications.tasks import check_single_subscription
@@ -150,6 +164,21 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
                 "subscribed": True,
                 "subscription": serializer.data
             })
+        except NotificationSubscription.MultipleObjectsReturned:
+            # Handle duplicate subscriptions - return the first one and log warning
+            logger.warning(
+                f"Multiple subscriptions found for user {request.user.id} and organization {org_uid}"
+            )
+            subscription = NotificationSubscription.objects.filter(
+                user=request.user,
+                organization__uid=org_uid,
+                is_active=True
+            ).first()
+            serializer = NotificationSubscriptionSerializer(subscription)
+            return Response({
+                "subscribed": True,
+                "subscription": serializer.data
+            })
         except NotificationSubscription.DoesNotExist:
             return Response({
                 "subscribed": False,
@@ -173,6 +202,21 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
                 entity__afm=afm,
                 is_active=True
             )
+            serializer = NotificationSubscriptionSerializer(subscription)
+            return Response({
+                "subscribed": True,
+                "subscription": serializer.data
+            })
+        except NotificationSubscription.MultipleObjectsReturned:
+            # Handle duplicate subscriptions - return the first one and log warning
+            logger.warning(
+                f"Multiple subscriptions found for user {request.user.id} and entity {afm}"
+            )
+            subscription = NotificationSubscription.objects.filter(
+                user=request.user,
+                entity__afm=afm,
+                is_active=True
+            ).first()
             serializer = NotificationSubscriptionSerializer(subscription)
             return Response({
                 "subscribed": True,
@@ -220,6 +264,22 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
                 "subscribed": True,
                 "subscription": serializer.data
             })
+        except NotificationSubscription.MultipleObjectsReturned:
+            # Handle duplicate subscriptions - return the first one and log warning
+            logger.warning(
+                f"Multiple subscriptions found for user {request.user.id}, org {org_uid}, entity {entity_afm}"
+            )
+            subscription = NotificationSubscription.objects.filter(
+                user=request.user,
+                relationship_org__uid=org_uid,
+                relationship_entity__afm=entity_afm,
+                is_active=True
+            ).first()
+            serializer = NotificationSubscriptionSerializer(subscription)
+            return Response({
+                "subscribed": True,
+                "subscription": serializer.data
+            })
         except NotificationSubscription.DoesNotExist:
             return Response({
                 "subscribed": False,
@@ -248,6 +308,21 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
                 "subscribed": True,
                 "subscription": serializer.data
             })
+        except NotificationSubscription.MultipleObjectsReturned:
+            # Handle duplicate subscriptions - return the first one and log warning
+            logger.warning(
+                f"Multiple subscriptions found for user {request.user.id} and person {person_name}"
+            )
+            subscription = NotificationSubscription.objects.filter(
+                user=request.user,
+                person_name=person_name,
+                is_active=True
+            ).first()
+            serializer = NotificationSubscriptionSerializer(subscription)
+            return Response({
+                "subscribed": True,
+                "subscription": serializer.data
+            })
         except NotificationSubscription.DoesNotExist:
             return Response({
                 "subscribed": False,
@@ -271,6 +346,21 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
                 signer_name=signer_name,
                 is_active=True
             )
+            serializer = NotificationSubscriptionSerializer(subscription)
+            return Response({
+                "subscribed": True,
+                "subscription": serializer.data
+            })
+        except NotificationSubscription.MultipleObjectsReturned:
+            # Handle duplicate subscriptions - return the first one and log warning
+            logger.warning(
+                f"Multiple subscriptions found for user {request.user.id} and signer {signer_name}"
+            )
+            subscription = NotificationSubscription.objects.filter(
+                user=request.user,
+                signer_name=signer_name,
+                is_active=True
+            ).first()
             serializer = NotificationSubscriptionSerializer(subscription)
             return Response({
                 "subscribed": True,

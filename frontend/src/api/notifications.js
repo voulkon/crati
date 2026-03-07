@@ -325,18 +325,55 @@ export async function findExistingSubscription(subscriptionData) {
 
 /**
  * Toggle subscription for an entity
- * Creates if doesn't exist, deletes if exists
+ * Uses the check endpoints to determine if subscription exists, then creates/deletes
  * 
  * @param {Object} subscriptionData - Subscription data
  * @returns {Promise<Object>} Object with { action: 'created'|'deleted', subscription: Object }
  */
 export async function toggleSubscription(subscriptionData) {
-  const existing = await findExistingSubscription(subscriptionData);
+  let checkResult = null;
   
-  if (existing) {
-    await deleteSubscription(existing.id);
-    return { action: 'deleted', subscription: existing };
+  // Determine which check endpoint to use based on subscription data
+  if (subscriptionData.organization_uid) {
+    checkResult = await checkOrganizationSubscription(subscriptionData.organization_uid);
+  } else if (subscriptionData.entity_afm) {
+    checkResult = await checkEntitySubscription(subscriptionData.entity_afm);
+  } else if (subscriptionData.relationship_org_uid && subscriptionData.relationship_entity_afm) {
+    checkResult = await checkRelationshipSubscription(
+      subscriptionData.relationship_org_uid,
+      subscriptionData.relationship_entity_afm
+    );
+  } else if (subscriptionData.signer_name) {
+    checkResult = await checkSignerSubscription(subscriptionData.signer_name);
+  } else if (subscriptionData.person_name) {
+    // Person subscriptions use the signer check endpoint
+    checkResult = await checkSignerSubscription(subscriptionData.person_name);
   } else {
+    // For filter-only or other types, fall back to fetching all and comparing
+    const subscriptions = await getSubscriptions();
+    const existing = subscriptions.find(sub => {
+      if (subscriptionData.keywords || subscriptionData.amount_min || 
+          subscriptionData.amount_max || subscriptionData.decision_types) {
+        return sub.subscription_type === 'filter_only' &&
+               JSON.stringify(sub.keywords) === JSON.stringify(subscriptionData.keywords) &&
+               sub.amount_min === subscriptionData.amount_min &&
+               sub.amount_max === subscriptionData.amount_max &&
+               JSON.stringify(sub.decision_types) === JSON.stringify(subscriptionData.decision_types);
+      }
+      return false;
+    });
+    checkResult = existing ? { subscribed: true, subscription: existing } : { subscribed: false, subscription: null };
+  }
+  
+  if (checkResult && checkResult.subscribed && checkResult.subscription) {
+    // Subscription exists - delete it
+    await deleteSubscription(checkResult.subscription.id);
+    return { 
+      action: 'deleted', 
+      subscription: checkResult.subscription
+    };
+  } else {
+    // Subscription doesn't exist - create it
     const created = await createSubscription(subscriptionData);
     return { action: 'created', subscription: created };
   }

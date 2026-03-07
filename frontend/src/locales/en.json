@@ -121,7 +121,8 @@
     "days" : "days",
     "viewEntityDecisions": "View Entity Decisions",
     "expand" : "Expand",
-    "collapse" : "Collapse"
+    "collapse" : "Collapse",
+    "filters" : "Filters"
   },
   "errors": {
     "failedToLoad": "Failed to load data",
@@ -239,7 +240,7 @@
     "totalAmountWithCurrency": "€{amount}",
     "decisionTypesCount": "{count} decisions • €{amount}",
     "viewOrganizationChart": "View Organization Chart",
-    
+    "viewOrganizationDetails" : "View organization details",
     "positions": "Positions",
     "lastActivity": "Last Activity",
     "organizationsAndPositions" : "Organizations and Positions",

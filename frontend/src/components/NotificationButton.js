@@ -5,6 +5,7 @@ import { useNotificationContext } from '../hooks/useNotificationContext';
 import { useUnreadCount } from '../hooks/useUnreadCount';
 import { useSubscriptionStatus } from '../hooks/useSubscriptionStatus';
 import { toggleSubscription } from '../api/notifications';
+import { NOTIFICATION_CONFIG } from '../config/notifications';
 import './NotificationButton.css';
 
 /**
@@ -17,7 +18,7 @@ import './NotificationButton.css';
  */
 export default function NotificationButton({ onSidebarToggle, isSidebarOpen }) {
   const { context, capabilities } = useNotificationContext();
-  const { unreadCount, isLoading: countLoading } = useUnreadCount(30000); // Poll every 30s
+  const { unreadCount, isLoading: countLoading } = useUnreadCount(); // Uses default from config
   const { subscribed, isLoading: subLoading, refetch: refetchSubscription } = useSubscriptionStatus(context);
   
   const [isActionLoading, setIsActionLoading] = useState(false);

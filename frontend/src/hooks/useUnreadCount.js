@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { getUnreadCount } from '../api/notifications';
+import { NOTIFICATION_CONFIG } from '../config/notifications';
 
 /**
  * Hook to fetch and maintain unread notification count
- * @param {number} [pollInterval=30000] - Interval in milliseconds to poll for updates (default: 30s)
+ * @param {number} [pollInterval] - Interval in milliseconds to poll for updates (default: from config)
  * @returns {{ unreadCount: number, isLoading: boolean, refetch: Function, error: Error|null }}
  */
-export function useUnreadCount(pollInterval = 30000) {
+export function useUnreadCount(pollInterval = NOTIFICATION_CONFIG.UNREAD_COUNT_POLL_INTERVAL) {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);

@@ -9,6 +9,7 @@ import {
     markAllNotificationsRead,
     dismissAllNotifications
 } from '../api/notifications';
+import { NOTIFICATION_CONFIG } from '../config/notifications';
 import SubscriptionCard from './SubscriptionCard';
 import './NotificationSidebar.css';
 import { Bell, ClipboardList, Search, Inbox, X, CheckCheck, Trash2 } from 'lucide-react';
@@ -69,7 +70,7 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
 
         const interval = setInterval(() => {
             loadData();
-        }, 30000); // Every 30 seconds
+        }, NOTIFICATION_CONFIG.UNREAD_COUNT_POLL_INTERVAL);
 
         return () => clearInterval(interval);
         // eslint-disable-next-line

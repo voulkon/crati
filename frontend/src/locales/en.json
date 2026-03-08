@@ -497,6 +497,9 @@
     "justNow": "Just now",
     "hoursAgo": "hours ago",
     "daysAgo": "days ago",
-    "clickToView": "Click to view details"
+    "clickToView": "Click to view details",
+    "disabledOnHomePage": "Subscriptions are not available on the home page.",
+    "disabledOnDecisionPage": "Cannot subscribe to individual decisions. Subscribe to organizations or entities instead.",
+    "disabledOnThisPage": "Subscriptions are not available on this page."
   }
 }

@@ -157,7 +157,8 @@ export default function NotificationButton({ onSidebarToggle, isSidebarOpen }) {
         className={`notification-split-btn ${isSidebarOpen ? 'sidebar-open' : ''}`}
         mainTitle={getTooltipText()}
         chevronTitle={isSidebarOpen ? 'Close notifications' : 'Open notifications'}
-        disabled={isDisabled || isLoading}
+        mainDisabled={isDisabled || isLoading}
+        chevronDisabled={false}
         badge={displayCount}
       >
         <span className="notification-icon" data-testid="bell-icon">

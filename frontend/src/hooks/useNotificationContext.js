@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 import { useLocation, matchPath } from 'react-router-dom';
+import { NOTIFICATION_CONFIG } from '../config/notifications';
+import { useTranslation } from '../contexts/TranslationContext';
 
 /**
  * @typedef {Object} OrganizationContext
@@ -84,11 +86,12 @@ import { useLocation, matchPath } from 'react-router-dom';
 export function useNotificationContext(options = {}) {
     const location = useLocation();
     const { entityData } = options;
+    const { t } = useTranslation();
 
     // Detect context from current route
     const context = useMemo(() => {
-        return detectContextFromRoute(location.pathname, entityData);
-    }, [location.pathname, entityData]);
+        return detectContextFromRoute(location.pathname, entityData, t);
+    }, [location.pathname, entityData, t]);
 
     // Calculate capabilities based on context
     const capabilities = useMemo(() => {
@@ -167,9 +170,36 @@ export function useNotificationContext(options = {}) {
  * 
  * @param {string} pathname - Current pathname
  * @param {any} [entityData] - Entity data from page state
+ * @param {Function} t - Translation function
  * @returns {NotificationContext}
  */
-function detectContextFromRoute(pathname, entityData) {
+function detectContextFromRoute(pathname, entityData, t) {
+    // Check if the current page is in the whitelist of valid subscription pages
+    const isValidPage = NOTIFICATION_CONFIG.VALID_SUBSCRIPTION_PAGES.some(validPath => 
+        matchPath(validPath, pathname)
+    );
+
+    // If not in whitelist, return disabled
+    if (!isValidPage) {
+        // Special message for common pages
+        if (pathname === '/' || matchPath('/', pathname)) {
+            return {
+                type: 'disabled',
+                reason: t('notifications.disabledOnHomePage')
+            };
+        }
+        if (matchPath('/decision/:ada', pathname)) {
+            return { 
+                type: 'disabled',
+                reason: t('notifications.disabledOnDecisionPage')
+            };
+        }
+        return {
+            type: 'disabled',
+            reason: t('notifications.disabledOnThisPage')
+        };
+    }
+
     // Match patterns in order of specificity
 
     // Relationship page: /relationship/entity/:afm/org/:orgUid
@@ -224,57 +254,26 @@ function detectContextFromRoute(pathname, entityData) {
             };
         }
 
-        // Unit pages - disabled
+        // Unit pages - disabled (not in whitelist, but explicit handling)
         if (entityType === 'unit') {
             return { 
                 type: 'disabled',
-                reason: 'Cannot subscribe to organizational units.'
+                reason: t('notifications.disabledOnThisPage')
             };
         }
 
         // Unknown entity type - treat as disabled for safety
         return { 
             type: 'disabled',
-            reason: 'This page type does not support subscriptions.'
+            reason: t('notifications.disabledOnThisPage')
         };
     }
 
-    // Decision detail page: /decision/:ada
-    // Disabled - user is already viewing a specific decision
-    if (matchPath('/decision/:ada', pathname)) {
-        return { 
-            type: 'disabled',
-            reason: 'Cannot subscribe to individual decisions. Subscribe to organizations or entities instead.'
-        };
-    }
-
-    // Passive pages (home, search, library, etc.)
-    if (matchPath('/', pathname) && pathname === '/') {
-        return { type: 'passive' };
-    }
-
-    if (matchPath('/search', pathname)) {
-        return { type: 'passive' };
-    }
-
-    if (matchPath('/library', pathname)) {
-        return { type: 'passive' };
-    }
-
-    if (matchPath('/organizations', pathname)) {
-        return { type: 'passive' };
-    }
-
-    // Fallback: Default to passive for any unmapped routes
-    // This allows the bell button to show and open a subscription modal
-    // even on pages we haven't explicitly mapped yet
-    console.warn('Unmapped route detected for notifications:', pathname);
+    // Fallback: Should not reach here if whitelist is properly maintained
+    console.warn('Valid page pattern matched but no specific handler found:', pathname);
     return { 
-        type: 'passive',
-        metadata: {
-            source: 'unmapped',
-            pathname
-        }
+        type: 'disabled',
+        reason: t('notifications.disabledOnThisPage')
     };
 }
 

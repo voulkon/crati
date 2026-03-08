@@ -23,7 +23,9 @@ import './SplitButton.css';
  * @param {string} props.className - Additional classes for wrapper
  * @param {string} props.mainTitle - Tooltip for main button
  * @param {string} props.chevronTitle - Tooltip for chevron button
- * @param {boolean} props.disabled - Whether buttons are disabled
+ * @param {boolean} props.disabled - Whether buttons are disabled (applies to both if mainDisabled/chevronDisabled not specified)
+ * @param {boolean} props.mainDisabled - Whether main button is disabled (overrides disabled prop)
+ * @param {boolean} props.chevronDisabled - Whether chevron button is disabled (overrides disabled prop)
  * @param {number} props.height - Button height in pixels (default: 50)
  * @param {React.ReactNode} props.badge - Optional badge to display on main button (e.g., unread count)
  */
@@ -39,9 +41,15 @@ export default function SplitButton({
   mainTitle = '',
   chevronTitle = '',
   disabled = false,
+  mainDisabled,
+  chevronDisabled,
   height = 50,
   badge = null,
 }) {
+  // Allow individual disabled states, or use the general disabled prop
+  const isMainDisabled = mainDisabled !== undefined ? mainDisabled : disabled;
+  const isChevronDisabled = chevronDisabled !== undefined ? chevronDisabled : disabled;
+
   return (
     <>
       {/* Split button wrapper */}
@@ -50,7 +58,7 @@ export default function SplitButton({
         <button
           className={`split-button-main ${mainActive ? 'active' : ''} ${mainClassName}`}
           onClick={onMainClick}
-          disabled={disabled}
+          disabled={isMainDisabled}
           title={mainTitle}
           style={{ height: `${height}px` }}
         >
@@ -62,7 +70,7 @@ export default function SplitButton({
         <button
           className={`split-button-chevron ${isOpen ? 'active' : ''} ${chevronClassName}`}
           onClick={onChevronClick}
-          disabled={disabled}
+          disabled={isChevronDisabled}
           title={chevronTitle || (isOpen ? 'Close' : 'Open')}
           style={{ height: `${height}px` }}
         >

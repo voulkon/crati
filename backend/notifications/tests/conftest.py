@@ -148,3 +148,59 @@ def unread_notifications(user, notification_subscription):
             )
         )
     return notifications
+
+
+@pytest.fixture
+def notification_batch(user, notification_subscription):
+    """Create a test notification batch"""
+    from conftest import NotificationBatchFactory
+    return NotificationBatchFactory(
+        user=user,
+        subscription=notification_subscription,
+        check_window_start=timezone.now() - timedelta(days=1),
+        check_window_end=timezone.now(),
+        match_count=5
+    )
+
+
+@pytest.fixture
+def notification_batch_decision(notification_batch, decision):
+    """Create a test notification batch decision"""
+    from conftest import NotificationBatchDecisionFactory
+    return NotificationBatchDecisionFactory(
+        batch=notification_batch,
+        decision=decision
+    )
+
+
+@pytest.fixture
+def batch_with_decisions(user, notification_subscription):
+    """Create a batch with multiple decisions"""
+    from conftest import (
+        NotificationBatchFactory,
+        NotificationBatchDecisionFactory,
+        DecisionFactory
+    )
+    
+    batch = NotificationBatchFactory(
+        user=user,
+        subscription=notification_subscription,
+        match_count=10
+    )
+    
+    decisions = []
+    for i in range(10):
+        decision = DecisionFactory(
+            organization=notification_subscription.organization,
+            subject=f"Batch decision {i+1}"
+        )
+        NotificationBatchDecisionFactory(
+            batch=batch,
+            decision=decision
+        )
+        decisions.append(decision)
+    
+    return {
+        'batch': batch,
+        'decisions': decisions
+    }

@@ -7,7 +7,7 @@ from django.db import IntegrityError
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from loguru import logger
-from notifications.models import NotificationSubscription, Notification
+from notifications.models import NotificationSubscription, Notification, NotificationBatch, NotificationBatchDecision
 from notifications.constants import (
     SUBSCRIPTION_TYPE_ORGANIZATION,
     SUBSCRIPTION_TYPE_ENTITY,
@@ -23,6 +23,8 @@ from notifications.serializers import (
     NotificationSerializer,
     NotificationDetailSerializer,
     NotificationListSerializer,
+    NotificationBatchListSerializer,
+    NotificationBatchDetailSerializer,
 )
 from core.models.organizations import Organization
 from core.models.entities import AFMEntity
@@ -557,3 +559,171 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
             is_dismissed=False
         ).update(is_dismissed=True)
         return Response({'dismissed': count})
+
+
+class NotificationBatchViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for reading and managing notification batches.
+    
+    Batches are read-only from the API perspective (created by background tasks).
+    Users can only see their own batches.
+    
+    Provides read operations:
+    - list: GET /api/notification-batches/
+    - retrieve: GET /api/notification-batches/{id}/
+    
+    Custom actions:
+    - decisions: Get paginated list of decisions in this batch
+    - mark_read: Mark a batch as read
+    - dismiss: Dismiss a batch
+    - unread_count: Get count of unread batches
+    
+    Query parameters for list:
+    - is_read: Filter by read status (true/false)
+    - is_dismissed: Filter by dismissed status (true/false)
+    - subscription_id: Filter by subscription ID
+    """
+    
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Filter queryset to only show current user's batches.
+        Apply query parameter filters.
+        Optimize with select_related for nested relationships.
+        """
+        queryset = NotificationBatch.objects.filter(user=self.request.user)
+        
+        # Filter by read status
+        is_read = self.request.query_params.get('is_read')
+        if is_read is not None:
+            queryset = queryset.filter(is_read=is_read.lower() == 'true')
+        
+        # Filter by dismissed status
+        is_dismissed = self.request.query_params.get('is_dismissed')
+        if is_dismissed is not None:
+            queryset = queryset.filter(is_dismissed=is_dismissed.lower() == 'true')
+        
+        # Filter by subscription
+        subscription_id = self.request.query_params.get('subscription_id')
+        if subscription_id:
+            queryset = queryset.filter(subscription_id=subscription_id)
+        
+        return queryset.select_related(
+            'subscription',
+            'subscription__organization',
+            'subscription__entity'
+        ).order_by('-created_at')
+    
+    def get_serializer_class(self):
+        """
+        Use different serializers for different actions.
+        """
+        if self.action == 'list':
+            return NotificationBatchListSerializer
+        else:
+            return NotificationBatchDetailSerializer
+    
+    @action(detail=True, methods=['get'], url_path='decisions')
+    def decisions(self, request, pk=None):
+        """
+        Get paginated list of decisions in this batch.
+        
+        GET /api/notification-batches/{id}/decisions/
+        
+        Query parameters:
+        - page: Page number (default: 1)
+        - page_size: Items per page (default: 20, max: 100)
+        - is_viewed: Filter by viewed status (true/false)
+        
+        Returns:
+            {
+                "count": <total_count>,
+                "next": <next_page_url>,
+                "previous": <previous_page_url>,
+                "results": [<decision_objects>]
+            }
+        """
+        from rest_framework.pagination import PageNumberPagination
+        from notifications.serializers import NotificationBatchDecisionSerializer
+        
+        batch = self.get_object()
+        
+        # Get batch decisions queryset
+        queryset = NotificationBatchDecision.objects.filter(batch=batch)
+        
+        # Filter by viewed status
+        is_viewed = request.query_params.get('is_viewed')
+        if is_viewed is not None:
+            queryset = queryset.filter(is_viewed=is_viewed.lower() == 'true')
+        
+        # Optimize with select_related
+        queryset = queryset.select_related(
+            'decision',
+            'decision__organization',
+            'decision__decision_type'
+        ).order_by('-added_at')
+        
+        # Paginate
+        paginator = PageNumberPagination()
+        paginator.page_size = min(int(request.query_params.get('page_size', 20)), 100)
+        page = paginator.paginate_queryset(queryset, request)
+        
+        if page is not None:
+            serializer = NotificationBatchDecisionSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        serializer = NotificationBatchDecisionSerializer(queryset, many=True)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'], url_path='mark-read')
+    def mark_read(self, request, pk=None):
+        """
+        Mark a specific batch as read.
+        
+        POST /api/notification-batches/{id}/mark-read/
+        
+        Returns:
+            {"status": "marked as read", "batch_id": <id>}
+        """
+        batch = self.get_object()
+        batch.mark_as_read()
+        return Response({
+            'status': 'marked as read',
+            'batch_id': batch.id
+        })
+    
+    @action(detail=True, methods=['post'], url_path='dismiss')
+    def dismiss(self, request, pk=None):
+        """
+        Dismiss a specific batch.
+        
+        POST /api/notification-batches/{id}/dismiss/
+        
+        Returns:
+            {"status": "dismissed", "batch_id": <id>}
+        """
+        batch = self.get_object()
+        batch.dismiss()
+        return Response({
+            'status': 'dismissed',
+            'batch_id': batch.id
+        })
+    
+    @action(detail=False, methods=['get'], url_path='unread-count')
+    def unread_count(self, request):
+        """
+        Get the count of unread batches for the current user.
+        
+        GET /api/notification-batches/unread-count/
+        
+        Returns:
+            {"unread_count": <count>}
+        """
+        count = NotificationBatch.objects.filter(
+            user=request.user,
+            is_read=False,
+            is_dismissed=False
+        ).count()
+        return Response({'unread_count': count})
+

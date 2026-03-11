@@ -1145,7 +1145,6 @@ class TestEdgeCasesAndComplexCombinations:
         """Test that keyword matching is case-insensitive"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,

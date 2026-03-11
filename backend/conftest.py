@@ -10,7 +10,7 @@ from factory.django import DjangoModelFactory
 from faker import Faker
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from datetime import timedelta
+from datetime import timedelta, timezone as dt_timezone
 from decimal import Decimal
 
 fake = Faker()
@@ -256,6 +256,40 @@ class NotificationFactory(DjangoModelFactory):
     })
 
 
+class NotificationBatchFactory(DjangoModelFactory):
+    """Factory for NotificationBatch model"""
+    
+    class Meta:
+        model = 'notifications.NotificationBatch'
+    
+    user = factory.SubFactory(UserFactory)
+    subscription = factory.SubFactory(NotificationSubscriptionFactory)
+    check_window_start = factory.Faker('date_time_this_month', tzinfo=dt_timezone.utc)
+    check_window_end = factory.LazyAttribute(
+        lambda obj: obj.check_window_start + timedelta(days=1)
+    )
+    match_count = 0
+    aggregate_stats = factory.Dict({})
+    is_read = False
+    is_dismissed = False
+
+
+class NotificationBatchDecisionFactory(DjangoModelFactory):
+    """Factory for NotificationBatchDecision model"""
+    
+    class Meta:
+        model = 'notifications.NotificationBatchDecision'
+    
+    batch = factory.SubFactory(NotificationBatchFactory)
+    decision = factory.SubFactory(DecisionFactory)
+    match_reason = 'organization_match'
+    match_details = factory.LazyAttribute(lambda obj: {
+        'matched_on': 'organization',
+        'organization_uid': obj.decision.organization.uid if obj.decision and obj.decision.organization else None
+    })
+    is_viewed = False
+
+
 # ============================================================================
 # Pytest Fixtures (wrapping factories for easier use)
 # ============================================================================
@@ -320,6 +354,27 @@ def notification(user, notification_subscription, decision):
     return NotificationFactory(
         user=user,
         subscription=notification_subscription,
+        decision=decision
+    )
+
+
+@pytest.fixture
+def notification_batch(user, notification_subscription):
+    """Create a test notification batch"""
+    from django.utils import timezone
+    return NotificationBatchFactory(
+        user=user,
+        subscription=notification_subscription,
+        check_window_start=timezone.now() - timedelta(days=1),
+        check_window_end=timezone.now()
+    )
+
+
+@pytest.fixture
+def notification_batch_decision(notification_batch, decision):
+    """Create a test notification batch decision"""
+    return NotificationBatchDecisionFactory(
+        batch=notification_batch,
         decision=decision
     )
 

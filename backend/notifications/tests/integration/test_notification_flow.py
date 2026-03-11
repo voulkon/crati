@@ -322,6 +322,36 @@ class TestSubscriptionManagement:
         assert response.status_code == status.HTTP_201_CREATED
         assert 'id' in response.data
     
+    def test_prevent_duplicate_subscription_creation(
+        self, authenticated_client, organization
+    ):
+        """Test that creating duplicate subscriptions is prevented"""
+        # Create first subscription
+        response1 = authenticated_client.post(
+            '/api/notifications/subscriptions/',
+            {
+                'organization_uid': organization.uid,
+                'keywords': ['test']
+            },
+            format='json'
+        )
+        assert response1.status_code == status.HTTP_201_CREATED
+        
+        # Try to create duplicate (same user + organization)
+        response2 = authenticated_client.post(
+            '/api/notifications/subscriptions/',
+            {
+                'organization_uid': organization.uid,
+                'keywords': ['different', 'keywords']  # Different filters but same target
+            },
+            format='json'
+        )
+        
+        # Should return 400 Bad Request
+        assert response2.status_code == status.HTTP_400_BAD_REQUEST
+        assert 'error' in response2.data
+        assert 'already' in response2.data['error'].lower() or 'exists' in response2.data['error'].lower()
+    
     def test_update_subscription(
         self, authenticated_client, notification_subscription
     ):

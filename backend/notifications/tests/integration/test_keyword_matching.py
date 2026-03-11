@@ -1,0 +1,849 @@
+"""
+Comprehensive tests for keyword matching in notification subscriptions.
+
+This test suite covers:
+- OR operator: any keyword matches
+- AND operator: all keywords must match
+- Case insensitivity
+- Edge cases (empty keywords, single keyword, no matches)
+- Combinations with other subscription types and filters
+"""
+import pytest
+from django.utils import timezone
+from datetime import timedelta
+from decimal import Decimal
+
+
+pytestmark = [
+    pytest.mark.django_db,
+    pytest.mark.integration
+]
+
+
+# ============================================================================
+# OR Operator Tests (keyword_match_operator='OR')
+# ============================================================================
+
+class TestKeywordMatchingOR:
+    """Test keyword matching with OR operator - any keyword matches."""
+    
+    def test_single_keyword_match_or(self, user, organization, celery_eager_mode):
+        """Single keyword should match when using OR operator"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        # Create subscription with OR operator (default in old code)
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['contract'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Create matching decision
+        matching = DecisionFactory(
+            organization=organization,
+            subject="New contract for services",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Create non-matching decision
+        non_matching = DecisionFactory(
+            organization=organization,
+            subject="Administrative note",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Check subscription
+        result = check_single_subscription(sub.id)
+        
+        # Should create notification for matching decision only
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == matching
+        assert 'contract' in notifications.first().match_details.get('keywords_found', [])
+    
+    def test_multiple_keywords_any_match_or(self, user, organization, celery_eager_mode):
+        """With OR, matching any one keyword should trigger notification"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        # Create subscription with multiple keywords, OR operator
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['contract', 'tender', 'procurement'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Match first keyword only
+        match1 = DecisionFactory(
+            organization=organization,
+            subject="New contract for supplies",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Match second keyword only
+        match2 = DecisionFactory(
+            organization=organization,
+            subject="Public tender announcement",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Match multiple keywords
+        match3 = DecisionFactory(
+            organization=organization,
+            subject="Procurement contract after tender process",
+            publish_timestamp=timezone.now()
+        )
+        
+        # No match
+        non_match = DecisionFactory(
+            organization=organization,
+            subject="Regular administrative decision",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Check subscription
+        result = check_single_subscription(sub.id)
+        
+        # Should create 3 notifications (one for each matching decision)
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 3
+        
+        # Verify each notification has correct keyword matches
+        decision_keywords = {
+            match1.id: ['contract'],
+            match2.id: ['tender'],
+            match3.id: ['contract', 'tender', 'procurement']
+        }
+        
+        for notif in notifications:
+            expected_keywords = decision_keywords.get(notif.decision.id, [])
+            found_keywords = notif.match_details.get('keywords_found', [])
+            # Check that at least one expected keyword was found
+            assert any(kw in found_keywords for kw in expected_keywords)
+    
+    def test_case_insensitive_keyword_matching_or(self, user, organization, celery_eager_mode):
+        """Keywords should match case-insensitively with OR operator"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['Contract', 'TENDER', 'ProcureMent'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Lowercase keyword in subject
+        match1 = DecisionFactory(
+            organization=organization,
+            subject="new contract for supplies",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Uppercase keyword in subject
+        match2 = DecisionFactory(
+            organization=organization,
+            subject="PUBLIC TENDER ANNOUNCEMENT",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Mixed case
+        match3 = DecisionFactory(
+            organization=organization,
+            subject="Procurement Process Started",
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 3
+    
+    def test_greek_keywords_or(self, user, organization, celery_eager_mode):
+        """Test Greek keyword matching with OR operator"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['διαγωνισμός', 'σύμβαση', 'προμήθεια'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        match1 = DecisionFactory(
+            organization=organization,
+            subject="Ανακοίνωση διαγωνισμού για έργο",
+            publish_timestamp=timezone.now()
+        )
+        
+        match2 = DecisionFactory(
+            organization=organization,
+            subject="Σύμβαση παροχής υπηρεσιών",
+            publish_timestamp=timezone.now()
+        )
+        
+        non_match = DecisionFactory(
+            organization=organization,
+            subject="Διοικητική πράξη",
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 2
+
+
+# ============================================================================
+# AND Operator Tests (keyword_match_operator='AND')
+# ============================================================================
+
+class TestKeywordMatchingAND:
+    """Test keyword matching with AND operator - all keywords must match."""
+    
+    def test_single_keyword_match_and(self, user, organization, celery_eager_mode):
+        """Single keyword with AND operator should work like OR"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['contract'],
+            keyword_match_operator='AND'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        matching = DecisionFactory(
+            organization=organization,
+            subject="New contract for services",
+            publish_timestamp=timezone.now()
+        )
+        
+        non_matching = DecisionFactory(
+            organization=organization,
+            subject="Administrative note",
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == matching
+    
+    def test_all_keywords_must_match_and(self, user, organization, celery_eager_mode):
+        """With AND, all keywords must be present to trigger notification"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        # Create subscription with AND operator (all keywords required)
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['contract', 'urgent', 'supplies'],
+            keyword_match_operator='AND'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Match: has all three keywords
+        full_match = DecisionFactory(
+            organization=organization,
+            subject="Urgent contract for supplies delivery",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Partial match 1: has only 2 out of 3 keywords - should NOT match
+        partial_match1 = DecisionFactory(
+            organization=organization,
+            subject="Urgent contract for services",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Partial match 2: has only 1 keyword - should NOT match
+        partial_match2 = DecisionFactory(
+            organization=organization,
+            subject="Regular supplies order",
+            publish_timestamp=timezone.now()
+        )
+        
+        # No match
+        non_match = DecisionFactory(
+            organization=organization,
+            subject="Administrative decision",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Check subscription
+        result = check_single_subscription(sub.id)
+        
+        # Should create notification only for the decision with all keywords
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == full_match
+        
+        # Verify all keywords are in match_details
+        found_keywords = notifications.first().match_details.get('keywords_found', [])
+        assert 'contract' in found_keywords
+        assert 'urgent' in found_keywords
+        assert 'supplies' in found_keywords
+        assert notifications.first().match_details.get('keyword_match_operator') == 'AND'
+    
+    def test_two_keywords_both_required_and(self, user, organization, celery_eager_mode):
+        """With AND and 2 keywords, both must be present"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['tender', 'construction'],
+            keyword_match_operator='AND'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Has both keywords
+        match = DecisionFactory(
+            organization=organization,
+            subject="Public tender for construction project",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Has only 'tender'
+        no_match1 = DecisionFactory(
+            organization=organization,
+            subject="Public tender for consulting services",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Has only 'construction'
+        no_match2 = DecisionFactory(
+            organization=organization,
+            subject="Construction permit approval",
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == match
+    
+    def test_case_insensitive_and(self, user, organization, celery_eager_mode):
+        """AND operator should also be case-insensitive"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['URGENT', 'Contract'],
+            keyword_match_operator='AND'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Mixed case in subject
+        match = DecisionFactory(
+            organization=organization,
+            subject="urgent new contract for services",
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == match
+    
+    def test_keyword_order_irrelevant_and(self, user, organization, celery_eager_mode):
+        """With AND, keyword order in subject should not matter"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['first', 'second', 'third'],
+            keyword_match_operator='AND'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Keywords in different order than subscription
+        match1 = DecisionFactory(
+            organization=organization,
+            subject="third item comes before second and first",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Keywords scattered throughout subject
+        match2 = DecisionFactory(
+            organization=organization,
+            subject="first decision regarding the third party and second step",
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 2
+
+
+# ============================================================================
+# Default Behavior Tests
+# ============================================================================
+
+class TestKeywordMatchingDefaults:
+    """Test default behavior when keyword_match_operator is not explicitly set."""
+    
+    def test_default_operator_is_and(self, user, organization, celery_eager_mode):
+        """Default operator should be AND based on model definition"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        # Create subscription without explicitly setting operator (should default to AND)
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['contract', 'urgent']
+            # Note: NOT setting keyword_match_operator, should default to 'AND'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Verify default is 'AND'
+        assert sub.keyword_match_operator == 'AND'
+        
+        # Has both keywords - should match
+        match = DecisionFactory(
+            organization=organization,
+            subject="Urgent contract for supplies",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Has only one keyword - should NOT match
+        no_match = DecisionFactory(
+            organization=organization,
+            subject="Urgent administrative note",
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == match
+
+
+# ============================================================================
+# Edge Cases
+# ============================================================================
+
+class TestKeywordMatchingEdgeCases:
+    """Test edge cases and boundary conditions."""
+    
+    def test_empty_keywords_list(self, user, organization, celery_eager_mode):
+        """Empty keywords list should not filter (match all)"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=[],  # Empty list
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        decision1 = DecisionFactory(
+            organization=organization,
+            subject="First decision",
+            publish_timestamp=timezone.now()
+        )
+        
+        decision2 = DecisionFactory(
+            organization=organization,
+            subject="Second decision",
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        # Should match both decisions since no keyword filter is applied
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 2
+    
+    def test_none_keywords(self, user, organization, celery_eager_mode):
+        """None keywords should not filter"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=None
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        decision = DecisionFactory(
+            organization=organization,
+            subject="Some decision",
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+    
+    def test_keyword_not_found_in_any_decision_or(self, user, organization, celery_eager_mode):
+        """When no decisions match any keyword with OR, no notifications"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['nonexistent', 'noway'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        decision = DecisionFactory(
+            organization=organization,
+            subject="Regular decision without those words",
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 0
+    
+    def test_keyword_not_found_in_any_decision_and(self, user, organization, celery_eager_mode):
+        """When no decisions match all keywords with AND, no notifications"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['one', 'two', 'three'],
+            keyword_match_operator='AND'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Has only 'one' and 'two', missing 'three'
+        decision = DecisionFactory(
+            organization=organization,
+            subject="Decision with one and two items",
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 0
+
+
+# ============================================================================
+# Combination Tests (Keywords + Other Filters)
+# ============================================================================
+
+class TestKeywordWithOtherFilters:
+    """Test keywords combined with other subscription filters."""
+    
+    def test_organization_and_keywords_or(self, user, organization, celery_eager_mode):
+        """Organization filter + keyword OR filter"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory, OrganizationFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['contract', 'tender'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Correct org + keyword
+        match = DecisionFactory(
+            organization=organization,
+            subject="New contract",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Correct org, no keyword
+        no_match1 = DecisionFactory(
+            organization=organization,
+            subject="Administrative note",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Has keyword, wrong org
+        other_org = OrganizationFactory()
+        no_match2 = DecisionFactory(
+            organization=other_org,
+            subject="Contract from another org",
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == match
+    
+    def test_organization_and_keywords_and(self, user, organization, celery_eager_mode):
+        """Organization filter + keyword AND filter"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['urgent', 'contract'],
+            keyword_match_operator='AND'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Correct org + both keywords
+        match = DecisionFactory(
+            organization=organization,
+            subject="Urgent contract for supplies",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Correct org + only one keyword
+        no_match = DecisionFactory(
+            organization=organization,
+            subject="Urgent administrative note",
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == match
+    
+    def test_keywords_and_amount_filter_or(self, user, organization, celery_eager_mode):
+        """Keywords (OR) + amount filter"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['contract', 'procurement'],
+            keyword_match_operator='OR',
+            amount_min=Decimal('10000.00'),
+            amount_max=Decimal('50000.00')
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Has keyword + amount in range
+        match = DecisionFactory(
+            organization=organization,
+            subject="New contract",
+            amount=Decimal('25000.00'),
+            publish_timestamp=timezone.now()
+        )
+        
+        # Has keyword, amount too high
+        no_match1 = DecisionFactory(
+            organization=organization,
+            subject="Large contract",
+            amount=Decimal('100000.00'),
+            publish_timestamp=timezone.now()
+        )
+        
+        # Amount in range, no keyword
+        no_match2 = DecisionFactory(
+            organization=organization,
+            subject="Administrative decision",
+            amount=Decimal('20000.00'),
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == match
+    
+    def test_keywords_and_amount_filter_and(self, user, organization, celery_eager_mode):
+        """Keywords (AND) + amount filter"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['urgent', 'contract'],
+            keyword_match_operator='AND',
+            amount_min=Decimal('10000.00')
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Has both keywords + amount
+        match = DecisionFactory(
+            organization=organization,
+            subject="Urgent contract for supplies",
+            amount=Decimal('15000.00'),
+            publish_timestamp=timezone.now()
+        )
+        
+        # Has both keywords, amount too low
+        no_match1 = DecisionFactory(
+            organization=organization,
+            subject="Urgent contract for minor supplies",
+            amount=Decimal('5000.00'),
+            publish_timestamp=timezone.now()
+        )
+        
+        # Has one keyword + amount
+        no_match2 = DecisionFactory(
+            organization=organization,
+            subject="Urgent delivery",
+            amount=Decimal('15000.00'),
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == match
+    
+    def test_entity_subscription_with_keywords_and(self, user, afm_entity, celery_eager_mode):
+        """Entity subscription + keywords (AND)"""
+        from conftest import EntitySubscriptionFactory, DecisionFactory
+        from core.models.entities import DecisionEntityRelationship, EntityRole
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = EntitySubscriptionFactory(
+            user=user,
+            entity=afm_entity,
+            keywords=['contract', 'services'],
+            keyword_match_operator='AND'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Has entity + both keywords
+        match = DecisionFactory(
+            subject="Contract for services",
+            publish_timestamp=timezone.now()
+        )
+        DecisionEntityRelationship.objects.create(
+            decision=match,
+            entity=afm_entity,
+            role=EntityRole.SPONSOR,
+            parent_key_path='sponsor[0]'
+        )
+        
+        # Has entity + only one keyword
+        no_match = DecisionFactory(
+            subject="Contract for supplies",
+            publish_timestamp=timezone.now()
+        )
+        DecisionEntityRelationship.objects.create(
+            decision=no_match,
+            entity=afm_entity,
+            role=EntityRole.SPONSOR,
+            parent_key_path='sponsor[0]'
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == match
+    
+    def test_filter_only_subscription_keywords_and(self, user, celery_eager_mode):
+        """Filter-only subscription with keywords (AND)"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        # No organization or entity, just filters
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=None,
+            keywords=['urgent', 'public', 'tender'],
+            keyword_match_operator='AND',
+            amount_min=Decimal('50000.00')
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Has all keywords + amount
+        match = DecisionFactory(
+            subject="Urgent public tender for construction",
+            amount=Decimal('75000.00'),
+            publish_timestamp=timezone.now()
+        )
+        
+        # Has all keywords, no amount
+        no_match1 = DecisionFactory(
+            subject="Urgent public tender announcement",
+            amount=None,
+            publish_timestamp=timezone.now()
+        )
+        
+        # Has amount, missing one keyword
+        no_match2 = DecisionFactory(
+            subject="Urgent tender for services",
+            amount=Decimal('60000.00'),
+            publish_timestamp=timezone.now()
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == match

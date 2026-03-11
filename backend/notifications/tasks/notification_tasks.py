@@ -7,6 +7,61 @@ from loguru import logger
 from django.db import models
 
 
+def build_keyword_q_filter(keyword, field_name='subject'):
+    """
+    Build a Q filter for keyword matching that handles Greek word inflections.
+    
+    For Greek (and other inflected languages), we need to match word stems
+    since the same word can have different endings based on grammatical case.
+    
+    Examples:
+        - διαγωνισμός (nominative) should match διαγωνισμού (genitive)
+        - σύμβαση should match Σύμβαση (case-insensitive)
+    
+    Strategy:
+        1. First try exact substring match (handles most cases)
+        2. For longer keywords (>5 chars), also match word stems by removing
+           last 1-2 characters to handle case endings
+    
+    Args:
+        keyword: The keyword to match
+        field_name: The field name to search in (default: 'subject')
+    
+    Returns:
+        Q object with the appropriate filter conditions
+    """
+    q_filter = models.Q()
+    
+    # Always include exact substring match (case-insensitive)
+    q_filter |= models.Q(**{f'{field_name}__icontains': keyword})
+    
+    # For longer keywords, also try stem matching to handle inflections
+    # This is especially important for Greek where word endings change based on case
+    if len(keyword) > 5:
+        # Create stems by removing last 1-2 characters
+        # This handles most Greek case endings (ός/ού/ό, ση/σης/ση, ια/ιας, etc.)
+        stem_variants = []
+        
+        # Try removing last 2 chars (handles ός->ού/ό, ση->σης, ια->ιας, etc.)
+        if len(keyword) > 6:
+            stem = keyword[:-2]
+            if len(stem) >= 4:  # Minimum stem length to avoid false positives
+                stem_variants.append(stem)
+        
+        # Try removing last 1 char (handles η->ης, ο->ου, etc.)
+        if len(keyword) > 5:
+            stem = keyword[:-1]
+            if len(stem) >= 4:
+                stem_variants.append(stem)
+        
+        # Add stem variants as case-insensitive substring matches
+        # Don't use word boundaries as they don't work reliably with Unicode
+        for stem in stem_variants:
+            q_filter |= models.Q(**{f'{field_name}__icontains': stem})
+    
+    return q_filter
+
+
 @shared_task
 def check_single_subscription(subscription_id, lookback_days=30):
     """
@@ -226,11 +281,21 @@ def find_matching_decisions(subscription, check_since):
     
     # Keyword filter
     if subscription.keywords:
-        # Check keywords in subject (case-insensitive, OR logic)
-        keyword_filter = models.Q()
-        for keyword in subscription.keywords:
-            keyword_filter |= models.Q(subject__icontains=keyword)
-        queryset = queryset.filter(keyword_filter)
+        # Check keywords in subject (case-insensitive)
+        # Support both AND and OR operators
+        # Uses stem matching to handle Greek word inflections
+        operator = getattr(subscription, 'keyword_match_operator', 'AND')  # Default to AND
+        
+        if operator == 'OR':
+            # OR logic: any keyword matches (at least one keyword must be present)
+            keyword_filter = models.Q()
+            for keyword in subscription.keywords:
+                keyword_filter |= build_keyword_q_filter(keyword, 'subject')
+            queryset = queryset.filter(keyword_filter)
+        else:  # AND logic
+            # AND logic: all keywords must match (every keyword must be present)
+            for keyword in subscription.keywords:
+                queryset = queryset.filter(build_keyword_q_filter(keyword, 'subject'))
     
     if subscription.amount_min is not None or subscription.amount_max is not None:
         # Filter by amount
@@ -294,6 +359,7 @@ def determine_match_reason(subscription, decision):
         
         if found_keywords:
             match_details['keywords_found'] = list(set(found_keywords))
+            match_details['keyword_match_operator'] = getattr(subscription, 'keyword_match_operator', 'AND')
     
     # Check amount match
     if subscription.amount_min or subscription.amount_max:

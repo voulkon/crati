@@ -452,10 +452,16 @@ class TestPerformanceAndScaling:
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
         
-        # Create 10 notifications with different subscriptions/decisions
-        for i in range(10):
-            org = db_with_sample_data['organizations'][i % 5]
+        # Create subscriptions for each unique organization (5 total)
+        subscriptions = []
+        for i in range(5):
+            org = db_with_sample_data['organizations'][i]
             sub = NotificationSubscriptionFactory(user=user, organization=org)
+            subscriptions.append(sub)
+        
+        # Create 10 notifications distributed among those subscriptions
+        for i in range(10):
+            sub = subscriptions[i % 5]
             decision = db_with_sample_data['decisions'][i]
             NotificationFactory(user=user, subscription=sub, decision=decision)
         

@@ -1024,10 +1024,14 @@ class TestDecisionTypeFilters:
 class TestEdgeCasesAndComplexCombinations:
     """Test edge cases and very complex filter combinations."""
     
-    def test_multiple_keywords_any_match(
-        self, user, organization, celery_eager_mode
+    @pytest.mark.parametrize("operator,expected_count", [
+        ('OR', 3),   # OR: any single keyword matches → 3 decisions
+        ('AND', 0),  # AND: all keywords required → 0 decisions (none have all 3)
+    ])
+    def test_multiple_keywords_operator_behavior(
+        self, user, organization, celery_eager_mode, operator, expected_count
     ):
-        """Test that ANY keyword match triggers notification (OR logic)"""
+        """Test keyword matching with different operators (OR vs AND)"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
         from notifications.models import Notification
@@ -1035,7 +1039,8 @@ class TestEdgeCasesAndComplexCombinations:
         sub = NotificationSubscriptionFactory(
             user=user,
             organization=organization,
-            keywords=['urgent', 'critical', 'emergency']
+            keywords=['urgent', 'critical', 'emergency'],
+            keyword_match_operator=operator
         )
         sub.last_checked = timezone.now() - timedelta(days=1)
         sub.save()
@@ -1054,7 +1059,7 @@ class TestEdgeCasesAndComplexCombinations:
             publish_timestamp=timezone.now()
         )
         
-        # Matches multiple keywords
+        # Matches multiple keywords (2 out of 3)
         match3 = DecisionFactory(
             organization=organization,
             subject="Emergency urgent response needed",
@@ -1071,7 +1076,7 @@ class TestEdgeCasesAndComplexCombinations:
         result = check_single_subscription(sub.id)
         
         notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 3
+        assert notifications.count() == expected_count
     
     def test_no_results_when_no_matches(
         self, user, organization, celery_eager_mode

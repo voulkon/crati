@@ -8,6 +8,14 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 from loguru import logger
 from notifications.models import NotificationSubscription, Notification
+from notifications.constants import (
+    SUBSCRIPTION_TYPE_ORGANIZATION,
+    SUBSCRIPTION_TYPE_ENTITY,
+    SUBSCRIPTION_TYPE_RELATIONSHIP,
+    SUBSCRIPTION_TYPE_PERSON,
+    SUBSCRIPTION_TYPE_SIGNER,
+    SUBSCRIPTION_TYPE_FILTER,
+)
 from notifications.serializers import (
     NotificationSubscriptionSerializer,
     NotificationSubscriptionCreateSerializer,
@@ -420,20 +428,20 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         # Filter by subscription type
         subscription_type = self.request.query_params.get('subscription_type')
         if subscription_type:
-            if subscription_type == 'organization':
+            if subscription_type == SUBSCRIPTION_TYPE_ORGANIZATION:
                 queryset = queryset.filter(subscription__organization__isnull=False)
-            elif subscription_type == 'entity':
+            elif subscription_type == SUBSCRIPTION_TYPE_ENTITY:
                 queryset = queryset.filter(subscription__entity__isnull=False)
-            elif subscription_type == 'relationship':
+            elif subscription_type == SUBSCRIPTION_TYPE_RELATIONSHIP:
                 queryset = queryset.filter(
                     subscription__relationship_org__isnull=False,
                     subscription__relationship_entity__isnull=False
                 )
-            elif subscription_type == 'person':
+            elif subscription_type == SUBSCRIPTION_TYPE_PERSON:
                 queryset = queryset.filter(subscription__person_name__isnull=False)
-            elif subscription_type == 'signer':
+            elif subscription_type == SUBSCRIPTION_TYPE_SIGNER:
                 queryset = queryset.filter(subscription__signer_name__isnull=False)
-            elif subscription_type == 'filter':
+            elif subscription_type == SUBSCRIPTION_TYPE_FILTER:
                 # Filter-only subscriptions have no target
                 queryset = queryset.filter(
                     subscription__organization__isnull=True,

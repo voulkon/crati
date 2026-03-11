@@ -1,6 +1,19 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
+from notifications.constants import (
+    SUBSCRIPTION_TYPE_ORGANIZATION,
+    SUBSCRIPTION_TYPE_ENTITY,
+    SUBSCRIPTION_TYPE_RELATIONSHIP,
+    SUBSCRIPTION_TYPE_PERSON,
+    SUBSCRIPTION_TYPE_SIGNER,
+    SUBSCRIPTION_TYPE_FILTER,
+    KEYWORD_OPERATOR_AND,
+    KEYWORD_OPERATOR_OR,
+    CHECK_FREQUENCY_DAILY,
+    CHECK_FREQUENCY_WEEKLY,
+    CHECK_FREQUENCY_MANUAL,
+)
 
 
 class NotificationSubscription(models.Model):
@@ -92,8 +105,8 @@ class NotificationSubscription(models.Model):
     
     keyword_match_operator = models.CharField(
         max_length=3,
-        choices=[('AND', _('All keywords (AND)')), ('OR', _('Any keyword (OR)'))],
-        default='AND',
+        choices=[(KEYWORD_OPERATOR_AND, _('All keywords (AND)')), (KEYWORD_OPERATOR_OR, _('Any keyword (OR)'))],
+        default=KEYWORD_OPERATOR_AND,
         verbose_name=_("Keyword match operator"),
         help_text=_("How to combine multiple keywords")
     )
@@ -124,15 +137,15 @@ class NotificationSubscription(models.Model):
     is_active = models.BooleanField(default=True, verbose_name=_("Active"))
     
     CHECK_FREQUENCY_CHOICES = [
-        ('daily', _('Daily')),
-        ('weekly', _('Weekly')),
-        ('manual', _('Manual only')),
+        (CHECK_FREQUENCY_DAILY, _('Daily')),
+        (CHECK_FREQUENCY_WEEKLY, _('Weekly')),
+        (CHECK_FREQUENCY_MANUAL, _('Manual only')),
     ]
     
     check_frequency = models.CharField(
         max_length=20,
         choices=CHECK_FREQUENCY_CHOICES,
-        default='daily',
+        default=CHECK_FREQUENCY_DAILY,
         verbose_name=_("Check frequency"),
         help_text=_("How often to automatically check for new matching decisions")
     )
@@ -149,20 +162,20 @@ class NotificationSubscription(models.Model):
     def subscription_type(self):
         """
         Returns the type of subscription based on which target field is set.
-        Returns 'filter' if no target is set (filter-only subscription).
+        Returns SUBSCRIPTION_TYPE_FILTER if no target is set (filter-only subscription).
         """
         if self.organization_id is not None:
-            return "organization"
+            return SUBSCRIPTION_TYPE_ORGANIZATION
         elif self.entity_id is not None:
-            return "entity"
+            return SUBSCRIPTION_TYPE_ENTITY
         elif self.relationship_org_id is not None and self.relationship_entity_id is not None:
-            return "relationship"
+            return SUBSCRIPTION_TYPE_RELATIONSHIP
         elif self.person_name:
-            return "person"
+            return SUBSCRIPTION_TYPE_PERSON
         elif self.signer_name:
-            return "signer"
+            return SUBSCRIPTION_TYPE_SIGNER
         else:
-            return "filter"
+            return SUBSCRIPTION_TYPE_FILTER
     
     def clean(self):
         """
@@ -253,15 +266,15 @@ class NotificationSubscription(models.Model):
         
         # Otherwise, use descriptive label based on subscription type
         type_label = self.subscription_type
-        if type_label == "organization":
+        if type_label == SUBSCRIPTION_TYPE_ORGANIZATION:
             return f"{self.user.username} → Org: {self.organization.label if self.organization else 'N/A'}"
-        elif type_label == "entity":
+        elif type_label == SUBSCRIPTION_TYPE_ENTITY:
             return f"{self.user.username} → Entity: {self.entity.afm if self.entity else 'N/A'}"
-        elif type_label == "relationship":
+        elif type_label == SUBSCRIPTION_TYPE_RELATIONSHIP:
             return f"{self.user.username} → Relationship: {self.relationship_org.label if self.relationship_org else 'N/A'} ↔ {self.relationship_entity.afm if self.relationship_entity else 'N/A'}"
-        elif type_label == "person":
+        elif type_label == SUBSCRIPTION_TYPE_PERSON:
             return f"{self.user.username} → Person: {self.person_name}"
-        elif type_label == "signer":
+        elif type_label == SUBSCRIPTION_TYPE_SIGNER:
             return f"{self.user.username} → Signer: {self.signer_name}"
         else:
             return f"{self.user.username} → Filter subscription"

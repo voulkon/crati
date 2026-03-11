@@ -90,6 +90,14 @@ class NotificationSubscription(models.Model):
         help_text=_("List of keywords to match in decision subject/content")
     )
     
+    keyword_match_operator = models.CharField(
+        max_length=3,
+        choices=[('AND', _('All keywords (AND)')), ('OR', _('Any keyword (OR)'))],
+        default='AND',
+        verbose_name=_("Keyword match operator"),
+        help_text=_("How to combine multiple keywords")
+    )
+    
     amount_min = models.DecimalField(
         max_digits=15,
         decimal_places=2,

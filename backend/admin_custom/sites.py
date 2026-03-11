@@ -137,7 +137,8 @@ def register_all_models():
         CustomUserAdmin, SubscriptionAdmin, BackupAdmin,
         AIModelPricingAdmin, TaskOutputEstimateAdmin, AIJobDefinitionAdmin, AIJobExecutionAdmin,
         ImportThresholdAdmin,
-        NotificationSubscriptionAdmin, NotificationAdmin
+        NotificationSubscriptionAdmin, NotificationAdmin,
+        NotificationBatchAdmin, NotificationBatchDecisionAdmin
     )
     
     from core.models.decisions import Decision, Attachment
@@ -150,7 +151,7 @@ def register_all_models():
     from core.models.backups import Backup
     from api.models import APIAnalytics, EndpointStats, DailyTraffic
     from users.models import CustomUser, Subscription
-    from notifications.models import NotificationSubscription, Notification
+    from notifications.models import NotificationSubscription, Notification, NotificationBatch, NotificationBatchDecision
     
     # Register Decision models
     admin_site.register(Decision, DecisionAdmin)
@@ -194,6 +195,8 @@ def register_all_models():
     # Register Notification models
     admin_site.register(NotificationSubscription, NotificationSubscriptionAdmin)
     admin_site.register(Notification, NotificationAdmin)
+    admin_site.register(NotificationBatch, NotificationBatchAdmin)
+    admin_site.register(NotificationBatchDecision, NotificationBatchDecisionAdmin)
 
 
 # Auto-register models when module is imported

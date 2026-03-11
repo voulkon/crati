@@ -6,7 +6,7 @@ from .users import CustomUserAdmin, SubscriptionAdmin
 from .backup import BackupAdmin
 from .ai_pricing import AIModelPricingAdmin, TaskOutputEstimateAdmin, AIJobDefinitionAdmin, AIJobExecutionAdmin
 from .import_thresholds import ImportThresholdAdmin
-from .notifications import NotificationSubscriptionAdmin, NotificationAdmin
+from .notifications import NotificationSubscriptionAdmin, NotificationAdmin, NotificationBatchAdmin, NotificationBatchDecisionAdmin
 
 __all__ = [
     # Decision admin classes
@@ -50,4 +50,6 @@ __all__ = [
     # Notification admin classes
     'NotificationSubscriptionAdmin',
     'NotificationAdmin',
+    'NotificationBatchAdmin',
+    'NotificationBatchDecisionAdmin',
 ]

@@ -34,6 +34,8 @@
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
     "python.envFile": "${workspaceFolder}/backend/.env",
-    "shifty.colorThemes.ignoreLightColorThemes" : true,
+    "shifty.colorThemes.ignoreLightColorThemes": true,
+    "python-envs.defaultEnvManager": "ms-python.python:poetry",
+    "python-envs.defaultPackageManager": "ms-python.python:poetry",
     // "shifty.colorThemes.ignoreDarkColorThemes":  true 
 }

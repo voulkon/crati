@@ -185,6 +185,23 @@ class DecisionFactory(DjangoModelFactory):
     has_private_data = False
 
 
+class DocumentExtractionFactory(DjangoModelFactory):
+    """Factory for DocumentExtraction model"""
+    
+    class Meta:
+        model = 'core.DocumentExtraction'
+    
+    decision = factory.SubFactory(DecisionFactory)
+    extraction_status = 'COMPLETED'
+    extraction_provider = 'PYMUPDF'
+    extraction_date = factory.LazyFunction(timezone.now)
+    raw_text = factory.Faker('text', max_nb_chars=500)
+    page_count = 1
+    character_count = factory.LazyAttribute(lambda obj: len(obj.raw_text) if obj.raw_text else 0)
+    is_scanned_document = False
+    processing_time_ms = 100
+
+
 # ============================================================================
 # Notification Factories
 # ============================================================================

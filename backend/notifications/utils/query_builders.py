@@ -17,7 +17,7 @@ from notifications.constants import (
 )
 
 
-def build_keyword_q_filter(keyword, field_name='subject'):
+def build_keyword_q_filter(keyword, field_names=None):
     """
     Build a Q filter for keyword matching that handles Greek word inflections.
     
@@ -35,39 +35,43 @@ def build_keyword_q_filter(keyword, field_name='subject'):
     
     Args:
         keyword: The keyword to match
-        field_name: The field name to search in (default: 'subject')
+        field_names: List of field names to search in (default: ['subject', 'text_extraction__raw_text'])
     
     Returns:
         Q object with the appropriate filter conditions
     """
+    if field_names is None:
+        field_names = ['subject', 'text_extraction__raw_text']
+    
     q_filter = models.Q()
     
-    # Always include exact substring match (case-insensitive)
-    q_filter |= models.Q(**{f'{field_name}__icontains': keyword})
-    
-    # For longer keywords, also try stem matching to handle inflections
-    # This is especially important for Greek where word endings change based on case
-    if len(keyword) > 5:
-        # Create stems by removing last 1-2 characters
-        # This handles most Greek case endings (ός/ού/ό, ση/σης/ση, ια/ιας, etc.)
-        stem_variants = []
+    for field_name in field_names:
+        # Always include exact substring match (case-insensitive)
+        q_filter |= models.Q(**{f'{field_name}__icontains': keyword})
         
-        # Try removing last 2 chars (handles ός->ού/ό, ση->σης, ια->ιας, etc.)
-        if len(keyword) > 6:
-            stem = keyword[:-2]
-            if len(stem) >= 4:  # Minimum stem length to avoid false positives
-                stem_variants.append(stem)
-        
-        # Try removing last 1 char (handles η->ης, ο->ου, etc.)
+        # For longer keywords, also try stem matching to handle inflections
+        # This is especially important for Greek where word endings change based on case
         if len(keyword) > 5:
-            stem = keyword[:-1]
-            if len(stem) >= 4:
-                stem_variants.append(stem)
-        
-        # Add stem variants as case-insensitive substring matches
-        # Don't use word boundaries as they don't work reliably with Unicode
-        for stem in stem_variants:
-            q_filter |= models.Q(**{f'{field_name}__icontains': stem})
+            # Create stems by removing last 1-2 characters
+            # This handles most Greek case endings (ός/ού/ό, ση/σης/ση, ια/ιας, etc.)
+            stem_variants = []
+            
+            # Try removing last 2 chars (handles ός->ού/ό, ση->σης, ια->ιας, etc.)
+            if len(keyword) > 6:
+                stem = keyword[:-2]
+                if len(stem) >= 4:  # Minimum stem length to avoid false positives
+                    stem_variants.append(stem)
+            
+            # Try removing last 1 char (handles η->ης, ο->ου, etc.)
+            if len(keyword) > 5:
+                stem = keyword[:-1]
+                if len(stem) >= 4:
+                    stem_variants.append(stem)
+            
+            # Add stem variants as case-insensitive substring matches
+            # Don't use word boundaries as they don't work reliably with Unicode
+            for stem in stem_variants:
+                q_filter |= models.Q(**{f'{field_name}__icontains': stem})
     
     return q_filter
 
@@ -202,6 +206,7 @@ def _apply_keyword_filter(queryset, keywords, operator):
     Apply keyword filter to a queryset.
     
     Supports both AND and OR operators with stem matching for Greek inflections.
+    Searches in both decision subject and extracted document text.
     
     Args:
         queryset: Decision queryset to filter
@@ -211,15 +216,18 @@ def _apply_keyword_filter(queryset, keywords, operator):
     Returns:
         Filtered queryset
     """
+    # Search in both decision subject and extracted document text
+    search_fields = ['subject', 'text_extraction__raw_text']
+    
     if operator == KEYWORD_OPERATOR_OR:
         # OR logic: any keyword matches (at least one keyword must be present)
         keyword_filter = models.Q()
         for keyword in keywords:
-            keyword_filter |= build_keyword_q_filter(keyword, 'subject')
+            keyword_filter |= build_keyword_q_filter(keyword, search_fields)
         queryset = queryset.filter(keyword_filter)
     else:  # AND logic (default)
         # AND logic: all keywords must match (every keyword must be present)
         for keyword in keywords:
-            queryset = queryset.filter(build_keyword_q_filter(keyword, 'subject'))
+            queryset = queryset.filter(build_keyword_q_filter(keyword, search_fields))
     
     return queryset

@@ -39,15 +39,33 @@ def determine_match_reason(subscription, decision):
     # Add subscription type to match details
     match_details['subscription_type'] = subscription_type
     
-    # Check keyword matches
+    # Check keyword matches in both subject and document text
     if subscription.keywords:
         found_keywords = []
+        found_in_locations = []
+        
+        subject_text = (decision.subject or '').lower()
+        
+        # Get document text if available
+        document_text = ''
+        if hasattr(decision, 'text_extraction') and decision.text_extraction:
+            document_text = (decision.text_extraction.raw_text or '').lower()
+        
         for keyword in subscription.keywords:
-            if keyword.lower() in (decision.subject or '').lower():
+            keyword_lower = keyword.lower()
+            if keyword_lower in subject_text:
                 found_keywords.append(keyword)
+                if 'subject' not in found_in_locations:
+                    found_in_locations.append('subject')
+            if document_text and keyword_lower in document_text:
+                if keyword not in found_keywords:
+                    found_keywords.append(keyword)
+                if 'document_text' not in found_in_locations:
+                    found_in_locations.append('document_text')
         
         if found_keywords:
             match_details['keywords_found'] = list(set(found_keywords))
+            match_details['keywords_found_in'] = found_in_locations
             match_details['keyword_match_operator'] = getattr(subscription, 'keyword_match_operator', KEYWORD_OPERATOR_AND)
     
     # Check amount match

@@ -847,3 +847,477 @@ class TestKeywordWithOtherFilters:
         notifications = Notification.objects.filter(subscription=sub)
         assert notifications.count() == 1
         assert notifications.first().decision == match
+
+
+# ============================================================================
+# Document Text Keyword Matching Tests
+# ============================================================================
+
+class TestKeywordMatchingInDocumentText:
+    """Test keyword matching in DocumentExtraction.raw_text field."""
+    
+    def test_keyword_in_subject_only(self, user, organization, celery_eager_mode):
+        """Keyword found only in subject should match (existing behavior)"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        from core.models.document_analysis import DocumentExtraction
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['contract'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Create decision with keyword in subject
+        decision = DecisionFactory(
+            organization=organization,
+            subject="New contract for services",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Create text extraction WITHOUT the keyword
+        DocumentExtraction.objects.create(
+            decision=decision,
+            extraction_status='COMPLETED',
+            raw_text="This is some text about other things, no matching keyword here."
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == decision
+        assert 'contract' in notifications.first().match_details.get('keywords_found', [])
+        assert 'subject' in notifications.first().match_details.get('keywords_found_in', [])
+    
+    def test_keyword_in_document_text_only(self, user, organization, celery_eager_mode):
+        """Keyword found only in document text should match (new behavior)"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        from core.models.document_analysis import DocumentExtraction
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['procurement'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Create decision WITHOUT keyword in subject
+        decision = DecisionFactory(
+            organization=organization,
+            subject="Administrative decision",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Create text extraction WITH the keyword
+        DocumentExtraction.objects.create(
+            decision=decision,
+            extraction_status='COMPLETED',
+            raw_text="This document contains details about the procurement process and vendor selection."
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == decision
+        assert 'procurement' in notifications.first().match_details.get('keywords_found', [])
+        assert 'document_text' in notifications.first().match_details.get('keywords_found_in', [])
+    
+    def test_keyword_in_both_subject_and_document(self, user, organization, celery_eager_mode):
+        """Keyword found in both subject and document text"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        from core.models.document_analysis import DocumentExtraction
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['tender'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Create decision with keyword in subject
+        decision = DecisionFactory(
+            organization=organization,
+            subject="Public tender announcement",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Create text extraction also with the keyword
+        DocumentExtraction.objects.create(
+            decision=decision,
+            extraction_status='COMPLETED',
+            raw_text="The tender process will begin next month and all vendors are invited to participate."
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == decision
+        assert 'tender' in notifications.first().match_details.get('keywords_found', [])
+        # Should be found in both locations
+        found_in = notifications.first().match_details.get('keywords_found_in', [])
+        assert 'subject' in found_in
+        assert 'document_text' in found_in
+    
+    def test_keyword_not_in_subject_or_document(self, user, organization, celery_eager_mode):
+        """Keyword not found in either subject or document text should not match"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        from core.models.document_analysis import DocumentExtraction
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['helicopter'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Create decision without keyword
+        decision = DecisionFactory(
+            organization=organization,
+            subject="Administrative decision about office supplies",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Create text extraction without keyword
+        DocumentExtraction.objects.create(
+            decision=decision,
+            extraction_status='COMPLETED',
+            raw_text="This document describes the purchase of paper and pens for the office."
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 0
+    
+    def test_no_document_extraction_fallback_to_subject_only(self, user, organization, celery_eager_mode):
+        """If no DocumentExtraction exists, should still match on subject"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['services'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Create decision with keyword in subject, NO DocumentExtraction
+        decision = DecisionFactory(
+            organization=organization,
+            subject="Services agreement",
+            publish_timestamp=timezone.now()
+        )
+        # Do NOT create DocumentExtraction
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == decision
+    
+    def test_document_text_or_operator_multiple_keywords(self, user, organization, celery_eager_mode):
+        """OR operator with multiple keywords - should match if any keyword in document text"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        from core.models.document_analysis import DocumentExtraction
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['construction', 'renovation', 'building'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Subject has no keywords, but document text has one
+        decision = DecisionFactory(
+            organization=organization,
+            subject="Project approval decision",
+            publish_timestamp=timezone.now()
+        )
+        
+        DocumentExtraction.objects.create(
+            decision=decision,
+            extraction_status='COMPLETED',
+            raw_text="The renovation of the municipal building will be completed by the end of the year."
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert 'renovation' in notifications.first().match_details.get('keywords_found', [])
+    
+    def test_document_text_and_operator_all_keywords_required(self, user, organization, celery_eager_mode):
+        """AND operator - all keywords must be present in subject OR document text"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        from core.models.document_analysis import DocumentExtraction
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['urgent', 'repair', 'equipment'],
+            keyword_match_operator='AND'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Subject has 'urgent', document text has 'repair' and 'equipment'
+        match = DecisionFactory(
+            organization=organization,
+            subject="Urgent decision required",
+            publish_timestamp=timezone.now()
+        )
+        
+        DocumentExtraction.objects.create(
+            decision=match,
+            extraction_status='COMPLETED',
+            raw_text="This concerns the repair of critical equipment in the facility."
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        found_keywords = notifications.first().match_details.get('keywords_found', [])
+        assert 'urgent' in found_keywords
+        assert 'repair' in found_keywords
+        assert 'equipment' in found_keywords
+    
+    def test_document_text_and_operator_missing_one_keyword(self, user, organization, celery_eager_mode):
+        """AND operator - should NOT match if one keyword is missing from both subject and document"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        from core.models.document_analysis import DocumentExtraction
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['urgent', 'repair', 'equipment'],
+            keyword_match_operator='AND'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Has 'urgent' in subject and 'repair' in document, but missing 'equipment'
+        decision = DecisionFactory(
+            organization=organization,
+            subject="Urgent decision",
+            publish_timestamp=timezone.now()
+        )
+        
+        DocumentExtraction.objects.create(
+            decision=decision,
+            extraction_status='COMPLETED',
+            raw_text="This concerns the repair work needed in the building."
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 0
+    
+    def test_greek_keywords_in_document_text(self, user, organization, celery_eager_mode):
+        """Test Greek keyword matching in document text"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        from core.models.document_analysis import DocumentExtraction
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['σύμβαση', 'προμήθεια'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Greek keyword only in document text
+        decision = DecisionFactory(
+            organization=organization,
+            subject="Διοικητική πράξη",
+            publish_timestamp=timezone.now()
+        )
+        
+        DocumentExtraction.objects.create(
+            decision=decision,
+            extraction_status='COMPLETED',
+            raw_text="Η σύμβαση αφορά την προμήθεια υλικών για το έργο."
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        found_keywords = notifications.first().match_details.get('keywords_found', [])
+        # Should find both Greek keywords
+        assert any('σύμβαση' in kw or 'προμήθεια' in kw for kw in found_keywords)
+    
+    def test_case_insensitive_in_document_text(self, user, organization, celery_eager_mode):
+        """Document text keyword matching should be case-insensitive"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        from core.models.document_analysis import DocumentExtraction
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['CONTRACT', 'Services'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        decision = DecisionFactory(
+            organization=organization,
+            subject="Administrative decision",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Document has lowercase versions
+        DocumentExtraction.objects.create(
+            decision=decision,
+            extraction_status='COMPLETED',
+            raw_text="The contract for services was signed yesterday."
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+    
+    def test_keyword_in_document_with_amount_filter(self, user, organization, celery_eager_mode):
+        """Keyword in document text combined with amount filter"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        from core.models.document_analysis import DocumentExtraction
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['equipment'],
+            keyword_match_operator='OR',
+            amount_min=Decimal('10000.00')
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        # Keyword in document + amount in range
+        match = DecisionFactory(
+            organization=organization,
+            subject="Purchase decision",
+            amount=Decimal('15000.00'),
+            publish_timestamp=timezone.now()
+        )
+        
+        DocumentExtraction.objects.create(
+            decision=match,
+            extraction_status='COMPLETED',
+            raw_text="Purchase of new equipment for the office."
+        )
+        
+        # Keyword in document but amount too low
+        no_match = DecisionFactory(
+            organization=organization,
+            subject="Small purchase",
+            amount=Decimal('5000.00'),
+            publish_timestamp=timezone.now()
+        )
+        
+        DocumentExtraction.objects.create(
+            decision=no_match,
+            extraction_status='COMPLETED',
+            raw_text="Purchase of minor equipment items."
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert notifications.first().decision == match
+    
+    def test_long_document_text_with_keyword(self, user, organization, celery_eager_mode):
+        """Test keyword matching in longer document text"""
+        from conftest import NotificationSubscriptionFactory, DecisionFactory
+        from notifications.tasks import check_single_subscription
+        from notifications.models import Notification
+        from core.models.document_analysis import DocumentExtraction
+        
+        sub = NotificationSubscriptionFactory(
+            user=user,
+            organization=organization,
+            keywords=['environmental'],
+            keyword_match_operator='OR'
+        )
+        sub.last_checked = timezone.now() - timedelta(days=1)
+        sub.save()
+        
+        decision = DecisionFactory(
+            organization=organization,
+            subject="Decision regarding project approval",
+            publish_timestamp=timezone.now()
+        )
+        
+        # Long document with keyword buried in the middle
+        long_text = """
+        This is a comprehensive decision document describing the approval process.
+        
+        Section 1: Introduction
+        This document outlines the procedures and requirements for the proposed project.
+        
+        Section 2: Technical Specifications
+        The project must meet all technical standards and requirements.
+        
+        Section 3: Environmental Impact
+        The environmental assessment has been completed and reviewed by experts.
+        All environmental regulations must be strictly followed.
+        
+        Section 4: Budget
+        Total estimated cost is within approved budget limits.
+        
+        Section 5: Timeline
+        Project completion is scheduled for next year.
+        """
+        
+        DocumentExtraction.objects.create(
+            decision=decision,
+            extraction_status='COMPLETED',
+            raw_text=long_text
+        )
+        
+        result = check_single_subscription(sub.id)
+        
+        notifications = Notification.objects.filter(subscription=sub)
+        assert notifications.count() == 1
+        assert 'environmental' in notifications.first().match_details.get('keywords_found', [])
+

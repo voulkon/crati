@@ -2,7 +2,8 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import Q
+from rest_framework.pagination import PageNumberPagination
+from django.db.models import Q, Count, Min, Max
 from django.db import IntegrityError
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -25,6 +26,7 @@ from notifications.serializers import (
     NotificationListSerializer,
     NotificationBatchListSerializer,
     NotificationBatchDetailSerializer,
+    NotificationBatchDecisionSerializer,
 )
 from core.models.organizations import Organization
 from core.models.entities import AFMEntity
@@ -405,6 +407,99 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
                 "subscribed": False,
                 "subscription": None
             })
+
+    @action(detail=True, methods=['get'], url_path='all-decisions')
+    def all_decisions(self, request, pk=None):
+        """
+        Get all decisions from all batches for this subscription.
+        
+        GET /api/notifications/subscriptions/{id}/all-decisions/
+        
+        Query parameters:
+        - page: Page number (default: 1)
+        - page_size: Items per page (default: 20, max: 100)
+        - sort: Sort order (recent, oldest, amount_desc, amount_asc) (default: recent)
+        - is_viewed: Filter by viewed status (true/false)
+        
+        Returns:
+            {
+                "count": <total_count>,
+                "next": <next_page_url>,
+                "previous": <previous_page_url>,
+                "results": [<NotificationBatchDecision objects>],
+                "metadata": {
+                    "subscription": <SubscriptionSerializer data>,
+                    "total_batches": <number>,
+                    "date_range": {"from": <date>, "to": <date>}
+                }
+            }
+        """
+        subscription = self.get_object()
+        
+        # Get all batch decisions for this subscription
+        queryset = NotificationBatchDecision.objects.filter(
+            subscription=subscription
+        )
+        
+        # Filter by viewed status if specified
+        is_viewed = request.query_params.get('is_viewed')
+        if is_viewed is not None:
+            queryset = queryset.filter(is_viewed=is_viewed.lower() == 'true')
+        
+        # Optimize with select_related and prefetch_related
+        queryset = queryset.select_related(
+            'decision',
+            'decision__organization',
+            'decision__decision_type',
+            'batch'
+        ).prefetch_related(
+            'decision__signers',
+            'decision__kae_amounts'
+        )
+        
+        # Apply sorting
+        from api.utils.sorting import apply_decision_sorting
+        sort_by = request.query_params.get('sort', 'recent')
+        queryset = apply_decision_sorting(
+            queryset, 
+            sort_by, 
+            amount_field='decision__amount', 
+            date_field='decision__issue_date'
+        )
+        
+        # Get metadata
+        batch_stats = NotificationBatch.objects.filter(
+            subscription=subscription
+        ).aggregate(
+            total_batches=Count('id'),
+            earliest=Min('created_at'),
+            latest=Max('created_at')
+        )
+        
+        # Paginate
+        paginator = PageNumberPagination()
+        paginator.page_size = min(int(request.query_params.get('page_size', 20)), 100)
+        page = paginator.paginate_queryset(queryset, request)
+        
+        if page is not None:
+            serializer = NotificationBatchDecisionSerializer(page, many=True)
+            response = paginator.get_paginated_response(serializer.data)
+            
+            # Add metadata
+            response.data['metadata'] = {
+                'subscription': NotificationSubscriptionSerializer(subscription).data,
+                'total_batches': batch_stats['total_batches'] or 0,
+                'date_range': {
+                    'from': batch_stats['earliest'].isoformat() if batch_stats['earliest'] else None,
+                    'to': batch_stats['latest'].isoformat() if batch_stats['latest'] else None
+                }
+            }
+            
+            return response
+        
+        # Fallback (shouldn't happen with pagination)
+        serializer = NotificationBatchDecisionSerializer(queryset, many=True)
+        return Response(serializer.data)
 
 
 class NotificationViewSet(viewsets.ReadOnlyModelViewSet):

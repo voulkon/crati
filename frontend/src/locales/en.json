@@ -123,7 +123,9 @@
     "viewEntityDecisions": "View Entity Decisions",
     "expand" : "Expand",
     "collapse" : "Collapse",
-    "filters" : "Filters"
+    "filters" : "Filters",
+    "all": "All",
+    "loadMore": "Load More"
   },
   "errors": {
     "failedToLoad": "Failed to load data",
@@ -500,6 +502,23 @@
     "clickToView": "Click to view details",
     "disabledOnHomePage": "Subscriptions are not available on the home page.",
     "disabledOnDecisionPage": "Cannot subscribe to individual decisions. Subscribe to organizations or entities instead.",
-    "disabledOnThisPage": "Subscriptions are not available on this page."
+    "disabledOnThisPage": "Subscriptions are not available on this page.",
+    "loadingBatch": "Loading notification batch...",
+    "errorLoadingBatch": "Error Loading Batch",
+    "batchNotFound": "Notification Batch Not Found",
+    "batchDetail": "Batch Details",
+    "notificationBatch": "Notification Batch",
+    "subscription": "Subscription",
+    "unnamed": "Unnamed",
+    "checkWindow": "Check Window",
+    "created": "Created",
+    "totalAmount": "Total Amount",
+    "avgAmount": "Average Amount",
+    "decisionTypes": "Decision Types",
+    "matchingDecisions": "Matching Decisions",
+    "showViewed": "Show Viewed",
+    "notViewed": "Not Viewed",
+    "viewed": "Viewed",
+    "noDecisionsInBatch": "No decisions found in this batch"
   }
 }

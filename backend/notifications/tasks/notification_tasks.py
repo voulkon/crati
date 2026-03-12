@@ -231,12 +231,29 @@ def create_batch_for_matches(subscription, matching_decisions, check_window_star
         logger.info(f"No decisions to batch for subscription {subscription.id}")
         return {'batch_id': None, 'decisions_added': 0}
     
-    # Calculate aggregate statistics
+    # Filter out decisions that already exist in any batch for this subscription
+    existing_decision_ids = NotificationBatchDecision.objects.filter(
+        subscription=subscription,
+        decision__in=decisions_list
+    ).values_list('decision_id', flat=True)
+    
+    new_decisions = [d for d in decisions_list if d.id not in existing_decision_ids]
+    
+    if not new_decisions:
+        logger.info(f"All {len(decisions_list)} decisions already exist in batches for subscription {subscription.id}")
+        return {'batch_id': None, 'decisions_added': 0, 'all_duplicates': True}
+    
+    logger.info(
+        f"Subscription {subscription.id}: {len(new_decisions)} new decisions, "
+        f"{len(existing_decision_ids)} already in batches"
+    )
+    
+    # Calculate aggregate statistics (only for new decisions)
     aggregate_stats = {}
     
     # Amount statistics (if decisions have amounts)
     amounts = []
-    for decision in decisions_list:
+    for decision in new_decisions:
         if hasattr(decision, 'amount') and decision.amount:
             amounts.append(float(decision.amount))
     
@@ -248,7 +265,7 @@ def create_batch_for_matches(subscription, matching_decisions, check_window_star
     
     # Decision type breakdown
     decision_types = {}
-    for decision in decisions_list:
+    for decision in new_decisions:
         if decision.decision_type:
             type_uid = decision.decision_type.uid
             decision_types[type_uid] = decision_types.get(type_uid, 0) + 1
@@ -265,23 +282,23 @@ def create_batch_for_matches(subscription, matching_decisions, check_window_star
                 check_window_end=check_window_end,
                 defaults={
                     'user': subscription.user,
-                    'match_count': len(decisions_list),
+                    'match_count': len(new_decisions),
                     'aggregate_stats': aggregate_stats,
                 }
             )
             
             if not created:
                 # Batch already exists - update match count and stats
-                batch.match_count = len(decisions_list)
+                batch.match_count += len(new_decisions)
                 batch.aggregate_stats = aggregate_stats
                 batch.save(update_fields=['match_count', 'aggregate_stats'])
                 logger.info(f"Updated existing batch {batch.id} for subscription {subscription.id}")
             else:
                 logger.info(f"Created new batch {batch.id} for subscription {subscription.id}")
             
-            # Create batch decisions
+            # Create batch decisions (only for new decisions)
             batch_decisions_to_create = []
-            for decision in decisions_list:
+            for decision in new_decisions:
                 match_reason, match_details = determine_match_reason(subscription, decision)
                 
                 batch_decisions_to_create.append(
@@ -294,15 +311,13 @@ def create_batch_for_matches(subscription, matching_decisions, check_window_star
                     )
                 )
             
-            # Bulk create with ignore_conflicts to handle duplicates
-            # Note: bulk_create with ignore_conflicts=True returns an empty list,
-            # so we count before creating rather than after
-            decisions_added = len(batch_decisions_to_create)
-            
+            # Bulk create - duplicates already filtered out, but use ignore_conflicts for safety
             NotificationBatchDecision.objects.bulk_create(
                 batch_decisions_to_create,
                 ignore_conflicts=True
             )
+            
+            decisions_added = len(new_decisions)
             
             logger.info(
                 f"Batch {batch.id}: Added {decisions_added} decisions "

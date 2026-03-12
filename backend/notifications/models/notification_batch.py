@@ -139,9 +139,7 @@ class NotificationBatchDecision(models.Model):
         on_delete=models.CASCADE,
         related_name='batch_decisions',
         verbose_name=_("Subscription"),
-        help_text=_("Denormalized subscription reference to enable unique constraint across batches"),
-        null=True,  # Temporarily nullable for migration
-        blank=True
+        help_text=_("Denormalized subscription reference to enable unique constraint across batches")
     )
     
     decision = models.ForeignKey(

@@ -179,6 +179,38 @@ export async function getBatchDecisions(batchId, page = 1, pageSize = 20, isView
 }
 
 /**
+ * Get all decisions from a subscription across all batches
+ * @param {number} subscriptionId - Subscription ID
+ * @param {number} [page=1] - Page number
+ * @param {number} [pageSize=20] - Items per page
+ * @param {boolean|null} [isViewed] - Filter by viewed status
+ * @param {string} [sortBy='recent'] - Sort order (recent, oldest, amount_desc, amount_asc)
+ * @returns {Promise<Object>} Paginated response with decisions and metadata
+ */
+export async function getSubscriptionAllDecisions(
+  subscriptionId,
+  page = 1,
+  pageSize = 20,
+  isViewed = null,
+  sortBy = 'recent'
+) {
+  const params = new URLSearchParams({
+    page: page.toString(),
+    page_size: pageSize.toString(),
+    sort: sortBy
+  });
+
+  if (isViewed !== null) {
+    params.append('is_viewed', isViewed.toString());
+  }
+
+  const response = await apiClient.get(
+    `${SUBSCRIPTIONS_BASE}/${subscriptionId}/all-decisions/?${params}`
+  );
+  return response.data;
+}
+
+/**
  * Mark a notification batch as read
  * @param {number} id - Batch ID
  * @returns {Promise<Object>} Response with status

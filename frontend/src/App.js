@@ -8,6 +8,7 @@ import DecisionDetailPage from "./pages/DecisionDetailPage";
 import AFMEntityDetailPage from "./pages/AFMEntityDetailPage";
 import RelationshipDetailPage from "./pages/RelationshipDetailPage";
 import NotificationBatchDetailPage from "./pages/NotificationBatchDetailPage";
+import SubscriptionHistoryPage from "./pages/SubscriptionHistoryPage";
 import SearchResults from "./pages/SearchResults";
 import SuperSearchExample from "./pages/SuperSearchExample";
 import LibraryPage from "./pages/LibraryPage";
@@ -191,6 +192,9 @@ function AuthenticatedApp({ controlsLayout }) {
         
         {/* Notification Batch Detail */}
         <Route path="/batch/:batchId" element={<NotificationBatchDetailPage />} />
+        
+        {/* Subscription History - All decisions from a subscription */}
+        <Route path="/notifications/subscriptions/:subscriptionId/history" element={<SubscriptionHistoryPage />} />
       </Routes>
     </>
   );

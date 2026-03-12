@@ -2,21 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from '../contexts/TranslationContext';
 import { getNotificationBatch, getBatchDecisions, markBatchRead } from '../api/notifications';
-import DecisionCard from '../components/DecisionCard';
-import SortControl from '../components/SortControl';
 import apiClient from '../api/client';
 import { formatAmount } from '../utils/dateUtils';
 import './NotificationBatchDetailPage.css';
 
+// Import shared components
+import DecisionListView from '../components/DecisionListView';
+import BatchMetadataHeader from '../components/BatchMetadataHeader';
+import { ChartIcon } from '../components/Icons';
+
 /**
- * Page showing a notification batch with all its matching decisions
- * Similar structure to RelationshipDetailPage
+ * Page for viewing details of a single notification batch and its decisions
  */
 const NotificationBatchDetailPage = () => {
   const { batchId } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
 
+  // State
   const [batch, setBatch] = useState(null);
   const [decisions, setDecisions] = useState([]);
   const [pagination, setPagination] = useState(null);
@@ -51,7 +54,7 @@ const NotificationBatchDetailPage = () => {
         setPagination({
           current_page: 1,
           total_count: decisionsData.count,
-          has_next: !!decisionsData.next,
+          has_next: decisionsData.has_next || !!decisionsData.next,
           has_previous: !!decisionsData.previous
         });
 
@@ -68,6 +71,7 @@ const NotificationBatchDetailPage = () => {
     }
   }, [batchId, isViewedFilter, sortBy]);
 
+  // Load more handler
   const handleLoadMore = async () => {
     if (!pagination?.has_next || loadingMore) return;
 
@@ -80,7 +84,7 @@ const NotificationBatchDetailPage = () => {
       setPagination({
         current_page: nextPage,
         total_count: decisionsData.count,
-        has_next: !!decisionsData.next,
+        has_next: decisionsData.has_next || !!decisionsData.next,
         has_previous: !!decisionsData.previous
       });
     } catch (err) {
@@ -90,6 +94,7 @@ const NotificationBatchDetailPage = () => {
     }
   };
 
+  // View document content handler
   const handleViewDocumentContent = async (decisionAda) => {
     try {
       const response = await apiClient.get(`/decision/${decisionAda}/content/`);
@@ -100,6 +105,7 @@ const NotificationBatchDetailPage = () => {
     }
   };
 
+  // Format date helper
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleDateString(undefined, {
@@ -111,34 +117,43 @@ const NotificationBatchDetailPage = () => {
     });
   };
 
+  // Loading state
   if (loading && !batch) {
     return (
-      <div className="notification-batch-page loading-container">
-        <h2>{t('notifications.loadingBatch')}</h2>
-        <div className="spinner"></div>
+      <div className="notification-batch-detail-page">
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>{t('notifications.loadingBatch')}</p>
+        </div>
       </div>
     );
   }
 
+  // Error state
   if (error) {
     return (
-      <div className="notification-batch-page error-container">
-        <h2>{t('notifications.errorLoadingBatch')}</h2>
-        <p>{error}</p>
-        <button onClick={() => navigate(-1)} className="back-button">
-          {t('common.goBack')}
-        </button>
+      <div className="notification-batch-detail-page">
+        <div className="error-container">
+          <h2>{t('notifications.errorLoadingBatch')}</h2>
+          <p>{error}</p>
+          <button onClick={() => navigate('/notifications')} className="back-button">
+            {t('common.goBack')}
+          </button>
+        </div>
       </div>
     );
   }
 
+  // Not found state
   if (!batch) {
     return (
-      <div className="notification-batch-page not-found-container">
-        <h2>{t('notifications.batchNotFound')}</h2>
-        <button onClick={() => navigate(-1)} className="back-button">
-          {t('common.goBack')}
-        </button>
+      <div className="notification-batch-detail-page">
+        <div className="not-found-container">
+          <h2>{t('notifications.batchNotFound')}</h2>
+          <button onClick={() => navigate('/notifications')} className="back-button">
+            {t('common.goBack')}
+          </button>
+        </div>
       </div>
     );
   }
@@ -146,135 +161,57 @@ const NotificationBatchDetailPage = () => {
   return (
     <div className="notification-batch-detail-page">
       {/* Breadcrumb */}
-      <div className="breadcrumb">
-        <button onClick={() => navigate(-1)} className="breadcrumb-link">
-          {t('navigation.back')}
+      <nav className="breadcrumb">
+        <button onClick={() => navigate('/notifications')} className="breadcrumb-link">
+          {t('navigation.notifications')}
         </button>
-        <span className="breadcrumb-separator">•</span>
-        <span>{t('notifications.batchDetail')}</span>
-      </div>
+        <span className="breadcrumb-separator">›</span>
+        <span className="breadcrumb-current">
+          {t('notifications.batch')} #{batchId}
+        </span>
+      </nav>
 
-      {/* Header Section */}
-      <div className="batch-header">
-        <h1 className="batch-title">{t('notifications.notificationBatch')}</h1>
-        
-        {batch.subscription && (
-          <div className="subscription-info">
-            <span className="subscription-label">{t('notifications.subscription')}:</span>
-            <span className="subscription-alias">{batch.subscription.alias || t('notifications.unnamed')}</span>
-            {batch.subscription.organization_label && (
-              <span className="subscription-detail">→ {batch.subscription.organization_label}</span>
-            )}
-            {batch.subscription.entity_name && (
-              <span className="subscription-detail">→ {batch.subscription.entity_name}</span>
-            )}
-          </div>
-        )}
+      {/* Batch Metadata Header - Now using shared component */}
+      <BatchMetadataHeader
+        batch={batch}
+        formatDate={formatDate}
+        formatAmount={formatAmount}
+        showCheckWindow={true}
+        showCreatedAt={true}
+        showSubscriptionInfo={true}
+        showStats={true}
+      />
 
-        <div className="batch-metadata">
-          <div className="metadata-item">
-            <span className="metadata-label">{t('notifications.checkWindow')}:</span>
-            <span className="metadata-value">
-              {formatDate(batch.check_window_start)} — {formatDate(batch.check_window_end)}
-            </span>
-          </div>
-          <div className="metadata-item">
-            <span className="metadata-label">{t('notifications.created')}:</span>
-            <span className="metadata-value">{formatDate(batch.created_at)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Statistics Section */}
-      {batch.aggregate_stats && Object.keys(batch.aggregate_stats).length > 0 && (
-        <div className="statistics-grid">
-          {batch.aggregate_stats.total_amount && (
-            <div className="stat-card">
-              <h3>{t('notifications.totalAmount')}</h3>
-              <div className="stat-value">{formatAmount(batch.aggregate_stats.total_amount)}</div>
-            </div>
-          )}
-          
-          {batch.aggregate_stats.avg_amount && (
-            <div className="stat-card">
-              <h3>{t('notifications.avgAmount')}</h3>
-              <div className="stat-value">{formatAmount(batch.aggregate_stats.avg_amount)}</div>
-            </div>
-          )}
-
-          {batch.aggregate_stats.decision_types && (
-            <div className="stat-card">
-              <h3>{t('notifications.decisionTypes')}</h3>
-              <div className="stat-value">{Object.keys(batch.aggregate_stats.decision_types).length}</div>
-            </div>
-          )}
+      {/* Link to view all subscription decisions */}
+      {batch.subscription && (
+        <div className="subscription-link-container">
+          <button 
+            className="view-all-subscription-link"
+            onClick={() => navigate(`/notifications/subscriptions/${batch.subscription.id}/history`)}
+          >
+            <ChartIcon size={18} />
+            {t('notifications.viewAllFromSubscription')}
+          </button>
         </div>
       )}
 
-      {/* Decisions Section */}
-      <div className="decisions-section">
-        <div className="decisions-header">
-          <h3 className="decisions-title">
-            {t('notifications.matchingDecisions')} ({batch.match_count || 0})
-          </h3>
-          
-          <div className="controls-container">
-            <SortControl sortBy={sortBy} onSortChange={setSortBy} options="simple" />
-            
-            {/* Viewed filter */}
-            <div className="viewed-filter">
-              <label>{t('notifications.showViewed')}:</label>
-              <select 
-                value={isViewedFilter === null ? 'all' : isViewedFilter.toString()} 
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setIsViewedFilter(value === 'all' ? null : value === 'true');
-                }}
-              >
-                <option value="all">{t('common.all')}</option>
-                <option value="false">{t('notifications.notViewed')}</option>
-                <option value="true">{t('notifications.viewed')}</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* Decisions List */}
-        {loading ? (
-          <div className="loading-text">{t('common.loading')}</div>
-        ) : decisions.length === 0 ? (
-          <div className="no-decisions-message">
-            {t('notifications.noDecisionsInBatch')}
-          </div>
-        ) : (
-          <>
-            <div className="decisions-list">
-              {decisions.map((batchDecision, index) => (
-                <DecisionCard
-                  key={batchDecision.id}
-                  decision={batchDecision.decision}
-                  formatAmount={formatAmount}
-                  index={index}
-                  isLastItem={index === decisions.length - 1}
-                  onViewDocumentContent={handleViewDocumentContent}
-                />
-              ))}
-            </div>
-
-            {pagination?.has_next && (
-              <div className="load-more-container">
-                <button 
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                  className={`load-more-button ${loadingMore ? 'loading' : ''}`}
-                >
-                  {loadingMore ? t('common.loading') : t('common.loadMore')}
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+      {/* Decision List - Now using shared component */}
+      <DecisionListView
+        decisions={decisions}
+        loading={loading}
+        loadingMore={loadingMore}
+        pagination={pagination}
+        sortBy={sortBy}
+        onSortChange={setSortBy}
+        showViewedFilter={true}
+        isViewedFilter={isViewedFilter}
+        onViewedFilterChange={setIsViewedFilter}
+        onLoadMore={handleLoadMore}
+        onViewDocumentContent={handleViewDocumentContent}
+        formatAmount={formatAmount}
+        emptyMessage={t('notifications.noDecisionsInBatch')}
+        decisionKeyPrefix={`batch-${batchId}`}
+      />
     </div>
   );
 };

@@ -485,6 +485,8 @@
     "notification": "ειδοποίηση",
     "checkNowTitle": "Έλεγχος για νέες αποφάσεις τώρα",
     "checkNow": "Έλεγχος Τώρα",
+    "viewHistory": "Προβολή Ιστορικού",
+    "viewAllFromSubscription": "Προβολή Όλων των Αποφάσεων από αυτόν τον Κανόνα",
     "pauseSubscription": "Παύση κανόνα ειδοποίησης",
     "resumeSubscription": "Συνέχιση κανόνα ειδοποίησης",
     "pause": "Παύση",

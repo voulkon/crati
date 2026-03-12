@@ -485,6 +485,8 @@
     "notification": "notification",
     "checkNowTitle": "Check for new decisions now",
     "checkNow": "Check Now",
+    "viewHistory": "View History",
+    "viewAllFromSubscription": "View All Decisions from This Subscription",
     "pauseSubscription": "Pause subscription",
     "resumeSubscription": "Resume subscription",
     "pause": "Pause",

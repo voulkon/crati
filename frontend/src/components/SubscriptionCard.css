@@ -278,7 +278,7 @@
 /* Actions */
 .subscription-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: 1fr 1fr 1fr auto;
   gap: var(--spacing-xs);
   padding-top: var(--spacing-xs);
 }
@@ -315,6 +315,18 @@
   box-shadow: 0 2px 4px var(--shadow);
 }
 
+.subscription-btn-view-history {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  font-weight: var(--font-bold);
+}
+
+.subscription-btn-view-history:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
 .subscription-btn-secondary {
   background-color: var(--selection-bg);
   color: var(--text-color);
@@ -343,10 +355,14 @@
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .subscription-actions {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
   }
   
   .subscription-btn {
     width: 100%;
+  }
+
+  .subscription-btn-view-history {
+    grid-column: 1 / -1;
   }
 }

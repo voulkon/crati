@@ -22,7 +22,8 @@ import {
     RefreshCw,
     Edit2,
     Check,
-    X
+    X,
+    BarChart3
 } from 'lucide-react';
 import './SubscriptionCard.css';
 
@@ -361,6 +362,14 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
 
             {/* Actions */}
             <div className="subscription-actions">
+                <button
+                    className="subscription-btn subscription-btn-view-history"
+                    onClick={() => navigate(`/notifications/subscriptions/${subscription.id}/history`)}
+                    title={t('notifications.viewHistory')}
+                >
+                    <BarChart3 size={14} /> {t('notifications.viewHistory')}
+                </button>
+
                 <button
                     className="subscription-btn subscription-btn-primary"
                     onClick={handleCheckNow}

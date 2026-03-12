@@ -5,7 +5,8 @@
     "explore": "Explore",
     "backToHome": "← Back to Home",
     "backToDashboard": "← Back to Dashboard",
-    "back": "← Back"
+    "back": "← Back",
+    "notifications": "Notifications"
   },
   "homepage": {
     "title": "Crati.Co",
@@ -33,7 +34,7 @@
     "mostActiveOrgs": "Most Active Organizations",
     "mostActiveOrganizations": "Most Active Organizations",
     "notableRecentDecisions": "Notable Recent Decisions",
-    "seeAll": "See All →",
+    "seeAll": "See All",
     "readyToExplore": "Ready to Explore?",
     "readyToExploreDesc": "Dive deep into government decision data with our powerful exploration tools",
     "diveDeepIntoData": "Dive deep into government decision data with our powerful exploration tools",
@@ -540,6 +541,7 @@
     "summaryStatistics": "Summary Statistics",
     "maxAmount": "Max Amount",
     "minAmount": "Min Amount",
-    "totalMatches": "Total Matches"
+    "totalMatches": "Total Matches",
+    "batch" : "Batch Number"
   }
 }

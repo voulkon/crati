@@ -49,9 +49,10 @@ const DecisionListView = ({
           {/* Viewed Filter */}
           {showViewedFilter && (
             <div className="viewed-filter">
-              <label htmlFor="viewed-filter">Filter:</label>
+              <label htmlFor="viewed-filter" className="sort-label">Filter:</label>
               <select
                 id="viewed-filter"
+                className="sort-select"
                 value={isViewedFilter === null ? 'all' : isViewedFilter.toString()}
                 onChange={(e) => {
                   const value = e.target.value;

@@ -20,10 +20,6 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
   const [entityRelationships, setEntityRelationships] = useState(null);
   const [showEntities, setShowEntities] = useState(false);
   const [loadingEntities, setLoadingEntities] = useState(false);
-
-  const kaeTotal = decision.kae_total;
-  const primaryAmount = decision.amount;
-  const hasAmountDiscrepancy = decision.has_amount_discrepancy;
   
   // Check if entity data is already included in decision (from optimized endpoint)
   const hasPreloadedEntityData = decision.entity_amount !== undefined || decision.main_recipient !== undefined;

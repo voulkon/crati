@@ -19,7 +19,7 @@
 .decisions-title {
   font-size: 1.4rem;
   font-weight: 600;
-  color: var(--text-primary, #1a1a1a);
+  color: var(--text-color);
   margin: 0;
   display: flex;
   align-items: center;
@@ -48,32 +48,6 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.viewed-filter label {
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--text-secondary, #666);
-}
-
-.viewed-filter select {
-  padding: 0.5rem 0.8rem;
-  border: 1px solid var(--border-color, #e0e0e0);
-  border-radius: 6px;
-  background: white;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: border-color 0.2s;
-}
-
-.viewed-filter select:hover {
-  border-color: var(--primary-color, #2563eb);
-}
-
-.viewed-filter select:focus {
-  outline: none;
-  border-color: var(--primary-color, #2563eb);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 /* Decisions List */
@@ -124,17 +98,17 @@
 .no-decisions-message {
   text-align: center;
   padding: 3rem 2rem;
-  color: var(--text-secondary, #666);
+  color: var(--muted-text);
   font-size: 1.1rem;
-  background: var(--background-light, #f9fafb);
+  background: var(--hover-bg);
   border-radius: 8px;
-  border: 2px dashed var(--border-color, #e0e0e0);
+  border: 2px dashed var(--border-color);
 }
 
 .loading-text {
   text-align: center;
   padding: 2rem;
-  color: var(--text-secondary, #666);
+  color: var(--muted-text);
   font-size: 1rem;
 }
 

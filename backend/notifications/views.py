@@ -657,11 +657,14 @@ class NotificationBatchViewSet(viewsets.ReadOnlyModelViewSet):
         if is_viewed is not None:
             queryset = queryset.filter(is_viewed=is_viewed.lower() == 'true')
         
-        # Optimize with select_related
+        # Optimize with select_related and prefetch_related
         queryset = queryset.select_related(
             'decision',
             'decision__organization',
             'decision__decision_type'
+        ).prefetch_related(
+            'decision__signers',
+            'decision__kae_amounts'
         ).order_by('-added_at')
         
         # Paginate

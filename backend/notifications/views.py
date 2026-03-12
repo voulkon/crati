@@ -130,15 +130,39 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
         POST /api/notifications/subscriptions/{id}/check-now/
         
         Optional query params:
-        - lookback_days: How many days back to check (default: 30)
+        - lookback_days: Override - check specific number of days back (e.g., 30, 90)
+                        If not provided, checks from last_checked to now for continuity
+        
+        Behavior:
+        - Default (no lookback_days): Checks from last_checked (or created_at) to now
+        - With lookback_days: Checks from (now - lookback_days) to now
+        - Always updates last_checked to now after check
         
         Returns:
-            {"status": "check started", "task_id": "<task_id>", "subscription_id": <id>}
+            {
+                "status": "check started",
+                "task_id": "<task_id>",
+                "subscription_id": <id>,
+                "lookback_days": <days> or null,
+                "check_mode": "continuity" or "override"
+            }
         """
         subscription = self.get_object()
         
-        # Get lookback_days from query params (default 30)
-        lookback_days = int(request.query_params.get('lookback_days', 30))
+        # Get optional lookback_days from query params
+        lookback_days_param = request.query_params.get('lookback_days')
+        lookback_days = None
+        check_mode = 'continuity'
+        
+        if lookback_days_param:
+            try:
+                lookback_days = int(lookback_days_param)
+                check_mode = 'override'
+            except ValueError:
+                return Response(
+                    {'error': 'lookback_days must be a valid integer'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
         # Trigger the check task
         from notifications.tasks import check_single_subscription
@@ -148,7 +172,8 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
             'status': 'check started',
             'task_id': task.id,
             'subscription_id': subscription.id,
-            'lookback_days': lookback_days
+            'lookback_days': lookback_days,
+            'check_mode': check_mode
         })
     
     @action(detail=False, methods=['get'], url_path='check-organization/(?P<org_uid>[^/.]+)')

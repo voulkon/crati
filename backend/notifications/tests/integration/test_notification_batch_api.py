@@ -243,7 +243,8 @@ class TestNotificationBatchDecisionsAPI:
         # Verify decision nested data
         assert 'ada' in first_item['decision']
         assert 'subject' in first_item['decision']
-        assert 'organization_label' in first_item['decision']
+        assert 'organization' in first_item['decision']
+        assert 'label' in first_item['decision']['organization']
     
     def test_batch_decisions_pagination(
         self, authenticated_client, user, notification_subscription

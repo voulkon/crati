@@ -8,15 +8,17 @@ from loguru import logger
 
 
 @shared_task
-def check_single_subscription(subscription_id, lookback_days=30, use_batch=True):
+def check_single_subscription(subscription_id, lookback_days=None, use_batch=True):
     """
     Check a single subscription for matching decisions.
     Used for on-demand checks triggered by users via the "check now" button.
     
     Args:
         subscription_id: ID of the subscription to check
-        lookback_days: How many days back to check for matching decisions (default: 30)
-        use_batch: If True, create NotificationBatch; if False, create individual Notifications (default: False)
+        lookback_days: Optional override - how many days back to check. 
+                      If None (default), checks from last_checked to now for continuity.
+                      If specified, checks from (now - lookback_days) to now.
+        use_batch: If True, create NotificationBatch; if False, create individual Notifications (default: True)
     
     Returns:
         dict with subscription_id and either batch_id/decisions_added or notifications_created
@@ -26,11 +28,33 @@ def check_single_subscription(subscription_id, lookback_days=30, use_batch=True)
             'organization', 'entity', 'relationship_org', 'relationship_entity'
         ).get(id=subscription_id)
         
-        logger.info(f"Checking subscription {subscription_id} (manual check, lookback: {lookback_days} days)")
-        
-        # For manual checks, use the lookback_days parameter
         check_window_end = timezone.now()
-        check_window_start = check_window_end - timedelta(days=lookback_days)
+        
+        # Determine check window start based on whether lookback_days is specified
+        if lookback_days is not None:
+            # Override mode: user explicitly wants to check a specific period
+            check_window_start = check_window_end - timedelta(days=lookback_days)
+            logger.info(
+                f"Checking subscription {subscription_id} (manual check with override, "
+                f"lookback: {lookback_days} days)"
+            )
+        else:
+            # Default mode: check from last_checked for continuity
+            if subscription.last_checked:
+                check_window_start = subscription.last_checked
+                logger.info(
+                    f"Checking subscription {subscription_id} (manual check, "
+                    f"from last_checked: {check_window_start})"
+                )
+            else:
+                # Never checked before - use subscription creation date or default to 30 days
+                check_window_start = subscription.created_at
+                logger.info(
+                    f"Checking subscription {subscription_id} (first check, "
+                    f"from created_at: {check_window_start})"
+                )
+        
+        logger.info(f"Check window: {check_window_start} to {check_window_end}")
         
         # Find matching decisions
         matching_decisions = find_matching_decisions(subscription, check_window_start)
@@ -59,6 +83,8 @@ def check_single_subscription(subscription_id, lookback_days=30, use_batch=True)
                 'decisions_added': batch_result.get('decisions_added', 0),
                 'batch_created': batch_result.get('batch_created', False),
                 'lookback_days': lookback_days,
+                'check_window_start': check_window_start.isoformat(),
+                'check_window_end': check_window_end.isoformat(),
                 # For backwards compatibility with tests expecting 'notifications_created'
                 'notifications_created': batch_result.get('decisions_added', 0)
             }
@@ -77,7 +103,9 @@ def check_single_subscription(subscription_id, lookback_days=30, use_batch=True)
             return {
                 'subscription_id': subscription_id,
                 'notifications_created': notifications_created,
-                'lookback_days': lookback_days
+                'lookback_days': lookback_days,
+                'check_window_start': check_window_start.isoformat(),
+                'check_window_end': check_window_end.isoformat(),
             }
         
     except NotificationSubscription.DoesNotExist:

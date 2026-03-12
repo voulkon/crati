@@ -7,6 +7,7 @@ import EntityDetailPage from "./pages/EntityDetailPage";
 import DecisionDetailPage from "./pages/DecisionDetailPage";
 import AFMEntityDetailPage from "./pages/AFMEntityDetailPage";
 import RelationshipDetailPage from "./pages/RelationshipDetailPage";
+import NotificationBatchDetailPage from "./pages/NotificationBatchDetailPage";
 import SearchResults from "./pages/SearchResults";
 import SuperSearchExample from "./pages/SuperSearchExample";
 import LibraryPage from "./pages/LibraryPage";
@@ -187,6 +188,9 @@ function AuthenticatedApp({ controlsLayout }) {
         
         {/* Relationship page - Entity × Organization */}
         <Route path="/relationship/entity/:afm/org/:orgUid" element={<RelationshipDetailPage />} />
+        
+        {/* Notification Batch Detail */}
+        <Route path="/batch/:batchId" element={<NotificationBatchDetailPage />} />
       </Routes>
     </>
   );

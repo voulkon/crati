@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../contexts/TranslationContext';
 import { 
     getSubscriptions, 
-    getNotifications, 
-    dismissNotification, 
-    markNotificationRead,
+    getNotificationBatches, 
+    dismissBatch, 
+    markBatchRead,
     markAllNotificationsRead,
     dismissAllNotifications,
     getBatchDecisions
@@ -41,7 +41,7 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
         try {
             const [subsData, notifsData] = await Promise.all([
                 getSubscriptions(),
-                getNotifications()
+                getNotificationBatches()
             ]);
 
             setSubscriptions(subsData);
@@ -82,7 +82,7 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
         try {
             const [subsData, notifsData] = await Promise.all([
                 getSubscriptions(),
-                getNotifications()
+                getNotificationBatches()
             ]);
 
             setSubscriptions(subsData);
@@ -158,7 +158,7 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
     const handleDismissNotification = async (notificationId, event) => {
         event.stopPropagation(); // Prevent navigation when clicking X
         try {
-            await dismissNotification(notificationId);
+            await dismissBatch(notificationId);
             // Update local state
             setNotifications(prev => prev.filter(n => n.id !== notificationId));
             // Update unread count
@@ -169,12 +169,12 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
         }
     };
 
-    // Handle notification click (mark as read and expand to show decisions)
+    // Handle notification click (navigate to batch detail page)
     const handleNotificationClick = async (notification) => {
         try {
             // Mark as read if not already
             if (!notification.is_read) {
-                await markNotificationRead(notification.id);
+                await markBatchRead(notification.id);
                 // Update local state
                 setNotifications(prev => prev.map(n => 
                     n.id === notification.id ? { ...n, is_read: true } : n
@@ -184,20 +184,9 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
                 onUnreadCountChange?.(unreadCount);
             }
 
-            // If batch has only 1 decision, navigate directly
-            if (notification.match_count === 1) {
-                // Fetch the single decision and navigate to it
-                const batchDecisions = await getBatchDecisions(notification.id, 1, 1);
-                if (batchDecisions.results && batchDecisions.results.length > 0) {
-                    const decision = batchDecisions.results[0].decision;
-                    if (decision.ada) {
-                        navigate(`/decisions/${decision.ada}`);
-                        onClose?.(); // Close sidebar after navigation
-                    }
-                }
-            }
-            // For batches with multiple decisions, you could navigate to a batch view
-            // or expand inline - for now, just mark as read
+            // Navigate to batch detail page
+            navigate(`/batch/${notification.id}`);
+            onClose?.(); // Close sidebar after navigation
         } catch (error) {
             console.error('Failed to handle notification click:', error);
         }

@@ -417,26 +417,3 @@ export async function getSubscriptionStats() {
   
   return stats;
 }
-
-// ============ BACKWARD COMPATIBILITY ALIASES ============
-// These allow existing code to work without changes during migration
-
-/**
- * @deprecated Use getNotificationBatches() instead
- */
-export const getNotifications = getNotificationBatches;
-
-/**
- * @deprecated Use getNotificationBatch() instead
- */
-export const getNotification = getNotificationBatch;
-
-/**
- * @deprecated Use markBatchRead() instead
- */
-export const markNotificationRead = markBatchRead;
-
-/**
- * @deprecated Use dismissBatch() instead
- */
-export const dismissNotification = dismissBatch;

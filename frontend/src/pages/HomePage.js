@@ -80,7 +80,7 @@ const HomePage = () => {
               {t('homepage.subtitle')}
             </p>
             
-            {/* Super Search Component - Enhanced as main feature */}
+            {/* Super Search Component - Main Feature */}
             <div className="hero-search-enhanced">
               <SuperSearch
                 placeholder={t('homepage.searchPlaceholder')}

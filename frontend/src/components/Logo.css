@@ -4,46 +4,64 @@
   justify-content: center;
   cursor: pointer;
   transition: transform 0.2s ease, opacity 0.2s ease;
+  text-decoration: none;
+  padding: var(--spacing-sm) var(--spacing-md);
   border-radius: var(--radius-md);
-  overflow: hidden;
   background-color: var(--surface-color);
-  padding: var(--spacing-xs);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px var(--shadow);
+  height: 40px; /* Match control buttons height */
+  min-width: fit-content;
 }
 
 .logo-link:hover {
-  transform: scale(1.05);
-  opacity: 0.8;
+  transform: scale(1.02);
+  opacity: 0.9;
 }
 
 .logo-link:active {
-  transform: scale(0.95);
+  transform: scale(0.98);
 }
 
-.logo-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+.logo-text {
+  display: flex;
+  align-items: baseline;
+  font-weight: var(--font-bold);
+  letter-spacing: -0.5px;
+  line-height: 1;
+}
+
+.logo-crati,
+.logo-co {
+  color: var(--text-color);
+}
+
+/* First letters - make them taller and more prominent */
+.logo-crati::first-letter,
+.logo-co::first-letter {
+  font-size: 1.4em;
+  font-weight: var(--font-black);
+  background: linear-gradient(135deg, var(--primary-blue), var(--secondary-blue));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.logo-dot {
+  color: var(--primary-blue);
+  font-weight: var(--font-black);
+  margin: 0 1px;
 }
 
 /* Size variants */
-.logo-small {
-  width: 32px;
-  height: 32px;
+.logo-small .logo-text {
+  font-size: 16px;
 }
 
-.logo-medium {
-  width: 40px;
-  height: 40px;
+.logo-medium .logo-text {
+  font-size: 20px;
 }
 
-.logo-large {
-  width: 56px;
-  height: 56px;
-}
-
-/* Optional: Add backdrop blur for better visibility */
-.logo-link {
-  backdrop-filter: blur(10px);
-  box-shadow: 0 2px 8px var(--shadow);
+.logo-large .logo-text {
+  font-size: 28px;
 }

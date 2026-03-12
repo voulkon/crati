@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { SignedIn, SignedOut, RedirectToSignIn } from "@clerk/clerk-react";
 import HomePage from "./pages/HomePage";
 import DevPage from "./pages/OrganizationsPage";
@@ -38,8 +38,12 @@ const isClerkAvailable = () => {
 function AuthenticatedApp({ controlsLayout }) {
   const { getToken, isClerkAuth } = useAuth();
   const { t } = useTranslation(); // OK here - this component is inside TranslationProvider
+  const location = useLocation(); // Get current route
   const stealthAllowlist = process.env.REACT_APP_STEALTH_ALLOWLIST === 'true';
   const { isAllowed, isChecking } = useAllowlistCheck();
+  
+  // Check if we're on the homepage
+  const isHomePage = location.pathname === '/';
   
   // Library sidebar state
   const [isLibraryOpen, setIsLibraryOpen] = React.useState(false);
@@ -146,6 +150,7 @@ function AuthenticatedApp({ controlsLayout }) {
         isNotificationSidebarOpen={isNotificationSidebarOpen}
         onUserMenuToggle={handleUserMenuToggle}
         isUserMenuOpen={isUserMenuOpen}
+        hideLogo={isHomePage}
       />
       
       {/* Library Sidebar */}

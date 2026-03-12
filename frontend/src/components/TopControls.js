@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Logo from './Logo';
 import UserMenu from './UserMenu';
 import BookmarkButton from './BookmarkButton';
 import NotificationButton from './NotificationButton';
+import { ChevronRight, ChevronLeft } from './Icons';
 import './TopControls.css';
 
 /**
@@ -14,6 +15,7 @@ import './TopControls.css';
  *   - 'horizontal-left': Horizontal layout, aligned to the left
  *   - 'vertical-left': Vertical layout from top to bottom, aligned to the left
  *   - 'split-corners': Split layout with logo on left, controls on right
+ * @param {boolean} hideLogo - Whether to hide the logo (e.g., on homepage)
  */
 const TopControls = ({ 
   layout = 'horizontal-right', 
@@ -23,32 +25,60 @@ const TopControls = ({
   onNotificationSidebarToggle,
   isNotificationSidebarOpen,
   onUserMenuToggle,
-  isUserMenuOpen
+  isUserMenuOpen,
+  hideLogo = false
 }) => {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const toggleCollapse = () => {
+    setIsCollapsed(!isCollapsed);
+    // Close any open menus when collapsing
+    if (!isCollapsed) {
+      if (isUserMenuOpen) onUserMenuToggle();
+      if (isLibraryOpen) onLibraryToggle();
+      if (isNotificationSidebarOpen) onNotificationSidebarToggle();
+    }
+  };
+
   return (
     <>
-      {/* Left side: Logo (shifts right when sidebar is open) */}
-      <div className={`left-controls ${isLibraryOpen ? 'shifted' : ''}`}>
-        <div className="logo-container">
-          <Logo size="medium" />
+      {/* Left side: Logo (conditionally rendered) */}
+      {!hideLogo && (
+        <div className={`left-controls ${isLibraryOpen ? 'shifted' : ''}`}>
+          <div className="logo-container">
+            <Logo size="medium" />
+          </div>
         </div>
-      </div>
+      )}
       
-      {/* Right side: User Menu, Bookmark button, then Notification button */}
-      <div className={`top-controls ${layout}`}>
-        <UserMenu 
-          isOpen={isUserMenuOpen}
-          onToggle={onUserMenuToggle}
-        />
-        <BookmarkButton
-          onLibraryToggle={onLibraryToggle}
-          isLibraryOpen={isLibraryOpen}
-          bookmarkCount={bookmarkCount}
-        />
-        <NotificationButton
-          onSidebarToggle={onNotificationSidebarToggle}
-          isSidebarOpen={isNotificationSidebarOpen}
-        />
+      {/* Right side: Collapsible controls */}
+      <div className={`top-controls-wrapper ${layout} ${isCollapsed ? 'collapsed' : 'expanded'}`}>
+        {/* Collapse/Expand Toggle Button */}
+        <button 
+          className="controls-collapse-toggle"
+          onClick={toggleCollapse}
+          aria-label={isCollapsed ? 'Expand controls' : 'Collapse controls'}
+          title={isCollapsed ? 'Expand controls' : 'Collapse controls'}
+        >
+          {isCollapsed ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
+        </button>
+
+        {/* User Menu, Bookmark button, then Notification button */}
+        <div className={`top-controls ${layout} ${isCollapsed ? 'hidden' : ''}`}>
+          <UserMenu 
+            isOpen={isUserMenuOpen}
+            onToggle={onUserMenuToggle}
+          />
+          <BookmarkButton
+            onLibraryToggle={onLibraryToggle}
+            isLibraryOpen={isLibraryOpen}
+            bookmarkCount={bookmarkCount}
+          />
+          <NotificationButton
+            onSidebarToggle={onNotificationSidebarToggle}
+            isSidebarOpen={isNotificationSidebarOpen}
+          />
+        </div>
       </div>
     </>
   );

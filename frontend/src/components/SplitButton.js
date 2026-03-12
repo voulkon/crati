@@ -27,7 +27,7 @@ import './SplitButton.css';
  * @param {boolean} props.mainDisabled - Whether main button is disabled (overrides disabled prop)
  * @param {boolean} props.chevronDisabled - Whether chevron button is disabled (overrides disabled prop)
  * @param {number} props.height - Button height in pixels (default: 50)
- * @param {React.ReactNode} props.badge - Optional badge to display on main button (e.g., unread count)
+ * @param {React.ReactNode} props.badge - Optional badge to display on chevron button (e.g., unread count)
  */
 export default function SplitButton({
   children,
@@ -63,7 +63,6 @@ export default function SplitButton({
           style={{ height: `${height}px` }}
         >
           {children}
-          {badge && <div className="split-button-badge">{badge}</div>}
         </button>
 
         {/* Chevron toggle button (right half) */}
@@ -77,6 +76,7 @@ export default function SplitButton({
           <span className="split-button-chevron-icon">
             {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </span>
+          {badge && <div className="split-button-badge">{badge}</div>}
         </button>
       </div>
     </>

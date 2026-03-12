@@ -96,7 +96,7 @@ class TestNotificationSubscriptionModel:
         assert sub.amount_min == Decimal('10000.00')
         assert sub.amount_max == Decimal('100000.00')
 
-
+@pytest.mark.skip(reason="Deprecated Model")
 class TestNotificationModel:
     """Test Notification model behavior"""
     
@@ -180,9 +180,9 @@ class TestNotificationQuerysets:
     
     def test_filter_unread_notifications(self, user, unread_notifications):
         """Test filtering for unread notifications"""
-        from notifications.models import Notification
-        
-        unread = Notification.objects.filter(user=user, is_read=False)
+        from notifications.models import NotificationBatch
+
+        unread = NotificationBatch.objects.filter(user=user, is_read=False)
         assert unread.count() == len(unread_notifications)
     
     def test_filter_by_subscription_type(self, user, multiple_subscriptions):

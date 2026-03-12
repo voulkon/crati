@@ -13,6 +13,11 @@ from django.utils import timezone
 from datetime import timedelta
 from decimal import Decimal
 
+from notifications.models.notification_batch import (
+    NotificationBatch, 
+    NotificationBatchDecision
+    )
+
 
 pytestmark = [
     pytest.mark.django_db,
@@ -31,7 +36,6 @@ class TestKeywordMatchingOR:
         """Single keyword should match when using OR operator"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         # Create subscription with OR operator (default in old code)
         sub = NotificationSubscriptionFactory(
@@ -60,17 +64,20 @@ class TestKeywordMatchingOR:
         # Check subscription
         result = check_single_subscription(sub.id)
         
-        # Should create notification for matching decision only
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
-        assert 'contract' in notifications.first().match_details.get('keywords_found', [])
+        # Should create notification batch for matching decision only
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        
+        batch = batches.first()
+        batch_decisions = batch.batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
+        assert 'contract' in batch_decisions.first().match_details.get('keywords_found', [])
     
     def test_multiple_keywords_any_match_or(self, user, organization, celery_eager_mode):
         """With OR, matching any one keyword should trigger notification"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         # Create subscription with multiple keywords, OR operator
         sub = NotificationSubscriptionFactory(
@@ -113,20 +120,24 @@ class TestKeywordMatchingOR:
         # Check subscription
         result = check_single_subscription(sub.id)
         
-        # Should create 3 notifications (one for each matching decision)
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 3
+        # Should create 1 batch with 3 decisions
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
         
-        # Verify each notification has correct keyword matches
+        batch = batches.first()
+        batch_decisions = batch.batch_decisions.all()
+        assert batch_decisions.count() == 3
+        
+        # Verify each decision has correct keyword matches
         decision_keywords = {
             match1.id: ['contract'],
             match2.id: ['tender'],
             match3.id: ['contract', 'tender', 'procurement']
         }
         
-        for notif in notifications:
-            expected_keywords = decision_keywords.get(notif.decision.id, [])
-            found_keywords = notif.match_details.get('keywords_found', [])
+        for batch_decision in batch_decisions:
+            expected_keywords = decision_keywords.get(batch_decision.decision.id, [])
+            found_keywords = batch_decision.match_details.get('keywords_found', [])
             # Check that at least one expected keyword was found
             assert any(kw in found_keywords for kw in expected_keywords)
     
@@ -134,7 +145,6 @@ class TestKeywordMatchingOR:
         """Keywords should match case-insensitively with OR operator"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -168,14 +178,15 @@ class TestKeywordMatchingOR:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 3
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 3
     
     def test_greek_keywords_or(self, user, organization, celery_eager_mode):
         """Test Greek keyword matching with OR operator"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -206,8 +217,10 @@ class TestKeywordMatchingOR:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 2
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 2
 
 
 # ============================================================================
@@ -221,7 +234,6 @@ class TestKeywordMatchingAND:
         """Single keyword with AND operator should work like OR"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -246,15 +258,16 @@ class TestKeywordMatchingAND:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_all_keywords_must_match_and(self, user, organization, celery_eager_mode):
         """With AND, all keywords must be present to trigger notification"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         # Create subscription with AND operator (all keywords required)
         sub = NotificationSubscriptionFactory(
@@ -297,23 +310,25 @@ class TestKeywordMatchingAND:
         # Check subscription
         result = check_single_subscription(sub.id)
         
-        # Should create notification only for the decision with all keywords
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == full_match
+        # Should create batch only for the decision with all keywords
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        batch_decision = batch_decisions.first()
+        assert batch_decision.decision == full_match
         
         # Verify all keywords are in match_details
-        found_keywords = notifications.first().match_details.get('keywords_found', [])
+        found_keywords = batch_decision.match_details.get('keywords_found', [])
         assert 'contract' in found_keywords
         assert 'urgent' in found_keywords
         assert 'supplies' in found_keywords
-        assert notifications.first().match_details.get('keyword_match_operator') == 'AND'
+        assert batch_decision.match_details.get('keyword_match_operator') == 'AND'
     
     def test_two_keywords_both_required_and(self, user, organization, celery_eager_mode):
         """With AND and 2 keywords, both must be present"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -347,15 +362,16 @@ class TestKeywordMatchingAND:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == match
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == match
     
     def test_case_insensitive_and(self, user, organization, celery_eager_mode):
         """AND operator should also be case-insensitive"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -375,15 +391,16 @@ class TestKeywordMatchingAND:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == match
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == match
     
     def test_keyword_order_irrelevant_and(self, user, organization, celery_eager_mode):
         """With AND, keyword order in subject should not matter"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -410,8 +427,10 @@ class TestKeywordMatchingAND:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 2
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 2
 
 
 # ============================================================================
@@ -425,7 +444,6 @@ class TestKeywordMatchingDefaults:
         """Default operator should be AND based on model definition"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         # Create subscription without explicitly setting operator (should default to AND)
         sub = NotificationSubscriptionFactory(
@@ -456,9 +474,11 @@ class TestKeywordMatchingDefaults:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == match
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == match
 
 
 # ============================================================================
@@ -472,7 +492,6 @@ class TestKeywordMatchingEdgeCases:
         """Empty keywords list should not filter (match all)"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -498,14 +517,15 @@ class TestKeywordMatchingEdgeCases:
         result = check_single_subscription(sub.id)
         
         # Should match both decisions since no keyword filter is applied
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 2
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 2
     
     def test_none_keywords(self, user, organization, celery_eager_mode):
         """None keywords should not filter"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -523,14 +543,15 @@ class TestKeywordMatchingEdgeCases:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
     
     def test_keyword_not_found_in_any_decision_or(self, user, organization, celery_eager_mode):
         """When no decisions match any keyword with OR, no notifications"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -549,14 +570,13 @@ class TestKeywordMatchingEdgeCases:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 0
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 0
     
     def test_keyword_not_found_in_any_decision_and(self, user, organization, celery_eager_mode):
         """When no decisions match all keywords with AND, no notifications"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -576,8 +596,8 @@ class TestKeywordMatchingEdgeCases:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 0
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 0
 
 
 # ============================================================================
@@ -591,7 +611,6 @@ class TestKeywordWithOtherFilters:
         """Organization filter + keyword OR filter"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory, OrganizationFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -626,15 +645,16 @@ class TestKeywordWithOtherFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == match
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == match
     
     def test_organization_and_keywords_and(self, user, organization, celery_eager_mode):
         """Organization filter + keyword AND filter"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -661,15 +681,16 @@ class TestKeywordWithOtherFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == match
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == match
     
     def test_keywords_and_amount_filter_or(self, user, organization, celery_eager_mode):
         """Keywords (OR) + amount filter"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -708,15 +729,16 @@ class TestKeywordWithOtherFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == match
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == match
     
     def test_keywords_and_amount_filter_and(self, user, organization, celery_eager_mode):
         """Keywords (AND) + amount filter"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -754,16 +776,17 @@ class TestKeywordWithOtherFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == match
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == match
     
     def test_entity_subscription_with_keywords_and(self, user, afm_entity, celery_eager_mode):
         """Entity subscription + keywords (AND)"""
         from conftest import EntitySubscriptionFactory, DecisionFactory
         from core.models.entities import DecisionEntityRelationship, EntityRole
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = EntitySubscriptionFactory(
             user=user,
@@ -800,15 +823,16 @@ class TestKeywordWithOtherFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == match
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == match
     
     def test_filter_only_subscription_keywords_and(self, user, celery_eager_mode):
         """Filter-only subscription with keywords (AND)"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         # No organization or entity, just filters
         sub = NotificationSubscriptionFactory(
@@ -844,9 +868,11 @@ class TestKeywordWithOtherFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == match
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == match
 
 
 # ============================================================================
@@ -860,7 +886,6 @@ class TestKeywordMatchingInDocumentText:
         """Keyword found only in subject should match (existing behavior)"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         from core.models.document_analysis import DocumentExtraction
         
         sub = NotificationSubscriptionFactory(
@@ -888,17 +913,19 @@ class TestKeywordMatchingInDocumentText:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == decision
-        assert 'contract' in notifications.first().match_details.get('keywords_found', [])
-        assert 'subject' in notifications.first().match_details.get('keywords_found_in', [])
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        batch_decision = batch_decisions.first()
+        assert batch_decision.decision == decision
+        assert 'contract' in batch_decision.match_details.get('keywords_found', [])
+        assert 'subject' in batch_decision.match_details.get('keywords_found_in', [])
     
     def test_keyword_in_document_text_only(self, user, organization, celery_eager_mode):
         """Keyword found only in document text should match (new behavior)"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         from core.models.document_analysis import DocumentExtraction
         
         sub = NotificationSubscriptionFactory(
@@ -926,17 +953,19 @@ class TestKeywordMatchingInDocumentText:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == decision
-        assert 'procurement' in notifications.first().match_details.get('keywords_found', [])
-        assert 'document_text' in notifications.first().match_details.get('keywords_found_in', [])
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        batch_decision = batch_decisions.first()
+        assert batch_decision.decision == decision
+        assert 'procurement' in batch_decision.match_details.get('keywords_found', [])
+        assert 'document_text' in batch_decision.match_details.get('keywords_found_in', [])
     
     def test_keyword_in_both_subject_and_document(self, user, organization, celery_eager_mode):
         """Keyword found in both subject and document text"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         from core.models.document_analysis import DocumentExtraction
         
         sub = NotificationSubscriptionFactory(
@@ -964,12 +993,15 @@ class TestKeywordMatchingInDocumentText:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == decision
-        assert 'tender' in notifications.first().match_details.get('keywords_found', [])
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        batch_decision = batch_decisions.first()
+        assert batch_decision.decision == decision
+        assert 'tender' in batch_decision.match_details.get('keywords_found', [])
         # Should be found in both locations
-        found_in = notifications.first().match_details.get('keywords_found_in', [])
+        found_in = batch_decision.match_details.get('keywords_found_in', [])
         assert 'subject' in found_in
         assert 'document_text' in found_in
     
@@ -977,7 +1009,6 @@ class TestKeywordMatchingInDocumentText:
         """Keyword not found in either subject or document text should not match"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         from core.models.document_analysis import DocumentExtraction
         
         sub = NotificationSubscriptionFactory(
@@ -1005,14 +1036,13 @@ class TestKeywordMatchingInDocumentText:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 0
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 0
     
     def test_no_document_extraction_fallback_to_subject_only(self, user, organization, celery_eager_mode):
         """If no DocumentExtraction exists, should still match on subject"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -1033,15 +1063,16 @@ class TestKeywordMatchingInDocumentText:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == decision
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == decision
     
     def test_document_text_or_operator_multiple_keywords(self, user, organization, celery_eager_mode):
         """OR operator with multiple keywords - should match if any keyword in document text"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         from core.models.document_analysis import DocumentExtraction
         
         sub = NotificationSubscriptionFactory(
@@ -1068,15 +1099,16 @@ class TestKeywordMatchingInDocumentText:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert 'renovation' in notifications.first().match_details.get('keywords_found', [])
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert 'renovation' in batch_decisions.first().match_details.get('keywords_found', [])
     
     def test_document_text_and_operator_all_keywords_required(self, user, organization, celery_eager_mode):
         """AND operator - all keywords must be present in subject OR document text"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         from core.models.document_analysis import DocumentExtraction
         
         sub = NotificationSubscriptionFactory(
@@ -1103,9 +1135,11 @@ class TestKeywordMatchingInDocumentText:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        found_keywords = notifications.first().match_details.get('keywords_found', [])
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        found_keywords = batch_decisions.first().match_details.get('keywords_found', [])
         assert 'urgent' in found_keywords
         assert 'repair' in found_keywords
         assert 'equipment' in found_keywords
@@ -1114,7 +1148,6 @@ class TestKeywordMatchingInDocumentText:
         """AND operator - should NOT match if one keyword is missing from both subject and document"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         from core.models.document_analysis import DocumentExtraction
         
         sub = NotificationSubscriptionFactory(
@@ -1141,14 +1174,13 @@ class TestKeywordMatchingInDocumentText:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 0
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 0
     
     def test_greek_keywords_in_document_text(self, user, organization, celery_eager_mode):
         """Test Greek keyword matching in document text"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         from core.models.document_analysis import DocumentExtraction
         
         sub = NotificationSubscriptionFactory(
@@ -1175,9 +1207,11 @@ class TestKeywordMatchingInDocumentText:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        found_keywords = notifications.first().match_details.get('keywords_found', [])
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        found_keywords = batch_decisions.first().match_details.get('keywords_found', [])
         # Should find both Greek keywords
         assert any('σύμβαση' in kw or 'προμήθεια' in kw for kw in found_keywords)
     
@@ -1185,7 +1219,6 @@ class TestKeywordMatchingInDocumentText:
         """Document text keyword matching should be case-insensitive"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         from core.models.document_analysis import DocumentExtraction
         
         sub = NotificationSubscriptionFactory(
@@ -1212,14 +1245,13 @@ class TestKeywordMatchingInDocumentText:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
     
     def test_keyword_in_document_with_amount_filter(self, user, organization, celery_eager_mode):
         """Keyword in document text combined with amount filter"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         from core.models.document_analysis import DocumentExtraction
         
         sub = NotificationSubscriptionFactory(
@@ -1262,15 +1294,16 @@ class TestKeywordMatchingInDocumentText:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == match
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == match
     
     def test_long_document_text_with_keyword(self, user, organization, celery_eager_mode):
         """Test keyword matching in longer document text"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         from core.models.document_analysis import DocumentExtraction
         
         sub = NotificationSubscriptionFactory(
@@ -1317,7 +1350,9 @@ class TestKeywordMatchingInDocumentText:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert 'environmental' in notifications.first().match_details.get('keywords_found', [])
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert 'environmental' in batch_decisions.first().match_details.get('keywords_found', [])
 

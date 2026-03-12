@@ -134,6 +134,16 @@ class NotificationBatchDecision(models.Model):
         verbose_name=_("Batch")
     )
     
+    subscription = models.ForeignKey(
+        'notifications.NotificationSubscription',
+        on_delete=models.CASCADE,
+        related_name='batch_decisions',
+        verbose_name=_("Subscription"),
+        help_text=_("Denormalized subscription reference to enable unique constraint across batches"),
+        null=True,  # Temporarily nullable for migration
+        blank=True
+    )
+    
     decision = models.ForeignKey(
         'core.Decision',
         on_delete=models.CASCADE,
@@ -182,12 +192,18 @@ class NotificationBatchDecision(models.Model):
             models.Index(fields=['batch', 'decision']),
             models.Index(fields=['decision']),
             models.Index(fields=['is_viewed']),
+            models.Index(fields=['subscription', 'decision']),
         ]
         constraints = [
             # Prevent duplicate decision in same batch
             models.UniqueConstraint(
                 fields=['batch', 'decision'],
                 name='unique_batch_decision'
+            ),
+            # Prevent same decision appearing in multiple batches for same subscription
+            models.UniqueConstraint(
+                fields=['subscription', 'decision'],
+                name='unique_subscription_decision'
             ),
         ]
     

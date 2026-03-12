@@ -7,7 +7,8 @@ import {
     dismissNotification, 
     markNotificationRead,
     markAllNotificationsRead,
-    dismissAllNotifications
+    dismissAllNotifications,
+    getBatchDecisions
 } from '../api/notifications';
 import { NOTIFICATION_CONFIG } from '../config/notifications';
 import SubscriptionCard from './SubscriptionCard';
@@ -168,7 +169,7 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
         }
     };
 
-    // Handle notification click (navigate to decision and mark as read)
+    // Handle notification click (mark as read and expand to show decisions)
     const handleNotificationClick = async (notification) => {
         try {
             // Mark as read if not already
@@ -183,13 +184,22 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
                 onUnreadCountChange?.(unreadCount);
             }
 
-            // Navigate to the decision
-            if (notification.decision_ada) {
-                navigate(`/decisions/${notification.decision_ada}`);
-                onClose?.(); // Close sidebar after navigation
+            // If batch has only 1 decision, navigate directly
+            if (notification.match_count === 1) {
+                // Fetch the single decision and navigate to it
+                const batchDecisions = await getBatchDecisions(notification.id, 1, 1);
+                if (batchDecisions.results && batchDecisions.results.length > 0) {
+                    const decision = batchDecisions.results[0].decision;
+                    if (decision.ada) {
+                        navigate(`/decisions/${decision.ada}`);
+                        onClose?.(); // Close sidebar after navigation
+                    }
+                }
             }
+            // For batches with multiple decisions, you could navigate to a batch view
+            // or expand inline - for now, just mark as read
         } catch (error) {
-            console.error('Failed to mark notification as read:', error);
+            console.error('Failed to handle notification click:', error);
         }
     };
 
@@ -420,7 +430,7 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
                                             
                                             <div className="notification-item-header">
                                                 <span className="notification-item-type">
-                                                    {notification.subscription_type}
+                                                    {notification.subscription?.subscription_type || 'notification'}
                                                 </span>
                                                 <span className="notification-item-time">
                                                     {new Date(notification.created_at).toLocaleDateString()}
@@ -429,18 +439,22 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
                                             
                                             <div className="notification-item-content">
                                                 <div className="notification-item-subject">
-                                                    {notification.decision_subject || 'New decision available'}
+                                                    {notification.match_count === 1 
+                                                        ? '1 new decision'
+                                                        : `${notification.match_count} new decisions`
+                                                    }
                                                 </div>
-                                                {notification.decision_ada && (
-                                                    <div className="notification-item-ada">
-                                                        ADA: {notification.decision_ada}
-                                                    </div>
-                                                )}
+                                                <div className="notification-item-ada">
+                                                    {notification.subscription?.alias || 
+                                                     notification.subscription?.organization?.label ||
+                                                     notification.subscription?.entity?.label ||
+                                                     'Subscription match'}
+                                                </div>
                                             </div>
                                             
-                                            {notification.match_reason && (
+                                            {notification.aggregate_stats && notification.aggregate_stats.total_amount && (
                                                 <div className="notification-item-reason">
-                                                    {notification.match_reason}
+                                                    Total: €{notification.aggregate_stats.total_amount.toLocaleString()}
                                                 </div>
                                             )}
                                         </div>

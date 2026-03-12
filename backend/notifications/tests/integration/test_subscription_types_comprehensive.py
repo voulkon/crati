@@ -16,6 +16,11 @@ from django.utils import timezone
 from datetime import timedelta
 from decimal import Decimal
 
+from notifications.models.notification_batch import (
+    NotificationBatch, 
+    NotificationBatchDecision
+)
+
 
 pytestmark = [
     pytest.mark.django_db,
@@ -36,7 +41,6 @@ class TestBaseSubscriptionTypes:
         """Test basic organization subscription - any decision from that org"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         # Create subscription
         sub = NotificationSubscriptionFactory(
@@ -64,10 +68,12 @@ class TestBaseSubscriptionTypes:
         # Check subscription
         result = check_single_subscription(sub.id)
         
-        # Should create notification for matching decision only
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        # Should create notification batch for matching decision only
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_entity_subscription_basic(
         self, user, afm_entity, celery_eager_mode
@@ -76,7 +82,6 @@ class TestBaseSubscriptionTypes:
         from conftest import EntitySubscriptionFactory, DecisionFactory, OrganizationFactory
         from core.models.entities import DecisionEntityRelationship, EntityRole
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         # Create subscription
         sub = EntitySubscriptionFactory(
@@ -101,10 +106,12 @@ class TestBaseSubscriptionTypes:
         # Check subscription
         result = check_single_subscription(sub.id)
         
-        # Should create notification for matching decision only
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        # Should create notification batch for matching decision only
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_relationship_subscription_basic(
         self, user, organization, afm_entity, celery_eager_mode
@@ -113,7 +120,6 @@ class TestBaseSubscriptionTypes:
         from conftest import RelationshipSubscriptionFactory, DecisionFactory, OrganizationFactory
         from core.models.entities import DecisionEntityRelationship, EntityRole
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         # Create subscription
         sub = RelationshipSubscriptionFactory(
@@ -167,9 +173,11 @@ class TestBaseSubscriptionTypes:
         result = check_single_subscription(sub.id)
         
         # Should create notification for matching decision only
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_signer_subscription_basic(
         self, user, celery_eager_mode
@@ -177,7 +185,6 @@ class TestBaseSubscriptionTypes:
         """Test signer subscription - decisions signed by specific person"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory, SignerFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         # Create a signer
         signer = SignerFactory(
@@ -217,9 +224,11 @@ class TestBaseSubscriptionTypes:
         result = check_single_subscription(sub.id)
         
         # Should create notification for matching decision
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_filter_only_subscription(
         self, user, celery_eager_mode
@@ -227,7 +236,6 @@ class TestBaseSubscriptionTypes:
         """Test filter-only subscription - no specific target, just criteria"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         # Create subscription with only keyword filter (no organization/entity)
         sub = NotificationSubscriptionFactory(
@@ -254,9 +262,11 @@ class TestBaseSubscriptionTypes:
         result = check_single_subscription(sub.id)
         
         # Should create notification for matching decision
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
 
 
 # ============================================================================
@@ -272,7 +282,6 @@ class TestOrganizationWithFilters:
         """Organization + keyword filter"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -307,9 +316,11 @@ class TestOrganizationWithFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_organization_with_amount_range(
         self, user, organization, celery_eager_mode
@@ -317,7 +328,6 @@ class TestOrganizationWithFilters:
         """Organization + amount filter"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -368,9 +378,11 @@ class TestOrganizationWithFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_organization_with_decision_types(
         self, user, organization, decision_type, celery_eager_mode
@@ -378,7 +390,6 @@ class TestOrganizationWithFilters:
         """Organization + decision type filter"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory, DecisionTypeFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         # Create target decision type
         target_type = decision_type
@@ -412,9 +423,11 @@ class TestOrganizationWithFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_organization_with_keyword_and_amount(
         self, user, organization, celery_eager_mode
@@ -422,7 +435,6 @@ class TestOrganizationWithFilters:
         """Organization + keywords + amount range"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -462,9 +474,11 @@ class TestOrganizationWithFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_organization_with_all_filters(
         self, user, organization, decision_type, celery_eager_mode
@@ -472,7 +486,6 @@ class TestOrganizationWithFilters:
         """Organization + keywords + amount + decision_type"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -517,9 +530,11 @@ class TestOrganizationWithFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
 
 
 class TestEntityWithFilters:
@@ -532,7 +547,6 @@ class TestEntityWithFilters:
         from conftest import EntitySubscriptionFactory, DecisionFactory
         from core.models.entities import DecisionEntityRelationship, EntityRole
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = EntitySubscriptionFactory(
             user=user,
@@ -568,9 +582,11 @@ class TestEntityWithFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_entity_with_amount_and_keyword(
         self, user, afm_entity, celery_eager_mode
@@ -579,7 +595,6 @@ class TestEntityWithFilters:
         from conftest import EntitySubscriptionFactory, DecisionFactory
         from core.models.entities import DecisionEntityRelationship, EntityRole
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = EntitySubscriptionFactory(
             user=user,
@@ -620,9 +635,11 @@ class TestEntityWithFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
 
 
 class TestRelationshipWithFilters:
@@ -635,7 +652,6 @@ class TestRelationshipWithFilters:
         from conftest import RelationshipSubscriptionFactory, DecisionFactory
         from core.models.entities import DecisionEntityRelationship, EntityRole
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = RelationshipSubscriptionFactory(
             user=user,
@@ -674,9 +690,11 @@ class TestRelationshipWithFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_relationship_with_amount_keyword_type(
         self, user, organization, afm_entity, decision_type, celery_eager_mode
@@ -685,7 +703,6 @@ class TestRelationshipWithFilters:
         from conftest import RelationshipSubscriptionFactory, DecisionFactory
         from core.models.entities import DecisionEntityRelationship, EntityRole
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = RelationshipSubscriptionFactory(
             user=user,
@@ -732,9 +749,11 @@ class TestRelationshipWithFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
 
 
 class TestSignerWithFilters:
@@ -746,7 +765,6 @@ class TestSignerWithFilters:
         """Signer + keyword filter"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory, SignerFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         # Create signer
         signer = SignerFactory(
@@ -780,9 +798,11 @@ class TestSignerWithFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_signer_with_organization_and_amount(
         self, user, organization, celery_eager_mode
@@ -790,7 +810,6 @@ class TestSignerWithFilters:
         """Signer + organization + amount (complex combination)"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory, SignerFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         # Create signer
         signer = SignerFactory(
@@ -830,9 +849,11 @@ class TestSignerWithFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
 
 
 class TestAmountOnlyFilters:
@@ -844,7 +865,6 @@ class TestAmountOnlyFilters:
         """Filter-only subscription with just minimum amount"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -872,9 +892,11 @@ class TestAmountOnlyFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_amount_range(
         self, user, celery_eager_mode
@@ -882,7 +904,6 @@ class TestAmountOnlyFilters:
         """Filter-only subscription with amount range"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -919,9 +940,11 @@ class TestAmountOnlyFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
 
 
 class TestDecisionTypeFilters:
@@ -933,7 +956,6 @@ class TestDecisionTypeFilters:
         """Filter-only subscription with just decision type"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory, DecisionTypeFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         target_type = decision_type
         other_type = DecisionTypeFactory(uid="Δ888", label="Other")
@@ -962,9 +984,11 @@ class TestDecisionTypeFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
-        assert notifications.first().decision == matching
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        batch_decisions = batches.first().batch_decisions.all()
+        assert batch_decisions.count() == 1
+        assert batch_decisions.first().decision == matching
     
     def test_multiple_decision_types(
         self, user, decision_type, celery_eager_mode
@@ -972,7 +996,6 @@ class TestDecisionTypeFilters:
         """Filter subscription with multiple decision types"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory, DecisionTypeFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         type1 = decision_type
         type2 = DecisionTypeFactory(uid="Δ777", label="Type 2")
@@ -1009,12 +1032,15 @@ class TestDecisionTypeFilters:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 2
-        decision_ids = [n.decision.id for n in notifications]
-        assert matching1.id in decision_ids
-        assert matching2.id in decision_ids
-        assert non_matching.id not in decision_ids
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 2
+        if batches.count() > 0:
+            batch_decisions = batches.first().batch_decisions.all()
+            assert batch_decisions.count() == 2
+            decision_ids = [bd.decision.id for bd in batch_decisions]
+            assert matching1.id in decision_ids
+            assert matching2.id in decision_ids
+            assert non_matching.id not in decision_ids
 
 
 # ============================================================================
@@ -1034,7 +1060,6 @@ class TestEdgeCasesAndComplexCombinations:
         """Test keyword matching with different operators (OR vs AND)"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -1074,9 +1099,13 @@ class TestEdgeCasesAndComplexCombinations:
         )
         
         result = check_single_subscription(sub.id)
+        number_of_decisions_added = result['decisions_added']
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == expected_count
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert number_of_decisions_added == expected_count
+        if expected_count > 0:
+            batch_decisions = batches.first().batch_decisions.all()
+            assert batch_decisions.count() == expected_count
     
     def test_no_results_when_no_matches(
         self, user, organization, celery_eager_mode
@@ -1084,7 +1113,6 @@ class TestEdgeCasesAndComplexCombinations:
         """Test that no notifications are created when nothing matches"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -1104,8 +1132,8 @@ class TestEdgeCasesAndComplexCombinations:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 0
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 0
     
     def test_duplicate_notification_prevention(
         self, user, organization, celery_eager_mode
@@ -1113,7 +1141,6 @@ class TestEdgeCasesAndComplexCombinations:
         """Test that running check twice doesn't create duplicate notifications"""
         from conftest import NotificationSubscriptionFactory, DecisionFactory
         from notifications.tasks import check_single_subscription
-        from notifications.models import Notification
         
         sub = NotificationSubscriptionFactory(
             user=user,
@@ -1130,11 +1157,11 @@ class TestEdgeCasesAndComplexCombinations:
         
         # Run check first time
         result1 = check_single_subscription(sub.id, lookback_days=30)
-        notifications1 = Notification.objects.filter(subscription=sub).count()
+        notifications1 = NotificationBatch.objects.filter(subscription=sub).count()
         
         # Run check second time (should not create duplicates)
         result2 = check_single_subscription(sub.id, lookback_days=30)
-        notifications2 = Notification.objects.filter(subscription=sub).count()
+        notifications2 = NotificationBatch.objects.filter(subscription=sub).count()
         
         # Should still be the same count
         assert notifications1 == notifications2 == 1
@@ -1163,5 +1190,8 @@ class TestEdgeCasesAndComplexCombinations:
         
         result = check_single_subscription(sub.id)
         
-        notifications = Notification.objects.filter(subscription=sub)
-        assert notifications.count() == 1
+        batches = NotificationBatch.objects.filter(subscription=sub)
+        assert batches.count() == 1
+        if batches.count() > 0:
+            batch_decisions = batches.first().batch_decisions.all()
+            assert batch_decisions.count() == 1

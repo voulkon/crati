@@ -131,23 +131,46 @@ def notification_with_read_status(user, notification_subscription, decision):
 
 @pytest.fixture
 def unread_notifications(user, notification_subscription):
-    """Create multiple unread notifications"""
-    from conftest import NotificationFactory, DecisionFactory
+    """Create multiple unread notification batches (updated for batch system)"""
+    from conftest import NotificationBatchFactory
     
-    notifications = []
+    batches = []
     for i in range(3):
-        decision = DecisionFactory(
-            organization=notification_subscription.organization
-        )
-        notifications.append(
-            NotificationFactory(
+        batches.append(
+            NotificationBatchFactory(
                 user=user,
                 subscription=notification_subscription,
-                decision=decision,
-                is_read=False
+                is_read=False,
+                match_count=1
             )
         )
-    return notifications
+    return batches
+
+
+@pytest.fixture
+def notification(user, notification_subscription):
+    """Create a single notification batch (alias for backward compatibility)"""
+    from conftest import NotificationBatchFactory
+    
+    return NotificationBatchFactory(
+        user=user,
+        subscription=notification_subscription,
+        is_read=False,
+        match_count=1
+    )
+
+
+@pytest.fixture
+def notification_with_read_status(user, notification_subscription):
+    """Create a read notification batch"""
+    from conftest import NotificationBatchFactory
+    
+    return NotificationBatchFactory(
+        user=user,
+        subscription=notification_subscription,
+        is_read=True,
+        match_count=1
+    )
 
 
 @pytest.fixture

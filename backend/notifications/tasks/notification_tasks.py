@@ -8,7 +8,7 @@ from loguru import logger
 
 
 @shared_task
-def check_single_subscription(subscription_id, lookback_days=30, use_batch=False):
+def check_single_subscription(subscription_id, lookback_days=30, use_batch=True):
     """
     Check a single subscription for matching decisions.
     Used for on-demand checks triggered by users via the "check now" button.
@@ -140,10 +140,15 @@ def check_subscriptions_for_new_decisions():
             # Find matching decisions
             matching_decisions = find_matching_decisions(subscription, check_window_start)
             
-            # Create notifications for matches
-            notifications_count = create_notifications_for_matches(subscription, matching_decisions)
+            # Create batch for matches
+            batch_result = create_batch_for_matches(
+                subscription,
+                matching_decisions,
+                check_window_start,
+                check_window_end
+            )
             
-            notifications_created += notifications_count
+            notifications_created += batch_result.get('decisions_added', 0)
             checked_count += 1
             
             # Update last_checked
@@ -282,6 +287,7 @@ def create_batch_for_matches(subscription, matching_decisions, check_window_star
                 batch_decisions_to_create.append(
                     NotificationBatchDecision(
                         batch=batch,
+                        subscription=subscription,
                         decision=decision,
                         match_reason=match_reason,
                         match_details=match_details

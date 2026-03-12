@@ -521,6 +521,25 @@
     "showViewed": "Show Viewed",
     "notViewed": "Not Viewed",
     "viewed": "Viewed",
-    "noDecisionsInBatch": "No decisions found in this batch"
+    "noDecisionsInBatch": "No decisions found in this batch",
+    "subscriptionHistory": "Subscription History",
+    "organizationPrefix": "Organization:",
+    "entityPrefix": "Entity:",
+    "afmPrefix": "AFM:",
+    "noTargetSpecified": "No target specified",
+    "activeFilters": "Active Filters",
+    "allKeywordsRequired": "All keywords required",
+    "anyKeywordMatches": "Any keyword matches",
+    "overview": "Overview",
+    "totalBatches": "Total Batches",
+    "totalDecisions": "Total Decisions",
+    "dateRange": "Date Range",
+    "since": "Since",
+    "until": "Until",
+    "lastChecked": "Last Checked",
+    "summaryStatistics": "Summary Statistics",
+    "maxAmount": "Max Amount",
+    "minAmount": "Min Amount",
+    "totalMatches": "Total Matches"
   }
 }

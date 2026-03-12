@@ -2,6 +2,7 @@ import React from 'react';
 import PropTypes from 'prop-types';
 import { CalendarIcon, ChartIcon, FileIcon } from './Icons';
 import { RefreshCw } from 'lucide-react';
+import { useTranslation } from '../contexts/TranslationContext';
 import './SubscriptionMetadataHeader.css';
 
 /**
@@ -17,10 +18,9 @@ const SubscriptionMetadataHeader = ({
   dateRange,
   formatDate,
   formatAmount,
-  title = 'Subscription History'
+  title
 }) => {
-  // Translation hook available for future use
-  // const { t } = useTranslation();
+  const { t } = useTranslation();
 
   if (!subscription) {
     return null;
@@ -44,12 +44,12 @@ const SubscriptionMetadataHeader = ({
   // Determine subscription target display
   const getSubscriptionTarget = () => {
     if (organization_label) {
-      return `Organization: ${organization_label}`;
+      return `${t('notifications.organizationPrefix')} ${organization_label}`;
     }
     if (entity_name) {
-      return `Entity: ${entity_name}${entity_afm ? ` (AFM: ${entity_afm})` : ''}`;
+      return `${t('notifications.entityPrefix')} ${entity_name}${entity_afm ? ` (${t('notifications.afmPrefix')} ${entity_afm})` : ''}`;
     }
-    return 'No target specified';
+    return t('notifications.noTargetSpecified');
   };
 
   // Check if any filters are applied
@@ -58,7 +58,7 @@ const SubscriptionMetadataHeader = ({
   return (
     <div className="subscription-metadata-header">
       {/* Title */}
-      <h1 className="subscription-title">{title}</h1>
+      <h1 className="subscription-title">{title || t('notifications.subscriptionHistory')}</h1>
 
       {/* Subscription Name and Target */}
       <div className="subscription-primary-info">
@@ -80,11 +80,11 @@ const SubscriptionMetadataHeader = ({
       {/* Filters Applied */}
       {hasFilters && (
         <div className="filters-section">
-          <h3 className="filters-title">Active Filters</h3>
+          <h3 className="filters-title">{t('notifications.activeFilters')}</h3>
           <div className="filters-grid">
             {keywords && keywords.length > 0 && (
               <div className="filter-item">
-                <div className="filter-label">Keywords</div>
+                <div className="filter-label">{t('notifications.keywords')}</div>
                 <div className="filter-value">
                   <div className="keywords-list">
                     {keywords.map((keyword, index) => (
@@ -92,7 +92,7 @@ const SubscriptionMetadataHeader = ({
                     ))}
                   </div>
                   {keyword_match_operator && (
-                    <span className="match-operator">{keyword_match_operator === 'AND' ? 'All keywords required' : 'Any keyword matches'}</span>
+                    <span className="match-operator">{keyword_match_operator === 'AND' ? t('notifications.allKeywordsRequired') : t('notifications.anyKeywordMatches')}</span>
                   )}
                 </div>
               </div>
@@ -100,7 +100,7 @@ const SubscriptionMetadataHeader = ({
 
             {(amount_min || amount_max) && (
               <div className="filter-item">
-                <div className="filter-label">Amount Range</div>
+                <div className="filter-label">{t('filters.amountRange')}</div>
                 <div className="filter-value">
                   {amount_min && amount_max
                     ? `${formatAmount ? formatAmount(amount_min) : amount_min} - ${formatAmount ? formatAmount(amount_max) : amount_max}`
@@ -114,7 +114,7 @@ const SubscriptionMetadataHeader = ({
 
             {decision_types && decision_types.length > 0 && (
               <div className="filter-item">
-                <div className="filter-label">Decision Types</div>
+                <div className="filter-label">{t('filters.decisionTypes')}</div>
                 <div className="filter-value">
                   <div className="types-list">
                     {decision_types.map((type, index) => (
@@ -130,13 +130,13 @@ const SubscriptionMetadataHeader = ({
 
       {/* Summary Statistics */}
       <div className="subscription-stats-section">
-        <h3 className="stats-title">Overview</h3>
+        <h3 className="stats-title">{t('notifications.overview')}</h3>
         <div className="stats-grid">
           <div className="stat-card">
             <ChartIcon className="stat-icon" size={32} />
             <div className="stat-content">
               <div className="stat-value">{totalBatches || 0}</div>
-              <div className="stat-label">Total Batches</div>
+              <div className="stat-label">{t('notifications.totalBatches')}</div>
             </div>
           </div>
 
@@ -144,7 +144,7 @@ const SubscriptionMetadataHeader = ({
             <FileIcon className="stat-icon" size={32} />
             <div className="stat-content">
               <div className="stat-value">{totalDecisions || 0}</div>
-              <div className="stat-label">Total Decisions</div>
+              <div className="stat-label">{t('notifications.totalDecisions')}</div>
             </div>
           </div>
 
@@ -152,16 +152,16 @@ const SubscriptionMetadataHeader = ({
             <div className="stat-card wide">
               <CalendarIcon className="stat-icon" size={32} />
               <div className="stat-content">
-                <div className="stat-label">Date Range</div>
+                <div className="stat-label">{t('notifications.dateRange')}</div>
                 <div className="stat-value date-range">
                   {dateRange.from && dateRange.to ? (
                     <>
                       {formatDate(dateRange.from)} <span className="arrow">→</span> {formatDate(dateRange.to)}
                     </>
                   ) : dateRange.from ? (
-                    `Since ${formatDate(dateRange.from)}`
+                    `${t('notifications.since')} ${formatDate(dateRange.from)}`
                   ) : dateRange.to ? (
-                    `Until ${formatDate(dateRange.to)}`
+                    `${t('notifications.until')} ${formatDate(dateRange.to)}`
                   ) : null}
                 </div>
               </div>
@@ -174,13 +174,13 @@ const SubscriptionMetadataHeader = ({
       <div className="subscription-metadata-footer">
         {created_at && (
           <div className="metadata-item">
-            <span className="metadata-label">Created:</span>
+            <span className="metadata-label">{t('notifications.created')}:</span>
             <span className="metadata-value">{formatDate(created_at)}</span>
           </div>
         )}
         {last_checked && (
           <div className="metadata-item">
-            <span className="metadata-label">Last Checked:</span>
+            <span className="metadata-label">{t('notifications.lastChecked')}:</span>
             <span className="metadata-value">{formatDate(last_checked)}</span>
           </div>
         )}

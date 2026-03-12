@@ -17,9 +17,8 @@ const BatchMetadataHeader = ({
   showCreatedAt = true,
   showSubscriptionInfo = true,
   showStats = true,
-  title = 'Notification Batch'
+  title
 }) => {
-  // eslint-disable-next-line no-unused-vars
   const { t } = useTranslation();
 
   if (!batch) {
@@ -31,12 +30,12 @@ const BatchMetadataHeader = ({
   return (
     <div className="batch-metadata-header">
       {/* Title */}
-      <h1 className="batch-title">{title}</h1>
+      <h1 className="batch-title">{title || t('notifications.notificationBatch')}</h1>
 
       {/* Subscription Info */}
       {showSubscriptionInfo && subscription && (
         <div className="subscription-info">
-          <div className="info-label">Subscription</div>
+          <div className="info-label">{t('notifications.subscription')}</div>
           <div className="subscription-details">
             {subscription.alias && (
               <span className="subscription-alias">{subscription.alias}</span>
@@ -50,7 +49,7 @@ const BatchMetadataHeader = ({
               <span className="entity-name">
                 {subscription.entity_name}
                 {subscription.entity_afm && (
-                  <span className="entity-afm"> (AFM: {subscription.entity_afm})</span>
+                  <span className="entity-afm"> ({t('notifications.afmPrefix')} {subscription.entity_afm})</span>
                 )}
               </span>
             )}
@@ -62,7 +61,7 @@ const BatchMetadataHeader = ({
       <div className="batch-metadata">
         {showCheckWindow && check_window_start && check_window_end && (
           <div className="metadata-item">
-            <div className="metadata-label">Check Window</div>
+            <div className="metadata-label">{t('notifications.checkWindow')}</div>
             <div className="metadata-value">
               <span className="date-range">
                 {formatDate(check_window_start)} → {formatDate(check_window_end)}
@@ -73,13 +72,13 @@ const BatchMetadataHeader = ({
 
         {showCreatedAt && created_at && (
           <div className="metadata-item">
-            <div className="metadata-label">Created</div>
+            <div className="metadata-label">{t('notifications.created')}</div>
             <div className="metadata-value">{formatDate(created_at)}</div>
           </div>
         )}
 
         <div className="metadata-item">
-          <div className="metadata-label">Total Matches</div>
+          <div className="metadata-label">{t('notifications.totalMatches')}</div>
           <div className="metadata-value highlight">{match_count || 0}</div>
         </div>
       </div>
@@ -87,39 +86,39 @@ const BatchMetadataHeader = ({
       {/* Aggregate Statistics */}
       {showStats && aggregate_stats && Object.keys(aggregate_stats).length > 0 && (
         <div className="statistics-section">
-          <h3 className="statistics-title">Summary Statistics</h3>
+          <h3 className="statistics-title">{t('notifications.summaryStatistics')}</h3>
           <div className="statistics-grid">
             {aggregate_stats.total_amount !== undefined && (
               <div className="stat-card">
-                <div className="stat-label">Total Amount</div>
+                <div className="stat-label">{t('notifications.totalAmount')}</div>
                 <div className="stat-value">{formatAmount(aggregate_stats.total_amount)}</div>
               </div>
             )}
 
             {aggregate_stats.avg_amount !== undefined && (
               <div className="stat-card">
-                <div className="stat-label">Average Amount</div>
+                <div className="stat-label">{t('notifications.avgAmount')}</div>
                 <div className="stat-value">{formatAmount(aggregate_stats.avg_amount)}</div>
               </div>
             )}
 
             {aggregate_stats.max_amount !== undefined && (
               <div className="stat-card">
-                <div className="stat-label">Max Amount</div>
+                <div className="stat-label">{t('notifications.maxAmount')}</div>
                 <div className="stat-value">{formatAmount(aggregate_stats.max_amount)}</div>
               </div>
             )}
 
             {aggregate_stats.min_amount !== undefined && (
               <div className="stat-card">
-                <div className="stat-label">Min Amount</div>
+                <div className="stat-label">{t('notifications.minAmount')}</div>
                 <div className="stat-value">{formatAmount(aggregate_stats.min_amount)}</div>
               </div>
             )}
 
             {aggregate_stats.decision_type_counts && (
               <div className="stat-card full-width">
-                <div className="stat-label">Decision Types</div>
+                <div className="stat-label">{t('notifications.decisionTypes')}</div>
                 <div className="decision-types">
                   {Object.entries(aggregate_stats.decision_type_counts).map(([type, count]) => (
                     <span key={type} className="type-badge">

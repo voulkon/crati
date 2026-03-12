@@ -1032,15 +1032,16 @@ class TestDecisionTypeFilters:
         
         result = check_single_subscription(sub.id)
         
-        batches = NotificationBatch.objects.filter(subscription=sub)
-        assert batches.count() == 2
-        if batches.count() > 0:
-            batch_decisions = batches.first().batch_decisions.all()
-            assert batch_decisions.count() == 2
-            decision_ids = [bd.decision.id for bd in batch_decisions]
-            assert matching1.id in decision_ids
-            assert matching2.id in decision_ids
-            assert non_matching.id not in decision_ids
+        batch = NotificationBatch.objects.filter(subscription=sub)
+        assert batch.count() == 1
+
+        batch_decisions = batch.first().batch_decisions.all()
+        assert batch_decisions.count() == 2
+        
+        decision_ids = [bd.decision.id for bd in batch_decisions]
+        assert matching1.id in decision_ids
+        assert matching2.id in decision_ids
+        assert non_matching.id not in decision_ids
 
 
 # ============================================================================

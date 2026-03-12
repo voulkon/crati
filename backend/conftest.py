@@ -281,6 +281,7 @@ class NotificationBatchDecisionFactory(DjangoModelFactory):
         model = 'notifications.NotificationBatchDecision'
     
     batch = factory.SubFactory(NotificationBatchFactory)
+    subscription = factory.LazyAttribute(lambda obj: obj.batch.subscription if obj.batch else None)
     decision = factory.SubFactory(DecisionFactory)
     match_reason = 'organization_match'
     match_details = factory.LazyAttribute(lambda obj: {

@@ -44,8 +44,8 @@ const NotificationBatchDetailPage = () => {
           batchData.is_read = true;
         }
 
-        // Get batch decisions (paginated)
-        const decisionsData = await getBatchDecisions(batchId, 1, 20, isViewedFilter);
+        // Get batch decisions (paginated) with sorting
+        const decisionsData = await getBatchDecisions(batchId, 1, 20, isViewedFilter, sortBy);
         setDecisions(decisionsData.results || []);
         setPagination({
           current_page: 1,
@@ -65,7 +65,7 @@ const NotificationBatchDetailPage = () => {
     if (batchId) {
       fetchBatchData();
     }
-  }, [batchId, isViewedFilter]);
+  }, [batchId, isViewedFilter, sortBy]);
 
   const handleLoadMore = async () => {
     if (!pagination?.has_next || loadingMore) return;
@@ -73,7 +73,7 @@ const NotificationBatchDetailPage = () => {
     try {
       setLoadingMore(true);
       const nextPage = pagination.current_page + 1;
-      const decisionsData = await getBatchDecisions(batchId, nextPage, 20, isViewedFilter);
+      const decisionsData = await getBatchDecisions(batchId, nextPage, 20, isViewedFilter, sortBy);
       
       setDecisions(prev => [...prev, ...(decisionsData.results || [])]);
       setPagination({
@@ -226,7 +226,7 @@ const NotificationBatchDetailPage = () => {
           </h3>
           
           <div className="controls-container">
-            <SortControl sortBy={sortBy} onSortChange={setSortBy} />
+            <SortControl sortBy={sortBy} onSortChange={setSortBy} options="simple" />
             
             {/* Viewed filter */}
             <div className="viewed-filter">

@@ -635,6 +635,7 @@ class NotificationBatchViewSet(viewsets.ReadOnlyModelViewSet):
         - page: Page number (default: 1)
         - page_size: Items per page (default: 20, max: 100)
         - is_viewed: Filter by viewed status (true/false)
+        - sort: Sort order (recent, oldest, amount_desc, amount_asc) (default: recent)
         
         Returns:
             {
@@ -665,7 +666,17 @@ class NotificationBatchViewSet(viewsets.ReadOnlyModelViewSet):
         ).prefetch_related(
             'decision__signers',
             'decision__kae_amounts'
-        ).order_by('-added_at')
+        )
+        
+        # Apply sorting with proper NULL handling
+        from api.utils.sorting import apply_decision_sorting
+        sort_by = request.query_params.get('sort', 'recent')
+        queryset = apply_decision_sorting(
+            queryset, 
+            sort_by, 
+            amount_field='decision__amount', 
+            date_field='decision__issue_date'
+        )
         
         # Paginate
         paginator = PageNumberPagination()

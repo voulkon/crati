@@ -283,7 +283,7 @@ const AFMEntityDetailPage = () => {
           </h3>
           
           <div className="controls-container">
-            <SortControl sortBy={sortBy} onSortChange={setSortBy} />
+            <SortControl sortBy={sortBy} onSortChange={setSortBy} options="simple" />
           </div>
         </div>
 

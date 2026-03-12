@@ -162,12 +162,16 @@ export async function getNotificationBatch(id) {
  * @param {number} [page=1] - Page number
  * @param {number} [pageSize=20] - Items per page
  * @param {boolean} [isViewed] - Filter by viewed status
+ * @param {string} [sortBy='recent'] - Sort order (recent, oldest, amount_desc, amount_asc)
  * @returns {Promise<Object>} Paginated response with decisions
  */
-export async function getBatchDecisions(batchId, page = 1, pageSize = 20, isViewed = null) {
+export async function getBatchDecisions(batchId, page = 1, pageSize = 20, isViewed = null, sortBy = 'recent') {
   const params = { page, page_size: pageSize };
   if (isViewed !== null) {
     params.is_viewed = isViewed;
+  }
+  if (sortBy) {
+    params.sort = sortBy;
   }
   const response = await apiClient.get(`${BATCHES_BASE}/${batchId}/decisions/`, { params });
   return response.data;

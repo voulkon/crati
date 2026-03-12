@@ -54,6 +54,11 @@ class DecisionNestedForBatchSerializer(serializers.ModelSerializer):
     # Has document content flag
     has_document_content = serializers.SerializerMethodField()
     
+    # Entity data flags to prevent N+1 queries in frontend
+    # Adding these fields (even as null) tells DecisionCard not to auto-fetch entities
+    entity_amount = serializers.SerializerMethodField()
+    main_recipient = serializers.SerializerMethodField()
+    
     class Meta:
         model = Decision
         fields = [
@@ -74,6 +79,8 @@ class DecisionNestedForBatchSerializer(serializers.ModelSerializer):
             'has_document_content',
             'document_url',
             'status',
+            'entity_amount',
+            'main_recipient',
         ]
         read_only_fields = fields
     
@@ -139,6 +146,20 @@ class DecisionNestedForBatchSerializer(serializers.ModelSerializer):
     def get_has_document_content(self, obj):
         """Check if decision has document extraction content."""
         return hasattr(obj, 'document_extraction')
+    
+    def get_entity_amount(self, obj):
+        """
+        Return None to indicate entity data is available (prevents auto-fetch).
+        For batch notifications, we don't preload full entity data to keep responses light.
+        """
+        return None
+    
+    def get_main_recipient(self, obj):
+        """
+        Return None to indicate entity data is available (prevents auto-fetch).
+        For batch notifications, we don't preload full entity data to keep responses light.
+        """
+        return None
 
 
 class NotificationBatchDecisionSerializer(serializers.ModelSerializer):

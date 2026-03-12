@@ -135,20 +135,27 @@ def afm_entity_decisions(request, afm):
         if roles_filter and roles_filter != [""]:
             relationships = relationships.filter(role__in=roles_filter)
 
-        # Apply sorting - now using linked amounts instead of decision.amount
-        if sort_by == "recent":
+        # Apply sorting with proper NULL handling
+        from api.utils.sorting import apply_aggregated_amount_sorting
+        
+        # For amount sorting, annotate with total linked amount first
+        if sort_by in ("amount_desc", "amount_asc"):
+            relationships = relationships.annotate(
+                total_linked_amount=Sum("linked_amounts__amount")
+            )
+            relationships = apply_aggregated_amount_sorting(
+                relationships,
+                sort_by,
+                aggregation_annotation='total_linked_amount',
+                date_field='decision__issue_date'
+            )
+        elif sort_by == "recent":
             relationships = relationships.order_by("-decision__issue_date")
         elif sort_by == "oldest":
             relationships = relationships.order_by("decision__issue_date")
-        elif sort_by == "amount_desc":
-            # Annotate with total linked amount for sorting
-            relationships = relationships.annotate(
-                total_linked_amount=Sum("linked_amounts__amount")
-            ).order_by("-total_linked_amount")
-        elif sort_by == "amount_asc":
-            relationships = relationships.annotate(
-                total_linked_amount=Sum("linked_amounts__amount")
-            ).order_by("total_linked_amount")
+        else:
+            # Default to recent
+            relationships = relationships.order_by("-decision__issue_date")
 
         # Pagination
         total_items = relationships.count()

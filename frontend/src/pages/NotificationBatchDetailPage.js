@@ -5,6 +5,7 @@ import { getNotificationBatch, getBatchDecisions, markBatchRead } from '../api/n
 import DecisionCard from '../components/DecisionCard';
 import SortControl from '../components/SortControl';
 import apiClient from '../api/client';
+import { formatAmount } from '../utils/dateUtils';
 import './NotificationBatchDetailPage.css';
 
 /**
@@ -97,14 +98,6 @@ const NotificationBatchDetailPage = () => {
       console.error('Error fetching document content:', error);
       throw error;
     }
-  };
-
-  const formatAmount = (amount) => {
-    if (!amount || amount === 0) return t('common.noAmount');
-    return `€${amount.toLocaleString(undefined, { 
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    })}`;
   };
 
   const formatDate = (dateString) => {

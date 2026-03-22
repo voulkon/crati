@@ -32,6 +32,9 @@ class DecisionNestedForBatchSerializer(serializers.ModelSerializer):
     Includes all fields needed by DecisionCard component in the frontend.
     """
     
+    # Convert amount from Decimal to float for consistency with other API endpoints
+    amount = serializers.SerializerMethodField()
+    
     # Nested organization object
     organization = serializers.SerializerMethodField()
     
@@ -83,6 +86,10 @@ class DecisionNestedForBatchSerializer(serializers.ModelSerializer):
             'main_recipient',
         ]
         read_only_fields = fields
+    
+    def get_amount(self, obj):
+        """Convert DecimalField amount to float for consistency with other API endpoints."""
+        return float(obj.amount) if obj.amount else None
     
     def get_organization(self, obj):
         """Return organization as nested object."""

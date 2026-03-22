@@ -2,17 +2,20 @@
   min-height: 100vh;
   background: linear-gradient(135deg, var(--bg-color) 0%, var(--hover-bg) 100%);
   color: var(--text-color);
+  /* Add top padding to account for fixed controls on right only */
+  padding-top: 70px;
 }
 
 .homepage-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 var(--spacing-xl);
+  /* Less left padding since no logo, balanced right for controls */
+  padding: 0 clamp(var(--spacing-xl), 10vw, 200px) 0 var(--spacing-xl);
 }
 
-/* Hero Section */
+/* Hero Section - keeping tight spacing */
 .hero-section {
-  padding: 60px 0;
+  padding: var(--spacing-xl) 0 var(--spacing-xxl) 0;
   text-align: center;
 }
 
@@ -27,31 +30,22 @@
 }
 
 .hero-subtitle {
-  font-size: var(--font-xl);
+  font-size: var(--font-lg);
   color: var(--muted-text);
-  margin-bottom: var(--spacing-xl);
-  max-width: 600px;
-  margin-left: auto;
-  margin-right: auto;
+  margin-bottom: var(--spacing-lg);
+  font-weight: var(--font-medium);
 }
 
 /* Hero Search - Enhanced version */
 .hero-search-enhanced {
   display: flex;
   justify-content: center;
-  margin-bottom: var(--spacing-xxxl);
-  margin-top: var(--spacing-xxxl);
+  margin-bottom: var(--spacing-xxl);
 }
 
 .hero-search-enhanced .homepage-super-search {
   max-width: 800px;
   width: 100%;
-}
-
-/* Scale up the search input */
-.hero-search-enhanced .super-search-container {
-  transform: scale(1.1);
-  transform-origin: top center;
 }
 
 .hero-stats {
@@ -84,9 +78,9 @@
 .data-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-xxl);
-  margin-top: var(--spacing-xxxxl);
-  margin-bottom: var(--spacing-xxxxl);
+  gap: var(--spacing-xl);
+  margin-top: var(--spacing-xl);
+  margin-bottom: var(--spacing-xxl);
 }
 
 .data-section {

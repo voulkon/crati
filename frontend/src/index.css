@@ -28,6 +28,7 @@
   --font-normal: 400;
   --font-medium: 500;
   --font-bold: 700;
+  --font-black: 900;
   
   /* Transitions */
   --transition-fast: 0.2s ease;
@@ -426,6 +427,22 @@ body {
   background-color: var(--bg-color);
   color: var(--text-color);
   transition: var(--transition-normal);
+}
+
+/* Global utility for balanced content with fixed controls */
+.balanced-content {
+  padding-top: 80px; /* Account for fixed top controls */
+  padding-left: clamp(var(--spacing-xl), 10vw, 180px);
+  padding-right: clamp(var(--spacing-xl), 10vw, 180px);
+}
+
+/* Alternative: Centered content with max-width */
+.centered-content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-top: 80px;
+  padding-left: clamp(var(--spacing-xl), 8vw, 160px);
+  padding-right: clamp(var(--spacing-xl), 8vw, 160px);
 }
 
 * {

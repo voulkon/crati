@@ -143,7 +143,16 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1;
+  align-items: center;
+  text-align: center;
+}
+
+.stat-item:first-child {
+  flex: 2; /* Amount gets more space (can have many digits) */
+}
+
+.stat-item:last-child {
+  flex: 1; /* Count gets less space (max ~4 digits) */
 }
 
 .stat-label {
@@ -157,10 +166,15 @@
   font-size: 1rem;
   font-weight: 600;
   color: var(--text-color);
+  word-break: break-all; /* Prevent overflow for very large amounts */
 }
 
 .stat-value.amount {
   color: var(--primary-blue);
+}
+
+.stat-value.count {
+  color: var(--secondary-blue);
 }
 
 .see-all-button {

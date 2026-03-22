@@ -17,6 +17,7 @@ INSTALLED_APPS = [
     "admin_custom",
     "users",
     "api",
+    "notifications",  # Notification system
     "experiments",  # Experimental decomposition strategies
     "drf_yasg",
     "corsheaders",

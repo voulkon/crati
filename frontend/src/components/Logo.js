@@ -5,11 +5,11 @@ import './Logo.css';
 const Logo = ({ size = 'medium' }) => {
   return (
     <Link to="/" className={`logo-link logo-${size}`}>
-      <img 
-        src="/android-chrome-192x192.png" 
-        alt="Home" 
-        className="logo-image"
-      />
+      <span className="logo-text">
+        <span className="logo-crati">Crati</span>
+        <span className="logo-dot">.</span>
+        <span className="logo-co">Co</span>
+      </span>
     </Link>
   );
 };

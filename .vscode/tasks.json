@@ -35,7 +35,13 @@
         {
             "label": "Docker Compose (with DB) Up",
             "type": "shell",
-            "command": "docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets up",
+            "command": "docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets up -d",
+            "problemMatcher": []
+        },
+        {
+            "label": "Docker Compose (with DB) Up (Build)",
+            "type": "shell",
+            "command": "docker-compose -f docker/docker-compose.yml --env-file=.env_files/.env.local.secrets up --build -d",
             "problemMatcher": []
         },
         {
@@ -59,7 +65,7 @@
         {
             "label": "Docker Compose (no DB) Up",
             "type": "shell",
-            "command": "docker-compose -f docker/docker-compose-no-db.yml --env-file=.env_files/.env.local.no-db.secrets up",
+            "command": "docker-compose -f docker/docker-compose-no-db.yml --env-file=.env_files/.env.local.no-db.secrets up -d",
             "problemMatcher": []
         },
         {

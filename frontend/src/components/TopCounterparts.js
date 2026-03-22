@@ -154,7 +154,7 @@ const TopCounterparts = ({
                 </div>
                 <div className="stat-item">
                   <span className="stat-label">{t('counterparts.decisions')}</span>
-                  <span className="stat-value">{counterpart.decision_count}</span>
+                  <span className="stat-value count">{counterpart.decision_count}</span>
                 </div>
               </div>
             </button>

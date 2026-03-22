@@ -48,7 +48,7 @@ export const createDateRangeUtils = () => {
 
 export const formatAmount = (amount) => {
   if (!amount || amount === 0) return 'No amount';
-  return `€${Number(amount).toLocaleString(undefined, { 
+  return `€${amount.toLocaleString(undefined, { 
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   })}`;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../contexts/TranslationContext';
 import { 
@@ -22,6 +22,8 @@ import { Bell, ClipboardList, Search, Inbox, X, CheckCheck, Trash2 } from 'lucid
 export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChange }) {
     const navigate = useNavigate();
     const { t } = useTranslation();
+    const sidebarRef = useRef(null);
+    const resizeHandleRef = useRef(null);
 
     // State
     const [activeTab, setActiveTab] = useState('subscriptions'); // 'notifications' or 'subscriptions'
@@ -34,6 +36,69 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
         type: 'all', // all, organization, entity, relationship, person, signer, filter_only
         sortBy: 'recent' // recent, alphabetical, type, notifications
     });
+    const [sidebarWidth, setSidebarWidth] = useState(() => {
+        const saved = localStorage.getItem('notificationSidebarWidth');
+        return saved ? parseInt(saved, 10) : 400;
+    });
+    const [isResizing, setIsResizing] = useState(false);
+
+    // Resize handlers
+    const handleResizeStart = useCallback((e) => {
+        e.preventDefault();
+        setIsResizing(true);
+    }, []);
+
+    const handleResizeMove = useCallback((e) => {
+        if (!isResizing || !sidebarRef.current) return;
+        
+        const newWidth = e.clientX;
+        const minWidth = 300;
+        const maxWidth = 800;
+        
+        if (newWidth >= minWidth && newWidth <= maxWidth) {
+            setSidebarWidth(newWidth);
+            sidebarRef.current.style.width = `${newWidth}px`;
+        }
+    }, [isResizing]);
+
+    const handleResizeEnd = useCallback(() => {
+        if (isResizing) {
+            setIsResizing(false);
+            localStorage.setItem('notificationSidebarWidth', sidebarWidth.toString());
+        }
+    }, [isResizing, sidebarWidth]);
+
+    // Resize event listeners
+    useEffect(() => {
+        if (isResizing) {
+            document.addEventListener('mousemove', handleResizeMove);
+            document.addEventListener('mouseup', handleResizeEnd);
+            document.body.style.cursor = 'ew-resize';
+            document.body.style.userSelect = 'none';
+            
+            return () => {
+                document.removeEventListener('mousemove', handleResizeMove);
+                document.removeEventListener('mouseup', handleResizeEnd);
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            };
+        }
+    }, [isResizing, handleResizeMove, handleResizeEnd]);
+
+    // Apply width on mount and when it changes
+    useEffect(() => {
+        if (sidebarRef.current) {
+            sidebarRef.current.style.width = `${sidebarWidth}px`;
+        }
+    }, [sidebarWidth]);
+
+    // Determine card layout class based on width
+    const getCardClass = () => {
+        if (sidebarWidth < 350) return 'icon-only';
+        if (sidebarWidth < 450) return 'compact';
+        return '';
+    };
+
 
     // Load data function
     const loadData = useCallback(async () => {
@@ -223,7 +288,14 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
     return (
         <>
             {/* Sidebar */}
-            <div className={`notification-sidebar ${isOpen ? 'open' : ''}`}>
+            <div ref={sidebarRef} className={`notification-sidebar ${isOpen ? 'open' : ''}`}>
+                {/* Resize Handle */}
+                <div 
+                    ref={resizeHandleRef}
+                    className={`notification-sidebar-resize-handle ${isResizing ? 'resizing' : ''}`}
+                    onMouseDown={handleResizeStart}
+                />
+                
                 {/* Header */}
                 <div className="notification-header">
                     <h2 className="notification-title">
@@ -355,6 +427,7 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
                                             key={subscription.id}
                                             subscription={subscription}
                                             onRefresh={handleSubscriptionRefresh}
+                                            cardClass={getCardClass()}
                                         />
                                     ))}
                                 </div>

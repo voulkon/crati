@@ -296,11 +296,19 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
+  min-width: 0; /* Allow buttons to shrink */
+  overflow: hidden;
 }
 
 .subscription-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.subscription-btn-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .subscription-btn-primary {
@@ -316,20 +324,22 @@
 }
 
 .subscription-btn-view-history {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background-color: var(--accent-color, var(--primary-blue));
   color: white;
-  border: none;
+  border-color: var(--accent-color, var(--primary-blue));
   font-weight: var(--font-bold);
 }
 
 .subscription-btn-view-history:hover:not(:disabled) {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px var(--shadow);
 }
 
 .subscription-btn-secondary {
   background-color: var(--selection-bg);
   color: var(--text-color);
+  border-color: var(--border-color);
 }
 
 .subscription-btn-secondary:hover:not(:disabled) {
@@ -365,4 +375,27 @@
   .subscription-btn-view-history {
     grid-column: 1 / -1;
   }
+}
+
+/* Compact layout for narrow sidebars (when resized smaller) */
+.subscription-card.compact .subscription-actions {
+  grid-template-columns: 1fr 1fr;
+}
+
+.subscription-card.compact .subscription-btn-view-history {
+  grid-column: 1 / -1;
+}
+
+/* Icon-only mode for very narrow sidebars */
+.subscription-card.icon-only .subscription-btn-text {
+  display: none;
+}
+
+.subscription-card.icon-only .subscription-actions {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.subscription-card.icon-only .subscription-btn {
+  padding: var(--spacing-xs);
+  min-width: 32px;
 }

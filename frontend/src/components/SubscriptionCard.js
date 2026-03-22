@@ -31,7 +31,7 @@ import './SubscriptionCard.css';
  * SubscriptionCard - Individual subscription display card
  * Shows subscription details with actions
  */
-export default function SubscriptionCard({ subscription, onRefresh }) {
+export default function SubscriptionCard({ subscription, onRefresh, cardClass = '' }) {
     const navigate = useNavigate();
     const { t } = useTranslation();
     const [isActionLoading, setIsActionLoading] = useState(false);
@@ -228,7 +228,7 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
     const hasCustomAlias = !!subscription.alias;
 
     return (
-        <div className={`subscription-card ${!subscription.is_active ? 'paused' : ''}`}>
+        <div className={`subscription-card ${!subscription.is_active ? 'paused' : ''} ${cardClass}`}>
             {/* Header */}
             <div className="subscription-card-header">
                 <div className="subscription-type">
@@ -367,7 +367,8 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                     onClick={() => navigate(`/notifications/subscriptions/${subscription.id}/history`)}
                     title={t('notifications.viewHistory')}
                 >
-                    <BarChart3 size={14} /> {t('notifications.viewHistory')}
+                    <BarChart3 size={14} /> 
+                    <span className="subscription-btn-text">{t('notifications.viewHistory')}</span>
                 </button>
 
                 <button
@@ -377,7 +378,10 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                     title={t('notifications.checkNowTitle')}
                 >
                     {isActionLoading ? '...' : (
-                        <><RefreshCw size={14} /> {t('notifications.checkNow')}</>
+                        <>
+                            <RefreshCw size={14} /> 
+                            <span className="subscription-btn-text">{t('notifications.checkNow')}</span>
+                        </>
                     )}
                 </button>
 
@@ -388,9 +392,15 @@ export default function SubscriptionCard({ subscription, onRefresh }) {
                     title={subscription.is_active ? t('notifications.pauseSubscription') : t('notifications.resumeSubscription')}
                 >
                     {subscription.is_active ? (
-                        <><Pause size={14} /> {t('notifications.pause')}</>
+                        <>
+                            <Pause size={14} /> 
+                            <span className="subscription-btn-text">{t('notifications.pause')}</span>
+                        </>
                     ) : (
-                        <><Play size={14} /> {t('notifications.resume')}</>
+                        <>
+                            <Play size={14} /> 
+                            <span className="subscription-btn-text">{t('notifications.resume')}</span>
+                        </>
                     )}
                 </button>
 

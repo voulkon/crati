@@ -20,16 +20,36 @@ from .views.organization_entity_relationships import (
     temporal_top_relationship_pairs_api
     )
 from users.views import UserDataViewSet
+from .auth_views import django_login, django_logout, current_user
+from notifications.views import NotificationSubscriptionViewSet, NotificationBatchViewSet
+from notifications.views_metadata import (
+    subscription_metadata,
+    decision_types_list,
+    popular_decision_types
+)
 
 router = DefaultRouter()
-# Register your viewsets
+# Register viewsets
 router.register('user-data', UserDataViewSet, basename='user-data')
+router.register('notifications/subscriptions', NotificationSubscriptionViewSet, basename='notification-subscription')
+router.register('notifications/batches', NotificationBatchViewSet, basename='notification-batch')
+# Old 'notifications' endpoint removed - use 'notifications/batches' instead
 
 urlpatterns = [
+    # Notification metadata endpoints (must be before router to avoid conflicts with notifications/<pk>/)
+    path("notifications-meta/metadata/", subscription_metadata, name="subscription_metadata"),
+    path("notifications-meta/metadata/decision-types/", decision_types_list, name="decision_types_list"),
+    path("notifications-meta/metadata/popular-decision-types/", popular_decision_types, name="popular_decision_types"),
+    
     path("", include(router.urls)),
     path("public/", public_endpoint, name="public"),
     path("protected/", protected_endpoint, name="protected"),
     path("usage/", check_api_usage, name="check_api_usage"),
+    
+    # Django authentication endpoints (for when Clerk is not configured)
+    path("auth/login/", django_login, name="django_login"),
+    path("auth/logout/", django_logout, name="django_logout"),
+    path("auth/me/", current_user, name="current_user"),
     
     # System configuration
     path("system/config/", system_views.system_config, name="system_config"),

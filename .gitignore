@@ -1,5 +1,7 @@
 *todo
+docs_deprecated/
 logs/
+implementation-tasks/
 extraction_results/
 decision_samples/
 .env.coolify-config

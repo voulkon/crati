@@ -21,6 +21,8 @@ export const ThemeProvider = ({ children }) => {
 
   const themes = [
     { id: 'light', name: 'Light', icon: '☀️' },
+    { id: 'solarized-light', name: 'Solarized Light', icon: '🌤️' },
+    { id: 'solarized-dark', name: 'Solarized Dark', icon: '🌆' },
     { id: 'dark', name: 'Dark', icon: '🌙' }
   ];
 
@@ -45,7 +47,8 @@ export const ThemeProvider = ({ children }) => {
 
   const getCurrentPaletteColor = () => {
     const currentPalette = palettes.find(p => p.id === palette);
-    return theme === 'dark' ? currentPalette?.darkColor : currentPalette?.color;
+    const isDarkTheme = theme === 'dark' || theme === 'solarized-dark';
+    return isDarkTheme ? currentPalette?.darkColor : currentPalette?.color;
   };
 
   useEffect(() => {
@@ -68,7 +71,7 @@ export const ThemeProvider = ({ children }) => {
     changeTheme,
     changePalette,
     getCurrentPaletteColor,
-    isDark: theme === 'dark',
+    isDark: theme === 'dark' || theme === 'solarized-dark',
     currentThemeName: themes.find(t => t.id === theme)?.name || 'Light',
     currentPaletteName: palettes.find(p => p.id === palette)?.name || 'Blue'
   };

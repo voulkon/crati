@@ -1,7 +1,11 @@
-import React, { createContext, useContext } from 'react';
-import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext();
+
+// Check if Clerk is available
+const isClerkAvailable = () => {
+  return !!process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+};
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -11,15 +15,16 @@ export const useAuth = () => {
   return context;
 };
 
-export const AuthProvider = ({ children }) => {
+// Clerk-based AuthProvider (when Clerk is configured)
+const ClerkAuthProvider = ({ children }) => {
+  // Dynamically import Clerk hooks only when needed
+  const { useUser, useAuth: useClerkAuth } = require('@clerk/clerk-react');
   const { user, isSignedIn, isLoaded } = useUser();
   const { getToken, signOut } = useClerkAuth();
 
-  // Fixed token method
   const getAuthToken = async () => {
     try {
       if (isSignedIn && user) {
-        // Use the auth hook's getToken method, not user.getToken
         return await getToken();
       }
       return null;
@@ -33,8 +38,9 @@ export const AuthProvider = ({ children }) => {
     user,
     isSignedIn: isSignedIn && isLoaded,
     isLoaded,
-    getToken: getAuthToken, // Use our fixed method
+    getToken: getAuthToken,
     signOut,
+    isClerkAuth: true,
   };
 
   return (
@@ -42,4 +48,119 @@ export const AuthProvider = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
+};
+
+// Basic AuthProvider (when Clerk is NOT configured)
+// Uses Django session/token authentication
+const BasicAuthProvider = ({ children }) => {
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [user, setUser] = useState(null);
+  const [isSignedIn, setIsSignedIn] = useState(false);
+
+  useEffect(() => {
+    // Check if user is authenticated via Django session
+    const checkAuth = async () => {
+      try {
+        const token = localStorage.getItem('django_auth_token');
+        if (token) {
+          // Verify token is still valid by fetching user info
+          const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/me/`, {
+            headers: {
+              'Authorization': `Token ${token}`,
+            },
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            setUser(data.user);
+            setIsSignedIn(true);
+          } else {
+            // Token invalid, clear it
+            localStorage.removeItem('django_auth_token');
+          }
+        }
+      } catch (error) {
+        console.error('Error checking auth:', error);
+      } finally {
+        setIsLoaded(true);
+      }
+    };
+    checkAuth();
+  }, []);
+
+  const signIn = async (email, password) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/login/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem('django_auth_token', data.token);
+        setUser(data.user);
+        setIsSignedIn(true);
+        return { success: true };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.error || 'Login failed' };
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      return { success: false, error: 'Network error' };
+    }
+  };
+
+  const getAuthToken = async () => {
+    // Return Django token for API requests
+    return localStorage.getItem('django_auth_token');
+  };
+
+  const signOut = async () => {
+    try {
+      const token = localStorage.getItem('django_auth_token');
+      if (token) {
+        await fetch(`${process.env.REACT_APP_API_URL}/auth/logout/`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Token ${token}`,
+          },
+        });
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      localStorage.removeItem('django_auth_token');
+      setUser(null);
+      setIsSignedIn(false);
+    }
+  };
+
+  const value = {
+    user,
+    isSignedIn,
+    isLoaded,
+    getToken: getAuthToken,
+    signIn,
+    signOut,
+    isClerkAuth: false,
+  };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+// Main AuthProvider that switches between Clerk and Basic auth
+export const AuthProvider = ({ children }) => {
+  if (isClerkAvailable()) {
+    return <ClerkAuthProvider>{children}</ClerkAuthProvider>;
+  } else {
+    return <BasicAuthProvider>{children}</BasicAuthProvider>;
+  }
 };

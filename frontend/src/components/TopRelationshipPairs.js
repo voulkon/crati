@@ -146,7 +146,7 @@ const TopRelationshipPairs = ({
                 </div>
                 <div className="stat-item">
                   <span className="stat-label">{t('counterparts.decisions')}</span>
-                  <span className="stat-value">{pair.decision_count}</span>
+                  <span className="stat-value count">{pair.decision_count}</span>
                 </div>
               </div>
             </button>

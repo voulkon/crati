@@ -1,12 +1,30 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { SignInButton, SignUpButton, UserButton } from '@clerk/clerk-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import './UserAuth.css';
 
+// Check if Clerk is available
+const isClerkAvailable = () => {
+  return !!process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+};
+
+// Lazy load Clerk components only if available
+let SignInButton, SignUpButton, UserButton;
+if (isClerkAvailable()) {
+  const clerkReact = require('@clerk/clerk-react');
+  SignInButton = clerkReact.SignInButton;
+  SignUpButton = clerkReact.SignUpButton;
+  UserButton = clerkReact.UserButton;
+}
+
 const UserAuth = () => {
   const { getCurrentPaletteColor } = useTheme();
-  const { user, isLoading, isSignedIn } = useAuth();
+  const { user, isLoading, isSignedIn, isClerkAuth } = useAuth();
+
+  // Don't render auth UI if Clerk is not available
+  if (!isClerkAuth) {
+    return null;
+  }
 
   if (isLoading) {
     return (

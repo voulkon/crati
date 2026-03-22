@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   getBookmarks,
@@ -20,6 +20,8 @@ import {LibraryIconInSidebar, LibraryFavoriteInSidebar, LibraryTimerInSidebar} f
 export default function LibrarySidebar({ isOpen, onClose, onBookmarkCountChange }) {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const sidebarRef = useRef(null);
+  const resizeHandleRef = useRef(null);
   
   // State
   const [folders, setFolders] = useState([]);
@@ -31,6 +33,11 @@ export default function LibrarySidebar({ isOpen, onClose, onBookmarkCountChange 
   const [searchQuery, setSearchQuery] = useState('');
   const [editingNotes, setEditingNotes] = useState(null); // {id, notes}
   const [expandedBookmark, setExpandedBookmark] = useState(null); // id of expanded bookmark
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('librarySidebarWidth');
+    return saved ? parseInt(saved, 10) : 400;
+  });
+  const [isResizing, setIsResizing] = useState(false);
   
   // Modal states
   const [showFolderModal, setShowFolderModal] = useState(false);
@@ -42,14 +49,66 @@ export default function LibrarySidebar({ isOpen, onClose, onBookmarkCountChange 
     icon: '📁'
   });
 
+  // Resize handlers
+  const handleResizeStart = useCallback((e) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  const handleResizeMove = useCallback((e) => {
+    if (!isResizing || !sidebarRef.current) return;
+    
+    const newWidth = e.clientX;
+    const minWidth = 300;
+    const maxWidth = 800;
+    
+    if (newWidth >= minWidth && newWidth <= maxWidth) {
+      setSidebarWidth(newWidth);
+      sidebarRef.current.style.width = `${newWidth}px`;
+    }
+  }, [isResizing]);
+
+  const handleResizeEnd = useCallback(() => {
+    if (isResizing) {
+      setIsResizing(false);
+      localStorage.setItem('librarySidebarWidth', sidebarWidth.toString());
+    }
+  }, [isResizing, sidebarWidth]);
+
+  // Resize event listeners
+  useEffect(() => {
+    if (isResizing) {
+      document.addEventListener('mousemove', handleResizeMove);
+      document.addEventListener('mouseup', handleResizeEnd);
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+      
+      return () => {
+        document.removeEventListener('mousemove', handleResizeMove);
+        document.removeEventListener('mouseup', handleResizeEnd);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+    }
+  }, [isResizing, handleResizeMove, handleResizeEnd]);
+
+  // Apply width on mount and when it changes
+  useEffect(() => {
+    if (sidebarRef.current) {
+      sidebarRef.current.style.width = `${sidebarWidth}px`;
+    }
+  }, [sidebarWidth]);
+
   useEffect(() => {
     if (isOpen) {
       loadData();
     }
+    // eslint-disable-next-line
   }, [isOpen]);
 
   useEffect(() => {
     loadBookmarks();
+    // eslint-disable-next-line
   }, [selectedFolder, viewMode]);
 
   async function loadData() {
@@ -190,11 +249,15 @@ export default function LibrarySidebar({ isOpen, onClose, onBookmarkCountChange 
 
   return (
     <>
-      {/* Overlay */}
-      <div className="library-overlay" onClick={onClose} />
-      
       {/* Sidebar */}
-      <div className={`library-sidebar ${isOpen ? 'open' : ''}`}>
+      <div ref={sidebarRef} className={`library-sidebar ${isOpen ? 'open' : ''}`}>
+        {/* Resize Handle */}
+        <div 
+          ref={resizeHandleRef}
+          className={`library-sidebar-resize-handle ${isResizing ? 'resizing' : ''}`}
+          onMouseDown={handleResizeStart}
+        />
+        
         {/* Header */}
         <div className="library-header">
           <h2 className="library-title">

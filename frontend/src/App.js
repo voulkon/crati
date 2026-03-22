@@ -1,18 +1,21 @@
 import React, { useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { SignedIn, SignedOut, RedirectToSignIn, useAuth } from '@clerk/clerk-react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { SignedIn, SignedOut, RedirectToSignIn } from "@clerk/clerk-react";
 import HomePage from "./pages/HomePage";
 import DevPage from "./pages/OrganizationsPage";
 import EntityDetailPage from "./pages/EntityDetailPage";
 import DecisionDetailPage from "./pages/DecisionDetailPage";
 import AFMEntityDetailPage from "./pages/AFMEntityDetailPage";
 import RelationshipDetailPage from "./pages/RelationshipDetailPage";
+import NotificationBatchDetailPage from "./pages/NotificationBatchDetailPage";
+import SubscriptionHistoryPage from "./pages/SubscriptionHistoryPage";
 import SearchResults from "./pages/SearchResults";
 import SuperSearchExample from "./pages/SuperSearchExample";
 import LibraryPage from "./pages/LibraryPage";
 import Clock from "./components/Clock";
 import AccessDenied from "./components/AccessDenied";
 import LibrarySidebar from "./components/LibrarySidebar";
+import NotificationSidebar from "./components/NotificationSidebar";
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { TranslationProvider } from './contexts/TranslationContext';
@@ -24,23 +27,77 @@ import RateLimitModal from './components/RateLimitModal';
 import AuthPromptModal from './components/AuthPromptModal';
 import { setTokenGetter } from './api/client';
 import { useTranslation } from './contexts/TranslationContext';
+import { useAuth } from './contexts/AuthContext';
 
-// Authentication wrapper component with allowlist check
+// Check if Clerk is available
+const isClerkAvailable = () => {
+  return !!process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
+};
+
+// Separate component to access auth context
 function AuthenticatedApp({ controlsLayout }) {
-  const { getToken } = useAuth();
+  const { getToken, isClerkAuth } = useAuth();
   const { t } = useTranslation(); // OK here - this component is inside TranslationProvider
+  const location = useLocation(); // Get current route
   const stealthAllowlist = process.env.REACT_APP_STEALTH_ALLOWLIST === 'true';
   const { isAllowed, isChecking } = useAllowlistCheck();
+  
+  // Check if we're on the homepage
+  const isHomePage = location.pathname === '/';
   
   // Library sidebar state
   const [isLibraryOpen, setIsLibraryOpen] = React.useState(false);
   const [bookmarkCount, setBookmarkCount] = React.useState(0);
   
+  // Notification sidebar state
+  const [isNotificationSidebarOpen, setIsNotificationSidebarOpen] = React.useState(false);
+  
+  // User menu state
+  const [isUserMenuOpen, setIsUserMenuOpen] = React.useState(false);
+  
+  // Toggle handlers with mutual exclusivity - only one can be open at a time
+  const handleLibraryToggle = () => {
+    setIsLibraryOpen(!isLibraryOpen);
+    if (!isLibraryOpen) {
+      // Opening library, close others
+      setIsNotificationSidebarOpen(false);
+      setIsUserMenuOpen(false);
+    }
+  };
+  
+  const handleNotificationToggle = () => {
+    setIsNotificationSidebarOpen(!isNotificationSidebarOpen);
+    if (!isNotificationSidebarOpen) {
+      // Opening notifications, close others
+      setIsLibraryOpen(false);
+      setIsUserMenuOpen(false);
+    }
+  };
+  
+  const handleUserMenuToggle = () => {
+    setIsUserMenuOpen(!isUserMenuOpen);
+    if (!isUserMenuOpen) {
+      // Opening user menu, close others
+      setIsLibraryOpen(false);
+      setIsNotificationSidebarOpen(false);
+    }
+  };
+  
+  // Handler for closing any open component when overlay is clicked
+  const handleOverlayClick = () => {
+    setIsLibraryOpen(false);
+    setIsNotificationSidebarOpen(false);
+    setIsUserMenuOpen(false);
+  };
+  
+  // Check if any component is open
+  const isAnyOpen = isLibraryOpen || isNotificationSidebarOpen || isUserMenuOpen;
+  
   // Set up the token getter for API client
   useEffect(() => {
-    setTokenGetter(getToken);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getToken]);
+    setTokenGetter(getToken, isClerkAuth);
+    // eslint-disable-next-line
+  }, [getToken, isClerkAuth]);
   
   // If allowlist is enabled, check if user is allowed
   if (stealthAllowlist) {
@@ -65,12 +122,35 @@ function AuthenticatedApp({ controlsLayout }) {
   
   return (
     <>
+      {/* Unified overlay for all split buttons - shows when any is open */}
+      {isAnyOpen && (
+        <div 
+          className="unified-overlay" 
+          onClick={handleOverlayClick}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.4)',
+            zIndex: 1002,
+            animation: 'fadeIn 0.2s ease-out'
+          }}
+        />
+      )}
+      
       {/* Flexible top controls with library toggle and bookmark button */}
       <TopControls 
         layout={controlsLayout}
-        onLibraryToggle={() => setIsLibraryOpen(!isLibraryOpen)}
+        onLibraryToggle={handleLibraryToggle}
         isLibraryOpen={isLibraryOpen}
         bookmarkCount={bookmarkCount}
+        onNotificationSidebarToggle={handleNotificationToggle}
+        isNotificationSidebarOpen={isNotificationSidebarOpen}
+        onUserMenuToggle={handleUserMenuToggle}
+        isUserMenuOpen={isUserMenuOpen}
+        hideLogo={isHomePage}
       />
       
       {/* Library Sidebar */}
@@ -78,6 +158,12 @@ function AuthenticatedApp({ controlsLayout }) {
         isOpen={isLibraryOpen}
         onClose={() => setIsLibraryOpen(false)}
         onBookmarkCountChange={setBookmarkCount}
+      />
+      
+      {/* Notification Sidebar */}
+      <NotificationSidebar 
+        isOpen={isNotificationSidebarOpen}
+        onClose={() => setIsNotificationSidebarOpen(false)}
       />
       
       <RateLimitIndicator />
@@ -102,31 +188,49 @@ function AuthenticatedApp({ controlsLayout }) {
         <Route path="/search-example" element={<SuperSearchExample />} />
         
         <Route path="/entity/:entityType/:entityId" element={<EntityDetailPage />} />
+        <Route path="/decision/:ada" element={<DecisionDetailPage />} />
         <Route path="/health" element={<Clock />} />
         <Route path="/entity/afm/:afm" element={<AFMEntityDetailPage />} />
         
         {/* Relationship page - Entity × Organization */}
         <Route path="/relationship/entity/:afm/org/:orgUid" element={<RelationshipDetailPage />} />
         
-        {/* Temporal exploration routes */}
-        <Route path="/explore/temporal/:date" element={<EntityDetailPage />} />
-        <Route path="/explore/temporal/:startDate/:endDate" element={<EntityDetailPage />} />
-        <Route path="/explore/month/:year/:month" element={<EntityDetailPage />} />
-        <Route path="/explore/week/:year/:week" element={<EntityDetailPage />} />
-        <Route path="/decision/:id" element={<DecisionDetailPage />} />
+        {/* Notification Batch Detail */}
+        <Route path="/batch/:batchId" element={<NotificationBatchDetailPage />} />
+        
+        {/* Subscription History - All decisions from a subscription */}
+        <Route path="/notifications/subscriptions/:subscriptionId/history" element={<SubscriptionHistoryPage />} />
       </Routes>
     </>
   );
 }
 
-function App() {
-  // Easy way to switch layouts - just change this value!
-  const controlsLayout = 'horizontal-right'; // Options: 'horizontal-right', 'vertical-right', 'split-corners', 'horizontal-left'
-  const { isLoaded } = useAuth();
+// Main App component
+function App({ controlsLayout = 'vertical-right' }) {
   // NOTE: Cannot use useTranslation here - this component creates the TranslationProvider
   
   // Stealth mode toggle - set REACT_APP_STEALTH_MODE=true to require authentication
   const stealthMode = process.env.REACT_APP_STEALTH_MODE === 'true';
+  const clerkAvailable = isClerkAvailable();
+
+  return (
+    <TranslationProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppContent 
+            controlsLayout={controlsLayout} 
+            stealthMode={stealthMode} 
+            clerkAvailable={clerkAvailable}
+          />
+        </AuthProvider>
+      </ThemeProvider>
+    </TranslationProvider>
+  );
+}
+
+// Separate component to access auth context
+function AppContent({ controlsLayout, stealthMode, clerkAvailable }) {
+  const { isLoaded } = useAuth();
 
   // Show loading state while checking authentication
   if (!isLoaded) {
@@ -147,35 +251,29 @@ function App() {
   }
 
   return (
-    <TranslationProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          <Router>
-            <div className="App" style={{ 
-              backgroundColor: 'var(--bg-color)', 
-              color: 'var(--text-color)', 
-              minHeight: '100vh',
-              transition: 'background-color 0.3s ease, color 0.3s ease'
-            }}>
-              {stealthMode ? (
-                // Stealth mode ON - require authentication
-                <>
-                  <SignedIn>
-                    <AuthenticatedApp controlsLayout={controlsLayout} />
-                  </SignedIn>
-                  <SignedOut>
-                    <RedirectToSignIn />
-                  </SignedOut>
-                </>
-              ) : (
-                // Stealth mode OFF - public access
-                <AuthenticatedApp controlsLayout={controlsLayout} />
-              )}
-            </div>
-          </Router>
-        </AuthProvider>
-      </ThemeProvider>
-    </TranslationProvider>
+    <Router>
+      <div className="App" style={{ 
+        backgroundColor: 'var(--bg-color)', 
+        color: 'var(--text-color)', 
+        minHeight: '100vh',
+        transition: 'background-color 0.3s ease, color 0.3s ease'
+      }}>
+        {stealthMode && clerkAvailable ? (
+          // Stealth mode ON with Clerk - require Clerk authentication
+          <>
+            <SignedIn>
+              <AuthenticatedApp controlsLayout={controlsLayout} />
+            </SignedIn>
+            <SignedOut>
+              <RedirectToSignIn />
+            </SignedOut>
+          </>
+        ) : (
+          // Stealth mode OFF or Clerk not available - public access or Django auth
+          <AuthenticatedApp controlsLayout={controlsLayout} />
+        )}
+      </div>
+    </Router>
   );
 }
 

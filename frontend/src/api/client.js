@@ -1,10 +1,12 @@
 import axios from 'axios';
 
 // Create a global token getter that will be set by the app
-let getClerkToken = null;
+let getAuthToken = null;
+let isClerkAuth = false;
 
-export const setTokenGetter = (getter) => {
-  getClerkToken = getter;
+export const setTokenGetter = (getter, clerkMode = false) => {
+  getAuthToken = getter;
+  isClerkAuth = clerkMode;
 };
 
 const apiClient = axios.create({
@@ -17,15 +19,16 @@ const apiClient = axios.create({
 
 // Add interceptors for auth, etc.
 apiClient.interceptors.request.use(async config => {
-  // Get Clerk token if available
-  if (getClerkToken) {
+  // Get auth token if available
+  if (getAuthToken) {
     try {
-      const token = await getClerkToken();
+      const token = await getAuthToken();
       if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
+        // Use Bearer for Clerk JWT, Token for Django token auth
+        config.headers.Authorization = isClerkAuth ? `Bearer ${token}` : `Token ${token}`;
       }
     } catch (error) {
-      console.error('Error getting Clerk token:', error);
+      console.error('Error getting auth token:', error);
     }
   }
   return config;

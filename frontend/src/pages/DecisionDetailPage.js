@@ -4,6 +4,7 @@ import apiClient from '../api/client';
 import { useTranslation } from '../contexts/TranslationContext';
 import './DecisionDetailPage.css';
 import EntityDisplay from '../components/EntityDisplay';
+import { formatAmount } from '../utils/dateUtils';
 import { 
   FinancialIcon, 
   CalendarIcon, 
@@ -22,7 +23,7 @@ import {
 } from '../components/Icons';
 
 const DecisionDetailPage = () => {
-  const { id } = useParams();
+  const { ada: id } = useParams();
   const navigate = useNavigate();
   const { t } = useTranslation();
   
@@ -151,10 +152,7 @@ const DecisionDetailPage = () => {
           <h3><FinancialIcon size={20} /> {t('decisionDetail.financialInformation')}</h3>
           {decision.amount && (
             <div className="amount-display">
-              €{decision.amount.toLocaleString(undefined, { 
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2
-              })}
+              {formatAmount(decision.amount)}
             </div>
           )}
           {decision.currency && decision.currency !== 'EUR' && (

@@ -380,19 +380,17 @@ def autocomplete_suggestions_api(request):
     
     Future enhancement: Use analytics to find most common terms in entity names
     """
-    query = request.GET.get('q', '').strip().upper()
+    query = request.GET.get('q', '').strip()
     category = request.GET.get('category', '').lower()
     
-    # Filter terms based on query and category
+    # Get autocomplete suggestions with automatic transliteration support
+    common_administrative_terms = get_administrative_terms_autocomplete(query_prefix=query)
+    
+    # Filter terms based on category
     suggestions = []
-    common_administrative_terms = get_administrative_terms_autocomplete()
     for term in common_administrative_terms:
         # Apply category filter if specified
         if category and term['category'] != category:
-            continue
-        
-        # Match query prefix if provided
-        if query and not term['text'].startswith(query):
             continue
         
         suggestions.append(term)

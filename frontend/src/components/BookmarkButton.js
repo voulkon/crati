@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { toggleBookmarkForCurrentPage, isCurrentPageBookmarked } from '../api/bookmarks';
 import { useTranslation } from '../contexts/TranslationContext';
+import SplitButton from './SplitButton';
 import './BookmarkButton.css';
 
 /**
- * Compact bookmark button for TopControls
- * Shows bookmark status and allows quick bookmark/unbookmark
+ * Split bookmark button for TopControls.
+ * Left half: star toggles the bookmark for the current page.
+ * Right half: chevron opens/closes the Library sidebar.
  */
-export default function BookmarkButton() {
+export default function BookmarkButton({ onLibraryToggle, isLibraryOpen, bookmarkCount }) {
   const { t } = useTranslation();
   const location = useLocation();
   const [isBookmarked, setIsBookmarked] = useState(false);
@@ -51,16 +53,22 @@ export default function BookmarkButton() {
 
   return (
     <>
-      <button
-        className={`bookmark-button ${isBookmarked ? 'bookmarked' : ''} ${isLoading ? 'loading' : ''}`}
-        onClick={handleToggleBookmark}
+      <SplitButton
+        isOpen={isLibraryOpen}
+        onMainClick={handleToggleBookmark}
+        onChevronClick={onLibraryToggle}
+        mainActive={isBookmarked}
+        mainClassName={`bookmark-button ${isLoading ? 'loading' : ''}`}
+        chevronClassName="bookmark-chevron"
+        className={`bookmark-split-btn ${isLibraryOpen ? 'library-open' : ''}`}
+        mainTitle={isBookmarked ? t('library.removeBookmark') : t('library.bookmarkThisPage')}
+        chevronTitle={isLibraryOpen ? t('library.close') : t('library.myLibrary')}
         disabled={isLoading}
-        title={isBookmarked ? t('library.removeBookmark') : t('library.bookmarkThisPage')}
       >
         <span className="bookmark-icon">
           {isLoading ? '⋯' : isBookmarked ? '★' : '☆'}
         </span>
-      </button>
+      </SplitButton>
 
       {/* Toast notification */}
       {showToast && (

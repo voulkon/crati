@@ -5,8 +5,14 @@ import jwt
 from users.models import CustomUser
 from diavgeia_project.security_tracing import security_tracer, get_client_ip
 from loguru import logger
+
 class ClerkAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
+        # Skip Clerk authentication if not configured
+        if not getattr(settings, 'CLERK_JWT_PUBLIC_KEY', None):
+            logger.debug("Clerk authentication not configured, skipping")
+            return None
+            
         logger.debug(f"ClerkAuthentication.authenticate called for {request.path}")
         auth_header = request.META.get("HTTP_AUTHORIZATION")
         logger.debug(f"Auth header present: {bool(auth_header)}")

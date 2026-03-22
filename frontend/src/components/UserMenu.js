@@ -1,210 +1,83 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { SignInButton, SignOutButton } from '@clerk/clerk-react';
-import { useTranslation } from '../contexts/TranslationContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import DjangoLoginForm from './DjangoLoginForm';
+import UserMenuDropdown from './UserMenuDropdown';
+import SplitButton from './SplitButton';
+import { UserIcon } from './Icons';
 import './UserMenu.css';
 
-const UserMenu = () => {
-  const navigate = useNavigate();
-  const [isOpen, setIsOpen] = useState(false);
-  const { t, language, switchLanguage, availableLanguages } = useTranslation();
-  const { 
-    theme, 
-    palette,
-    themes, 
-    palettes,
-    changeTheme,
-    changePalette,
-    currentThemeName,
-    currentPaletteName
-  } = useTheme();
-  const { user, isSignedIn } = useAuth();
-
-  const handleLanguageChange = (langCode) => {
-    switchLanguage(langCode);
-  };
-
-  const handleThemeChange = (themeId) => {
-    changeTheme(themeId);
-  };
-
-  const handlePaletteChange = (paletteId) => {
-    changePalette(paletteId);
-  };
+const UserMenu = ({ isOpen, onToggle }) => {
+  const [showLoginForm, setShowLoginForm] = useState(false);
+  const { palette, palettes, theme } = useTheme();
+  const { user, isSignedIn, isClerkAuth } = useAuth();
 
   const getCurrentPaletteColor = () => {
     const currentPalette = palettes.find(p => p.id === palette);
     if (!currentPalette) return '#4299E1';
-    return theme === 'dark' ? currentPalette.darkColor : currentPalette.color;
+    const isDarkTheme = theme === 'dark' || theme === 'solarized-dark';
+    return isDarkTheme ? currentPalette.darkColor : currentPalette.color;
+  };
+
+  const handleToggleMenu = () => {
+    onToggle();
+  };
+
+  const handleCloseMenu = () => {
+    if (isOpen) {
+      onToggle();
+    }
+  };
+
+  const buttonStyle = {
+    borderLeft: `3px solid ${getCurrentPaletteColor()}`
   };
 
   return (
-    <div className="user-menu">
-      <button 
-        className="user-menu-trigger"
-        onClick={() => setIsOpen(!isOpen)}
-        onBlur={() => setTimeout(() => setIsOpen(false), 150)}
-        style={{
-          borderLeft: `3px solid ${getCurrentPaletteColor()}`
-        }}
-      >
-        <div className="user-avatar">
-          {isSignedIn && user?.imageUrl ? (
-            <img src={user.imageUrl} alt={user.firstName} className="avatar-image" />
-          ) : (
-            <div className="avatar-placeholder">
-              {isSignedIn && user?.firstName ? user.firstName.charAt(0).toUpperCase() : '👤'}
-            </div>
-          )}
-        </div>
-        <span className="user-menu-arrow">▼</span>
-      </button>
-
-      {isOpen && (
-        <div className="user-menu-dropdown">
-          {/* User Section */}
-          <div className="menu-section">
-            {isSignedIn ? (
-              <div className="user-info">
-                <div className="user-details">
-                  <div className="user-name">{user?.firstName} {user?.lastName}</div>
-                  <div className="user-email">{user?.primaryEmailAddress?.emailAddress}</div>
+    <>
+      <div className={`user-menu ${isOpen ? 'user-menu-open' : ''}`}>
+        <div 
+          className="user-menu-wrapper"
+          style={buttonStyle}
+        >
+          <SplitButton
+            isOpen={isOpen}
+            onMainClick={handleToggleMenu}
+            onChevronClick={handleToggleMenu}
+            mainClassName="user-menu-trigger"
+            chevronClassName="user-menu-chevron"
+            className="user-menu-split-btn"
+            mainTitle={isOpen ? 'Close menu' : 'Open menu'}
+            chevronTitle={isOpen ? 'Close menu' : 'Open menu'}
+          >
+            <div className="user-avatar">
+              {isSignedIn && user?.imageUrl ? (
+                <img src={user.imageUrl} alt={user.firstName} className="avatar-image" />
+              ) : (
+                <div className="avatar-placeholder">
+                  {isSignedIn && user?.firstName ? user.firstName.charAt(0).toUpperCase() : <UserIcon size={16} />}
                 </div>
-              </div>
-            ) : (
-              <div className="sign-in-prompt">
-                <div className="sign-in-text">Not signed in</div>
-              </div>
-            )}
-          </div>
-
-          <div className="menu-divider"></div>
-
-          {/* Library Link */}
-          <div className="menu-section">
-            <button 
-              className="menu-action primary"
-              onClick={() => {
-                setIsOpen(false);
-                navigate('/library');
-              }}
-              style={{
-                width: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              <span>📚</span>
-              <span>{t('library.myLibrary')}</span>
-            </button>
-          </div>
-
-          <div className="menu-divider"></div>
-
-          {/* Language Section */}
-          <div className="menu-section">
-            <div className="menu-section-label">{t('common.language')}</div>
-            <div className="menu-options">
-              {availableLanguages.map((lang) => (
-                <button
-                  key={lang.code}
-                  className={`menu-option ${lang.code === language ? 'active' : ''}`}
-                  onClick={() => handleLanguageChange(lang.code)}
-                >
-                  <span className="option-flag">
-                    {lang.code === 'el' ? '🇬🇷' : '🇺🇸'}
-                  </span>
-                  <span className="option-name">{lang.nativeName}</span>
-                  {lang.code === language && <span className="option-check">✓</span>}
-                </button>
-              ))}
+              )}
             </div>
-          </div>
-
-          <div className="menu-divider"></div>
-
-          {/* Theme Mode Section */}
-          <div className="menu-section">
-            <div className="menu-section-label">
-              <span className="section-icon">🌓</span>
-              {t('common.themeMode')}
-            </div>
-            <div className="menu-options">
-              {themes.map((themeOption) => (
-                <button
-                  key={themeOption.id}
-                  className={`menu-option ${themeOption.id === theme ? 'active' : ''}`}
-                  onClick={() => handleThemeChange(themeOption.id)}
-                >
-                  <span className="option-icon">{themeOption.icon}</span>
-                  <span className="option-name">{themeOption.name}</span>
-                  {themeOption.id === theme && <span className="option-check">✓</span>}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="menu-divider"></div>
-
-          {/* Color Palette Section */}
-          <div className="menu-section">
-            <div className="menu-section-label">
-              <span className="section-icon">🎨</span>
-              {t('common.colorPalette')}
-            </div>
-            <div className="palette-grid">
-              {palettes.map((paletteOption) => (
-                <button
-                  key={paletteOption.id}
-                  className={`palette-option ${paletteOption.id === palette ? 'active' : ''}`}
-                  onClick={() => handlePaletteChange(paletteOption.id)}
-                  title={paletteOption.name}
-                  style={{
-                    backgroundColor: theme === 'dark' ? paletteOption.darkColor : paletteOption.color
-                  }}
-                >
-                  {paletteOption.id === palette && <span className="palette-check">✓</span>}
-                  <span className="palette-name">{paletteOption.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Show current theme info */}
-          <div className="menu-divider"></div>
-          <div className="menu-section">
-            <div className="current-theme-display">
-              <span className="current-theme-label">Current:</span>
-              <span className="current-theme-value">
-                {currentThemeName} • {currentPaletteName}
-              </span>
-            </div>
-          </div>
-
-          <div className="menu-divider"></div>
-
-          {/* Authentication Section */}
-          <div className="menu-section">
-            {isSignedIn ? (
-              <SignOutButton>
-                <button className="menu-action danger" onClick={() => setIsOpen(false)}>
-                  🚪 {t('common.signOut')}
-                </button>
-              </SignOutButton>
-            ) : (
-              <SignInButton mode="modal">
-                <button className="menu-action primary" onClick={() => setIsOpen(false)}>
-                  🔑 {t('common.signIn')}
-                </button>
-              </SignInButton>
-            )}
-          </div>
+          </SplitButton>
         </div>
-      )}
-    </div>
+
+        {isOpen && (
+          <UserMenuDropdown 
+            onClose={handleCloseMenu}
+            onShowLogin={() => setShowLoginForm(true)} 
+          />
+        )}
+        
+        {/* Django Login Form Modal */}
+        {showLoginForm && !isClerkAuth && (
+          <DjangoLoginForm 
+            onSuccess={() => setShowLoginForm(false)}
+            onCancel={() => setShowLoginForm(false)}
+          />
+        )}
+      </div>
+    </>
   );
 };
 

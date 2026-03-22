@@ -6,19 +6,31 @@ Contains REST_FRAMEWORK configuration including authentication and permission cl
 
 import os
 
+# Check if Clerk authentication is available
+CLERK_JWT_PUBLIC_KEY = os.getenv("CLERK_JWT_PUBLIC_KEY")
+CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY")
+USE_CLERK_AUTH = bool(CLERK_JWT_PUBLIC_KEY and CLERK_SECRET_KEY)
+
+# Build authentication classes list
+AUTH_CLASSES = [
+    "rest_framework.authentication.BasicAuthentication",
+    "rest_framework.authentication.SessionAuthentication",
+    "rest_framework.authentication.TokenAuthentication",
+]
+
+# Add Clerk authentication if credentials are available
+if USE_CLERK_AUTH:
+    AUTH_CLASSES.append("api.authentication.ClerkAuthentication")
+
+# Always include API key authentication
+AUTH_CLASSES.append("api.authentication.ApiKeyAuthentication")
+
 REST_FRAMEWORK = {
-    "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.BasicAuthentication",  # Add this for development
-        "rest_framework.authentication.TokenAuthentication",
-        # Add Clerk authentication class (we'll create this)
-        "api.authentication.ClerkAuthentication",
-        "api.authentication.ApiKeyAuthentication"
-    ],
+    "DEFAULT_AUTHENTICATION_CLASSES": AUTH_CLASSES,
     "DEFAULT_PERMISSION_CLASSES": [
-        # In stealth mode, require authentication for ALL endpoints
-        # Otherwise use IsAuthenticated (individual views can override)
-        "rest_framework.permissions.IsAuthenticated" if os.getenv("STEALTH_MODE", "False").lower() in ("true", "1", "t")
-        else "rest_framework.permissions.IsAuthenticated",
+        # Require authentication by default
+        # Individual views can override with AllowAny if needed
+        "rest_framework.permissions.IsAuthenticated",
     ],
     'DEFAULT_PARSER_CLASSES': [
         'api.parsers.SanitizedJSONParser',

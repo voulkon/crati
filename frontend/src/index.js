@@ -5,17 +5,17 @@ import App from "./App";
 
 const clerkPubKey = process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
 
-if (!clerkPubKey) {
-  console.error('Environment variables:', {
-    NODE_ENV: process.env.NODE_ENV,
-    REACT_APP_CLERK_PUBLISHABLE_KEY: process.env.REACT_APP_CLERK_PUBLISHABLE_KEY ? 'SET' : 'NOT SET'
-  });
-  throw new Error("Missing REACT_APP_CLERK_PUBLISHABLE_KEY - check your .env file");
-}
-
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(
-  <ClerkProvider publishableKey={clerkPubKey}>
-    <App />
-  </ClerkProvider>
-);
+
+// Conditionally wrap with ClerkProvider only if Clerk is configured
+if (clerkPubKey) {
+  console.log('✓ Clerk authentication enabled');
+  root.render(
+    <ClerkProvider publishableKey={clerkPubKey}>
+      <App />
+    </ClerkProvider>
+  );
+} else {
+  console.log('ℹ️ Clerk authentication not configured. Using Django default authentication.');
+  root.render(<App />);
+}

@@ -141,8 +141,8 @@
 
 /* Main Info Section - Amount, Recipient, Date */
 .decision-main-info {
-  background: linear-gradient(135deg, #f0f8ff 0%, #ffffff 100%);
-  border: 1px solid var(--primary-blue);
+  background-color: var(--card-bg);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: var(--spacing-sm) var(--spacing-md);
   margin-bottom: var(--spacing-md);
@@ -162,7 +162,7 @@
 }
 
 .amount-display {
-  font-size: 1.1rem;
+  font-size: var(--font-lg);
   font-weight: var(--font-bold);
   color: var(--secondary-blue);
   margin: 0;

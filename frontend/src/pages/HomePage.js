@@ -80,10 +80,10 @@ const HomePage = () => {
               {t('homepage.subtitle')}
             </p>
             
-            {/* Super Search Component - Enhanced as main feature */}
+            {/* Super Search Component - Main Feature */}
             <div className="hero-search-enhanced">
               <SuperSearch
-                placeholder="Search organizations, documents, companies, signers..."
+                placeholder={t('homepage.searchPlaceholder')}
                 autoFocus={false}
                 showFullResults={true}
                 className="homepage-super-search"
@@ -150,7 +150,7 @@ const HomePage = () => {
                 <div 
                   key={decision.ada} 
                   className="decision-item compact clickable"
-                  onClick={() => navigate(`/decision/${decision.ada}`)}
+                  onClick={() => navigate(`/decision/${decision.id}`)}
                 >
                   <div className="card-rank">#{index + 1}</div>
                   <div className="decision-content">

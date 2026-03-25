@@ -211,16 +211,16 @@ def logout(request):
     return Response({'message': 'Logged out successfully'})
 
 
-@api_view(['POST'])
+@api_view(['POST', 'GET'])
 @permission_classes([AllowAny])
 def verify_email(request):
     """
     Verify user's email address using the token sent via email.
     
-    Request:
-    {
-        "token": "uuid-token-from-email"
-    }
+    Supports both GET (from email link) and POST (from frontend form).
+    
+    GET: /auth/verify-email/?token=uuid-token-from-email
+    POST: {"token": "uuid-token-from-email"}
     
     Response:
     {
@@ -229,7 +229,11 @@ def verify_email(request):
         "token": "drf_token_here"
     }
     """
-    verification_token = request.data.get('token')
+    # Support both GET and POST
+    if request.method == 'GET':
+        verification_token = request.query_params.get('token')
+    else:
+        verification_token = request.data.get('token')
     
     if not verification_token:
         return Response(

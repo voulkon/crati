@@ -20,7 +20,7 @@ from .views.organization_entity_relationships import (
     temporal_top_relationship_pairs_api
     )
 from users.views import UserDataViewSet
-from .views.django_auth import register, login as django_login, logout as django_logout, me as current_user
+from .views.django_auth import register, login as django_login, logout as django_logout, me as current_user, verify_email
 from notifications.views import NotificationSubscriptionViewSet, NotificationBatchViewSet
 from notifications.views_metadata import (
     subscription_metadata,
@@ -50,6 +50,7 @@ urlpatterns = [
     path("auth/login/", django_login, name="django_login"),
     path("auth/register/", register, name="django_register"),
     path("auth/logout/", django_logout, name="django_logout"),
+    path("auth/verify-email/", verify_email, name="django_verify_email"),
     path("auth/me/", current_user, name="current_user"),
     
     # System configuration

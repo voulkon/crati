@@ -55,3 +55,5 @@ from .external_services import *
 
 # Import orchestrator settings
 from .orchestrator import *
+
+from .email import *

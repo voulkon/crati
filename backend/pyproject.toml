@@ -24,6 +24,7 @@ django-celery-beat = "^2.8.0"
 Faker = "37.0.0"
 diavgeia-api = {git = "https://github.com/voulkon/diavgeia-api.git"}
 gemi-opendata-client = {path = "./gemi", develop = true}
+django-ses = "^4.7.2"
 
 # OpenTelemetry dependencies
 opentelemetry-sdk = "^1.32.1"

@@ -133,6 +133,9 @@ class NotificationSubscription(models.Model):
         help_text=_("List of decision type codes to filter by")
     )
     
+    # TODO: Add an on-off toggle for each filter field in the UI to allow users to easily enable/disable specific criteria without deleting them.   
+    also_send_email = models.BooleanField(default=True, verbose_name=_("Also send email notifications"))
+
     # Status and metadata
     is_active = models.BooleanField(default=True, verbose_name=_("Active"))
     

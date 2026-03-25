@@ -26,10 +26,16 @@ class CustomUser(AbstractUser):
     api_key = models.CharField(max_length=64, unique=True, null=True, blank=True)
     usage_this_month = models.IntegerField(default=0)
     
-    # New: User preferences
+    # Email verification for Django-registered users (Clerk handles this for Clerk users)
+    email_verified = models.BooleanField(default=False, help_text='Whether email has been verified')
+    email_verification_token = models.UUIDField(null=True, blank=True, help_text='Token for email verification')
+    email_verification_token_expires = models.DateTimeField(null=True, blank=True, help_text='Expiry time for verification token')
+    
+    # User preferences
     preferred_theme = models.CharField(max_length=20, default='light')  # light/dark
     preferred_palette = models.CharField(max_length=20, default='blue')  # blue/purple/green/etc
     preferred_layout = models.CharField(max_length=30, default='horizontal-right')
+    preferred_language = models.CharField(max_length=10, default='en', choices=[('en', 'English'), ('el', 'Greek')])  # en/el
     
     @property
     def has_active_subscription(self):

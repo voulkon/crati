@@ -6,32 +6,54 @@ import { useTheme } from '../contexts/ThemeContext';
 import './DjangoLoginForm.css';
 
 /**
- * Django Login Form
- * Simple email/password form for Django authentication when Clerk is not available
+ * Django Registration Form
+ * Simple registration form for Django authentication when Clerk is not available
  */
-function DjangoLoginForm({ onSuccess, onCancel, onSwitchToRegister }) {
-  const { signIn } = useAuth();
+function DjangoRegisterForm({ onSuccess, onCancel, onSwitchToLogin }) {
+  const { register } = useAuth();
   const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    // Validate password length
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters long');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const result = await signIn(email, password);
+      const result = await register(email, password);
       if (result.success) {
-        if (onSuccess) onSuccess();
+        // Registration successful - user needs to verify email
+        if (result.verification_required) {
+          // Show success message
+          alert(result.message || 'Registration successful! Please check your email to verify your account.');
+          if (onSuccess) onSuccess();
+        } else {
+          // Old behavior for backward compatibility (if verification is disabled)
+          if (onSuccess) onSuccess();
+        }
       } else {
-        setError(result.error || 'Login failed');
+        setError(result.error || 'Registration failed');
       }
     } catch (err) {
-      setError('An error occurred during login');
+      setError('An error occurred during registration');
     } finally {
       setLoading(false);
     }
@@ -42,7 +64,7 @@ function DjangoLoginForm({ onSuccess, onCancel, onSwitchToRegister }) {
     <div className={`django-login-overlay ${isDarkMode ? 'dark' : 'light'}`}>
       <div className="django-login-modal">
         <div className="django-login-header">
-          <h2>🔑 {t('common.signIn') || 'Sign In'}</h2>
+          <h2>✨ {t('common.register') || 'Create Account'}</h2>
           <button 
             className="django-login-close" 
             onClick={onCancel}
@@ -80,9 +102,24 @@ function DjangoLoginForm({ onSuccess, onCancel, onSwitchToRegister }) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
+              placeholder="At least 8 characters"
               required
               disabled={loading}
+              minLength={8}
+            />
+          </div>
+          
+          <div className="django-login-field">
+            <label htmlFor="confirmPassword">Confirm Password</label>
+            <input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter your password"
+              required
+              disabled={loading}
+              minLength={8}
             />
           </div>
           
@@ -100,20 +137,20 @@ function DjangoLoginForm({ onSuccess, onCancel, onSwitchToRegister }) {
               className="django-login-submit"
               disabled={loading}
             >
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? 'Creating account...' : 'Create Account'}
             </button>
           </div>
         </form>
         
         <div className="django-login-footer">
           <p>
-            Don't have an account?{' '}
+            Already have an account?{' '}
             <button 
-              onClick={onSwitchToRegister}
+              onClick={onSwitchToLogin}
               className="django-login-switch"
               disabled={loading}
             >
-              Create Account
+              Sign In
             </button>
           </p>
         </div>
@@ -125,4 +162,4 @@ function DjangoLoginForm({ onSuccess, onCancel, onSwitchToRegister }) {
   return ReactDOM.createPortal(modalContent, document.body);
 }
 
-export default DjangoLoginForm;
+export default DjangoRegisterForm;

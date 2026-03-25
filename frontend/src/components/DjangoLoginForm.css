@@ -168,3 +168,23 @@
   color: var(--muted-text);
   text-align: center;
 }
+
+.django-login-switch {
+  background: none;
+  border: none;
+  color: var(--primary-blue);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  transition: var(--transition-fast);
+}
+
+.django-login-switch:hover {
+  color: var(--primary-hover);
+}
+
+.django-login-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

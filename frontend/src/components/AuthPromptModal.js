@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from '../contexts/TranslationContext';
 import { useTheme } from '../contexts/ThemeContext';
+import DjangoLoginForm from './DjangoLoginForm';
+import DjangoRegisterForm from './DjangoRegisterForm';
 
 // Check if Clerk is available
 const isClerkAvailable = () => {
@@ -17,6 +19,7 @@ if (isClerkAvailable()) {
 
 /**
  * Modal that prompts users to sign in when they try to access protected features
+ * Supports both Clerk (when configured) and Django auth
  */
 function AuthPromptModal() {
   const { t } = useTranslation();
@@ -24,13 +27,19 @@ function AuthPromptModal() {
   const { getCurrentPaletteColor } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState('');
+  const [showDjangoForm, setShowDjangoForm] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
 
   useEffect(() => {
     const handleAuthRequired = (event) => {
-      // Only show if Clerk is available and user is not already signed in
-      if (isClerkAuth && isLoaded && !isSignedIn) {
+      // Show modal for both auth types when user is not signed in
+      if (isLoaded && !isSignedIn) {
         setMessage(event.detail?.message || t('auth.signInRequired') || 'Please sign in to access this feature');
         setIsOpen(true);
+        // For Django auth, immediately show the login form
+        if (!isClerkAuth) {
+          setShowDjangoForm(true);
+        }
       }
     };
 
@@ -41,9 +50,45 @@ function AuthPromptModal() {
     };
   }, [isLoaded, isSignedIn, isClerkAuth, t]);
 
-  // Don't render if Clerk is not available
-  if (!isClerkAuth || !isOpen) return null;
+  // Don't render if modal is not open
+  if (!isOpen) return null;
 
+  // For Django auth, show the login form directly
+  if (showDjangoForm) {
+    if (showRegister) {
+      return (
+        <DjangoRegisterForm
+          onSuccess={() => {
+            setIsOpen(false);
+            setShowDjangoForm(false);
+            setShowRegister(false);
+          }}
+          onCancel={() => {
+            setIsOpen(false);
+            setShowDjangoForm(false);
+            setShowRegister(false);
+          }}
+          onSwitchToLogin={() => setShowRegister(false)}
+        />
+      );
+    }
+    
+    return (
+      <DjangoLoginForm
+        onSuccess={() => {
+          setIsOpen(false);
+          setShowDjangoForm(false);
+        }}
+        onCancel={() => {
+          setIsOpen(false);
+          setShowDjangoForm(false);
+        }}
+        onSwitchToRegister={() => setShowRegister(true)}
+      />
+    );
+  }
+
+  // For Clerk auth, show the auth prompt modal with Clerk sign-in button
   return (
     <div style={{
       position: 'fixed',

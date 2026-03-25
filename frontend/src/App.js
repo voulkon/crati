@@ -12,6 +12,7 @@ import SubscriptionHistoryPage from "./pages/SubscriptionHistoryPage";
 import SearchResults from "./pages/SearchResults";
 import SuperSearchExample from "./pages/SuperSearchExample";
 import LibraryPage from "./pages/LibraryPage";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
 import Clock from "./components/Clock";
 import AccessDenied from "./components/AccessDenied";
 import LibrarySidebar from "./components/LibrarySidebar";
@@ -173,6 +174,9 @@ function AuthenticatedApp({ controlsLayout }) {
       <Routes>
         {/* NEW: Use HomePage as the main landing page */}
         <Route path="/" element={<HomePage />} />
+        
+        {/* Email Verification Page */}
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
         
         {/* Library - bookmark management */}
         <Route path="/library" element={<LibraryPage />} />

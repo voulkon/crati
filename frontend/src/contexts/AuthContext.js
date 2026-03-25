@@ -95,7 +95,10 @@ const BasicAuthProvider = ({ children }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ 
+          email, 
+          password
+        }),
       });
 
       if (response.ok) {
@@ -103,6 +106,7 @@ const BasicAuthProvider = ({ children }) => {
         localStorage.setItem('django_auth_token', data.token);
         setUser(data.user);
         setIsSignedIn(true);
+        
         return { success: true };
       } else {
         const error = await response.json();
@@ -139,6 +143,82 @@ const BasicAuthProvider = ({ children }) => {
     }
   };
 
+  const register = async (email, password) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/register/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          email, 
+          password,
+          username: email  // Use email as username
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // New behavior: email verification required
+        if (data.verification_required) {
+          return { 
+            success: true, 
+            verification_required: true,
+            message: data.message,
+            email: data.email 
+          };
+        }
+        
+        // Old behavior: immediate login (for backward compatibility if verification is disabled)
+        if (data.token) {
+          localStorage.setItem('django_auth_token', data.token);
+          setUser(data.user);
+          setIsSignedIn(true);
+        }
+        
+        return { success: true, verification_required: false };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.error || 'Registration failed' };
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      return { success: false, error: 'Network error' };
+    }
+  };
+
+  const verifyEmail = async (token) => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/verify-email/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Automatically log the user in after successful verification
+        if (data.token) {
+          localStorage.setItem('django_auth_token', data.token);
+          setUser(data.user);
+          setIsSignedIn(true);
+        }
+        
+        return { success: true, message: data.message };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.error || 'Verification failed' };
+      }
+    } catch (error) {
+      console.error('Email verification error:', error);
+      return { success: false, error: 'Network error' };
+    }
+  };
+
   const value = {
     user,
     isSignedIn,
@@ -146,6 +226,8 @@ const BasicAuthProvider = ({ children }) => {
     getToken: getAuthToken,
     signIn,
     signOut,
+    register,
+    verifyEmail,
     isClerkAuth: false,
   };
 

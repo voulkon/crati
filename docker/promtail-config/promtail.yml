@@ -9,11 +9,14 @@ clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
-  # Docker socket scraping - ALL containers
+  # Docker socket scraping - RUNNING containers only
   - job_name: docker_containers
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
         refresh_interval: 5s
+        filters:
+          - name: status
+            values: [running]
     
     relabel_configs:
       # Capture container name (e.g., diavgeia_worker, diavgeia_backend)
@@ -73,6 +76,12 @@ scrape_configs:
     # Enhanced pipeline with JSON parsing
     pipeline_stages:
       - docker: {}
+      
+      # Drop log entries older than 14 days to prevent ingestion errors
+      - drop:
+          source: timestamp
+          older_than: 336h  # 14 days
+          drop_counter_reason: "timestamp_too_old"
       
       # Try to parse as JSON first
       - json:

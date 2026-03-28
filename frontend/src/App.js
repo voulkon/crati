@@ -13,6 +13,7 @@ import SearchResults from "./pages/SearchResults";
 import SuperSearchExample from "./pages/SuperSearchExample";
 import LibraryPage from "./pages/LibraryPage";
 import VerifyEmailPage from "./pages/VerifyEmailPage";
+import LoginPage from "./pages/LoginPage";
 import Clock from "./components/Clock";
 import AccessDenied from "./components/AccessDenied";
 import LibrarySidebar from "./components/LibrarySidebar";
@@ -234,7 +235,7 @@ function App({ controlsLayout = 'vertical-right' }) {
 
 // Separate component to access auth context
 function AppContent({ controlsLayout, stealthMode, clerkAvailable }) {
-  const { isLoaded } = useAuth();
+  const { isLoaded, isSignedIn, isClerkAuth } = useAuth();
 
   // Show loading state while checking authentication
   if (!isLoaded) {
@@ -262,18 +263,32 @@ function AppContent({ controlsLayout, stealthMode, clerkAvailable }) {
         minHeight: '100vh',
         transition: 'background-color 0.3s ease, color 0.3s ease'
       }}>
-        {stealthMode && clerkAvailable ? (
-          // Stealth mode ON with Clerk - require Clerk authentication
+        {stealthMode ? (
+          // Stealth mode ON - require authentication (Clerk OR Django)
           <>
-            <SignedIn>
-              <AuthenticatedApp controlsLayout={controlsLayout} />
-            </SignedIn>
-            <SignedOut>
-              <RedirectToSignIn />
-            </SignedOut>
+            {clerkAvailable && isClerkAuth ? (
+              // Using Clerk authentication
+              <>
+                <SignedIn>
+                  <AuthenticatedApp controlsLayout={controlsLayout} />
+                </SignedIn>
+                <SignedOut>
+                  <RedirectToSignIn />
+                </SignedOut>
+              </>
+            ) : (
+              // Using Django authentication - show login page if not signed in
+              <>
+                {isSignedIn ? (
+                  <AuthenticatedApp controlsLayout={controlsLayout} />
+                ) : (
+                  <LoginPage />
+                )}
+              </>
+            )}
           </>
         ) : (
-          // Stealth mode OFF or Clerk not available - public access or Django auth
+          // Stealth mode OFF - public access
           <AuthenticatedApp controlsLayout={controlsLayout} />
         )}
       </div>

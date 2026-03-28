@@ -56,6 +56,9 @@ const BasicAuthProvider = ({ children }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   const [user, setUser] = useState(null);
   const [isSignedIn, setIsSignedIn] = useState(false);
+  
+  // Use same base URL pattern as axios client
+  const apiUrl = process.env.REACT_APP_API_URL || '/api';
 
   useEffect(() => {
     // Check if user is authenticated via Django session
@@ -64,7 +67,7 @@ const BasicAuthProvider = ({ children }) => {
         const token = localStorage.getItem('django_auth_token');
         if (token) {
           // Verify token is still valid by fetching user info
-          const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/me/`, {
+          const response = await fetch(`${apiUrl}/auth/me/`, {
             headers: {
               'Authorization': `Token ${token}`,
             },
@@ -86,11 +89,11 @@ const BasicAuthProvider = ({ children }) => {
       }
     };
     checkAuth();
-  }, []);
+  }, [apiUrl]);
 
   const signIn = async (email, password) => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/login/`, {
+      const response = await fetch(`${apiUrl}/auth/login/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -127,7 +130,7 @@ const BasicAuthProvider = ({ children }) => {
     try {
       const token = localStorage.getItem('django_auth_token');
       if (token) {
-        await fetch(`${process.env.REACT_APP_API_URL}/auth/logout/`, {
+        await fetch(`${apiUrl}/auth/logout/`, {
           method: 'POST',
           headers: {
             'Authorization': `Token ${token}`,
@@ -145,7 +148,7 @@ const BasicAuthProvider = ({ children }) => {
 
   const register = async (email, password) => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/register/`, {
+      const response = await fetch(`${apiUrl}/auth/register/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -190,7 +193,7 @@ const BasicAuthProvider = ({ children }) => {
 
   const verifyEmail = async (token) => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/auth/verify-email/`, {
+      const response = await fetch(`${apiUrl}/auth/verify-email/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

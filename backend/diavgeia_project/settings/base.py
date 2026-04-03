@@ -82,5 +82,14 @@ EXTRACT_THE_DOCS_FROM_PDFS = os.getenv("EXTRACT_THE_DOCS_FROM_PDFS", "True").low
 #   we need some task to be ensuring that all documents that DON'T have text extracted will start getting extracted (aka create the respective tasks)
 
 TRANSMIT_TO_JAEGER = os.getenv("TRANSMIT_TO_JAEGER", "False").lower() == "true"
+# If False:
+#   OpenTelemetry/Jaeger tracing is disabled
+#   No spans will be sent to Jaeger
+
+LIGHT_WORKER = os.getenv("LIGHT_WORKER", "False").lower() == "true"
+# If True:
+#   Celery worker uses lightweight mode without PDF processing dependencies (Docling)
+#   Only PyMuPDF extractor is available
+#   Reduces Docker image size and memory footprint
 
 RETRY_AFM_FETCHES_AFTER_NUMBER_OF_DAYS = int(os.getenv("RETRY_AFM_FETCHES_AFTER_NUMBER_OF_DAYS", "60"))

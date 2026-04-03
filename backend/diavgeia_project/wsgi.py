@@ -4,14 +4,13 @@ WSGI config for diavgeia_project project.
 
 import os
 from django.core.wsgi import get_wsgi_application
+from django.conf import settings
 from loguru import logger
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "diavgeia_project.settings")
 
 try:
     # Check if tracing is enabled
-    transmit_to_jaeger = os.getenv('TRANSMIT_TO_JAEGER', 'True').lower() == 'true'
-    
-    if transmit_to_jaeger:
+    if settings.TRANSMIT_TO_JAEGER:
         # Simple approach - just force the Django service name
         os.environ["OTEL_SERVICE_NAME"] = "diavgeia-django"
         

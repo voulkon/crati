@@ -135,9 +135,9 @@ class TextExtractionProcessor(BaseDocumentProcessor):
         )
         
         # Check LIGHT_WORKER mode first (takes precedence)
-        light_worker = os.getenv('LIGHT_WORKER', 'false').lower() == 'true'
+        from django.conf import settings
         
-        if light_worker:
+        if settings.LIGHT_WORKER:
             # Light mode: force PyMuPDF
             self.default_extractor = ProcessingProvider.PYMUPDF
             logger.info("🪶 LIGHT_WORKER mode: Using PyMuPDF extractor (Docling disabled)")

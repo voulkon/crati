@@ -138,7 +138,8 @@ def register_all_models():
         AIModelPricingAdmin, TaskOutputEstimateAdmin, AIJobDefinitionAdmin, AIJobExecutionAdmin,
         ImportThresholdAdmin,
         NotificationSubscriptionAdmin, NotificationAdmin,
-        NotificationBatchAdmin, NotificationBatchDecisionAdmin
+        NotificationBatchAdmin, NotificationBatchDecisionAdmin,
+        FeatureFlagAdmin, FeatureFlagAuditLogAdmin
     )
     
     from core.models.decisions import Decision, Attachment
@@ -149,6 +150,7 @@ def register_all_models():
     from core.models.import_jobs import ImportJob, DateCoverage
     from core.models.import_thresholds import ImportThreshold
     from core.models.backups import Backup
+    from core.models.feature_flags import FeatureFlag, FeatureFlagAuditLog
     from api.models import APIAnalytics, EndpointStats, DailyTraffic
     from users.models import CustomUser, Subscription
     from notifications.models import NotificationSubscription, Notification, NotificationBatch, NotificationBatchDecision
@@ -196,6 +198,10 @@ def register_all_models():
     admin_site.register(NotificationSubscription, NotificationSubscriptionAdmin)
     admin_site.register(Notification, NotificationAdmin)
     admin_site.register(NotificationBatch, NotificationBatchAdmin)
+    
+    # Register Feature Flag models
+    admin_site.register(FeatureFlag, FeatureFlagAdmin)
+    admin_site.register(FeatureFlagAuditLog, FeatureFlagAuditLogAdmin)
     admin_site.register(NotificationBatchDecision, NotificationBatchDecisionAdmin)
 
 

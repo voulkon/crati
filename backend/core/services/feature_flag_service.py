@@ -104,6 +104,26 @@ class FeatureFlagService:
             'category': 'frontend',
             'requires_restart': True,
         },
+        'TRANSMIT_TO_JAEGER': {
+            'name': 'Jaeger Tracing',
+            'description': 'Enable OpenTelemetry tracing to Jaeger for distributed tracing. '
+                          'If disabled, no spans will be sent to Jaeger. '
+                          'Requires service restart to take effect.',
+            'default': False,
+            'env_var': 'TRANSMIT_TO_JAEGER',
+            'category': 'system',
+            'requires_restart': True,
+        },
+        'LIGHT_WORKER': {
+            'name': 'Light Worker Mode',
+            'description': 'Use lightweight Celery worker without PDF processing dependencies (Docling). '
+                          'Only PyMuPDF extractor is available, reducing Docker image size and memory footprint. '
+                          'Requires worker restart to take effect.',
+            'default': False,
+            'env_var': 'LIGHT_WORKER',
+            'category': 'system',
+            'requires_restart': True,
+        },
     }
     
     def __init__(self):

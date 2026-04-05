@@ -1,0 +1,64 @@
+{% extends "admin/change_list.html" %}
+{% load static %}
+
+{% block content_title %}
+    <h1>{{ title }}</h1>
+    
+    {% if show_initialize_prompt %}
+    <div style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 20px; margin: 20px 0;">
+        <h2 style="margin-top: 0; color: #856404;">
+            <span style="font-size: 24px;">⚠️</span> Feature Flags Not Initialized
+        </h2>
+        <p style="font-size: 16px; margin-bottom: 20px;">
+            No feature flags found in the database. Initialize them to start managing your system's feature toggles.
+        </p>
+        <div style="margin-bottom: 15px;">
+            <strong>Known flags to initialize:</strong> {{ known_flags_count }}
+        </div>
+        <a href="{% url 'admin:featureflag_initialize' %}" 
+           class="button" 
+           style="background-color: #28a745; color: white; padding: 12px 24px; border-radius: 5px; text-decoration: none; font-weight: bold; display: inline-block; font-size: 16px;">
+            🚀 Initialize Feature Flags Now
+        </a>
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd; font-size: 14px; color: #666;">
+            <strong>Alternative:</strong> Run <code style="background: #f4f4f4; padding: 2px 6px; border-radius: 3px;">python manage.py initialize_feature_flags</code> from the command line
+        </div>
+    </div>
+    {% elif needs_sync %}
+    <div style="background: #d1ecf1; border: 2px solid #17a2b8; border-radius: 8px; padding: 15px; margin: 20px 0;">
+        <h3 style="margin-top: 0; color: #0c5460;">
+            <span style="font-size: 20px;">ℹ️</span> New Flags Available
+        </h3>
+        <p style="margin-bottom: 15px;">
+            Database has <strong>{{ flag_count }}</strong> flag(s), but <strong>{{ known_flags_count }}</strong> flag(s) are defined in code.
+            New flags may need to be initialized.
+        </p>
+        <a href="{% url 'admin:featureflag_initialize' %}" 
+           class="button" 
+           style="background-color: #17a2b8; color: white; padding: 10px 20px; border-radius: 5px; text-decoration: none; display: inline-block;">
+            Synchronize Flags
+        </a>
+    </div>
+    {% else %}
+    <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 5px; padding: 10px; margin: 20px 0; font-size: 14px;">
+        <span style="color: #155724;">✓</span> 
+        <strong>{{ flag_count }}</strong> feature flag(s) initialized and ready to use
+        <span style="margin-left: 20px;">
+            <a href="{% url 'admin:featureflag_clear_cache' %}" style="color: #155724; text-decoration: underline;">
+                Clear Cache
+            </a>
+        </span>
+    </div>
+    {% endif %}
+{% endblock %}
+
+{% block result_list %}
+    {% if show_initialize_prompt %}
+        <div style="text-align: center; padding: 40px; color: #999;">
+            <p style="font-size: 18px; margin-bottom: 20px;">No feature flags to display</p>
+            <p>Click the button above to initialize flags from your configuration</p>
+        </div>
+    {% else %}
+        {{ block.super }}
+    {% endif %}
+{% endblock %}

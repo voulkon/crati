@@ -1,0 +1,407 @@
+"""
+Feature Flag Service
+
+Provides a centralized service for checking feature flags with a fallback mechanism:
+1. Check database for flag value (highest priority)
+2. Check environment variable if not in database
+3. Use default value as last resort
+
+This service includes caching for performance and supports runtime updates.
+"""
+
+import os
+from typing import Optional, Dict, List, Any
+from django.core.cache import cache
+from django.db import DatabaseError
+from django.utils import timezone
+from loguru import logger
+
+class FeatureFlagService:
+    """
+    Service for managing and checking feature flags.
+    
+    Usage:
+        from core.services.feature_flag_service import feature_flags
+        
+        if feature_flags.is_enabled('STEALTH_MODE'):
+            # Apply stealth mode logic
+            pass
+    """
+    
+    # Cache timeout in seconds (5 minutes)
+    CACHE_TIMEOUT = 300
+    
+    # Known feature flags with their default values and env var names
+    KNOWN_FLAGS = {
+        'STEALTH_MODE': {
+            'name': 'Stealth Mode',
+            'description': 'Require authentication for all API endpoints',
+            'default': False,
+            'env_var': 'STEALTH_MODE',
+            'category': 'authentication',
+            'requires_restart': False,
+        },
+        'STEALTH_ALLOWLIST': {
+            'name': 'Stealth Allowlist',
+            'description': 'When enabled with STEALTH_MODE, only users in AllowedUser table can access the system',
+            'default': False,
+            'env_var': 'STEALTH_ALLOWLIST',
+            'category': 'authentication',
+            'requires_restart': False,
+        },
+        'INDEX_THE_OPENSEARCH': {
+            'name': 'Index to OpenSearch',
+            'description': 'Enable document indexing to OpenSearch for full-text search. '
+                          'If disabled, search functionality will be limited. '
+                          'Requires backfill task when re-enabled.',
+            'default': True,
+            'env_var': 'INDEX_THE_OPENSEARCH',
+            'category': 'data_indexing',
+            'requires_restart': False,
+        },
+        'INDEX_THE_POSTGRES': {
+            'name': 'Index to PostgreSQL',
+            'description': 'Enable advanced indexing features in PostgreSQL database. '
+                          'Improves query performance for complex searches.',
+            'default': True,
+            'env_var': 'INDEX_THE_POSTGRES',
+            'category': 'data_indexing',
+            'requires_restart': False,
+        },
+        'HAVE_AFM_FETCH_JOB': {
+            'name': 'Company Data Fetching',
+            'description': 'Enable automatic fetching of company information from GEMI/AFM registry. '
+                          'If disabled, company enrichment will not occur. '
+                          'Requires backfill task when re-enabled.',
+            'default': True,
+            'env_var': 'HAVE_AFM_FETCH_JOB',
+            'category': 'data_enrichment',
+            'requires_restart': False,
+        },
+        'EXTRACT_THE_DOCS_FROM_PDFS': {
+            'name': 'PDF Text Extraction',
+            'description': 'Enable text extraction from PDF attachments. '
+                          'If disabled, document content analysis will be limited. '
+                          'Requires backfill task when re-enabled.',
+            'default': True,
+            'env_var': 'EXTRACT_THE_DOCS_FROM_PDFS',
+            'category': 'data_extraction',
+            'requires_restart': False,
+        },
+        'REACT_APP_STEALTH_MODE': {
+            'name': 'Frontend Stealth Mode',
+            'description': 'Enable authentication requirements in the React frontend application',
+            'default': False,
+            'env_var': 'REACT_APP_STEALTH_MODE',
+            'category': 'frontend',
+            'requires_restart': True,
+        },
+        'REACT_APP_STEALTH_ALLOWLIST': {
+            'name': 'Frontend Stealth Allowlist',
+            'description': 'Enable allowlist checking in the React frontend',
+            'default': False,
+            'env_var': 'REACT_APP_STEALTH_ALLOWLIST',
+            'category': 'frontend',
+            'requires_restart': True,
+        },
+        'TRANSMIT_TO_JAEGER': {
+            'name': 'Jaeger Tracing',
+            'description': 'Enable OpenTelemetry tracing to Jaeger for distributed tracing. '
+                          'If disabled, no spans will be sent to Jaeger. '
+                          'Requires service restart to take effect.',
+            'default': False,
+            'env_var': 'TRANSMIT_TO_JAEGER',
+            'category': 'system',
+            'requires_restart': True,
+        },
+        'LIGHT_WORKER': {
+            'name': 'Light Worker Mode',
+            'description': 'Use lightweight Celery worker without PDF processing dependencies (Docling). '
+                          'Only PyMuPDF extractor is available, reducing Docker image size and memory footprint. '
+                          'Requires worker restart to take effect.',
+            'default': False,
+            'env_var': 'LIGHT_WORKER',
+            'category': 'system',
+            'requires_restart': True,
+        },
+    }
+    
+    def __init__(self):
+        """Initialize the feature flag service."""
+        self._db_available = True
+    
+    def is_enabled(self, flag_key: str, default: Optional[bool] = None) -> bool:
+        """
+        Check if a feature flag is enabled.
+        
+        Args:
+            flag_key: The feature flag key (e.g., 'STEALTH_MODE')
+            default: Optional default value to use if flag is not found
+            
+        Returns:
+            bool: True if the flag is enabled, False otherwise
+            
+        Resolution order:
+            1. Database value (if exists and is_active=True)
+            2. Environment variable (if exists)
+            3. Provided default parameter
+            4. KNOWN_FLAGS default value
+            5. False (safe default)
+        """
+        # Try cache first
+        cache_key = f"feature_flag:{flag_key}"
+        cached_value = cache.get(cache_key)
+        if cached_value is not None:
+            return cached_value
+        
+        # Try database
+        db_value = self._get_from_database(flag_key)
+        if db_value is not None:
+            # Cache the result
+            cache.set(cache_key, db_value, self.CACHE_TIMEOUT)
+            return db_value
+        
+        # Try environment variable
+        env_value = self._get_from_environment(flag_key)
+        if env_value is not None:
+            # Cache the result (shorter timeout for env vars)
+            cache.set(cache_key, env_value, 60)
+            return env_value
+        
+        # Use provided default
+        if default is not None:
+            return default
+        
+        # Use KNOWN_FLAGS default
+        if flag_key in self.KNOWN_FLAGS:
+            return self.KNOWN_FLAGS[flag_key]['default']
+        
+        # Safe default
+        logger.warning(f"Feature flag '{flag_key}' not found in DB, env, or defaults. Returning False.")
+        return False
+    
+    def _get_from_database(self, flag_key: str) -> Optional[bool]:
+        """
+        Get feature flag value from database.
+        
+        Args:
+            flag_key: The feature flag key
+            
+        Returns:
+            Optional[bool]: The flag value if found and active, None otherwise
+        """
+        if not self._db_available:
+            return None
+        
+        try:
+            from core.models.feature_flags import FeatureFlag
+            from datetime import timedelta
+            
+            flag = FeatureFlag.objects.filter(
+                key=flag_key,
+                is_active=True
+            ).first()
+            
+            if flag:
+                # Update last_checked_at only if it's been more than 1 hour
+                # This reduces DB writes while still tracking usage
+                now = timezone.now()
+                if not flag.last_checked_at or (now - flag.last_checked_at) > timedelta(hours=1):
+                    flag.last_checked_at = now
+                    flag.save(update_fields=['last_checked_at'])
+                
+                return flag.enabled
+            
+            return None
+            
+        except DatabaseError as e:
+            logger.warning(f"Database error while checking feature flag '{flag_key}': {e}")
+            self._db_available = False
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error checking feature flag '{flag_key}': {e}")
+            return None
+    
+    def _get_from_environment(self, flag_key: str) -> Optional[bool]:
+        """
+        Get feature flag value from environment variable.
+        
+        Args:
+            flag_key: The feature flag key (or env var name)
+            
+        Returns:
+            Optional[bool]: The flag value if env var exists, None otherwise
+        """
+        # First try the flag_key directly
+        env_value = os.getenv(flag_key)
+        
+        # If not found and we know the env var name, try that
+        if env_value is None and flag_key in self.KNOWN_FLAGS:
+            env_var_name = self.KNOWN_FLAGS[flag_key].get('env_var')
+            if env_var_name:
+                env_value = os.getenv(env_var_name)
+        
+        if env_value is not None:
+            # Convert to boolean
+            return env_value.lower() in ('true', '1', 't', 'yes', 'on')
+        
+        return None
+    
+    def get_all_flags(self) -> Dict[str, bool]:
+        """
+        Get all feature flags and their current values.
+        
+        Returns:
+            Dict[str, bool]: Dictionary of flag keys to their current values
+        """
+        # Try cache first
+        cache_key = "feature_flags:all"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+        
+        result = {}
+        
+        # Get all known flags
+        for flag_key in self.KNOWN_FLAGS:
+            result[flag_key] = self.is_enabled(flag_key)
+        
+        # Get any additional flags from database
+        try:
+            from core.models.feature_flags import FeatureFlag
+            
+            db_flags = FeatureFlag.objects.filter(is_active=True)
+            for flag in db_flags:
+                if flag.key not in result:
+                    result[flag.key] = flag.enabled
+        except Exception as e:
+            logger.error(f"Error fetching all flags from database: {e}")
+        
+        # Cache for 1 minute
+        cache.set(cache_key, result, 60)
+        
+        return result
+    
+    def get_flag_info(self, flag_key: str) -> Optional[Dict[str, Any]]:
+        """
+        Get detailed information about a feature flag.
+        
+        Args:
+            flag_key: The feature flag key
+            
+        Returns:
+            Optional[Dict]: Flag information including current value, source, etc.
+        """
+        info = {
+            'key': flag_key,
+            'enabled': self.is_enabled(flag_key),
+            'source': 'default',
+            'db_override': False,
+            'env_override': False,
+        }
+        
+        # Check if it's in known flags
+        if flag_key in self.KNOWN_FLAGS:
+            info.update(self.KNOWN_FLAGS[flag_key])
+        
+        # Check database
+        try:
+            from core.models.feature_flags import FeatureFlag
+            
+            flag = FeatureFlag.objects.filter(
+                key=flag_key,
+                is_active=True
+            ).first()
+            
+            if flag:
+                info['source'] = 'database'
+                info['db_override'] = True
+                info['name'] = flag.name
+                info['description'] = flag.description
+                info['category'] = flag.category
+                info['requires_restart'] = flag.requires_restart
+                info['updated_at'] = flag.updated_at
+        except Exception:
+            pass
+        
+        # Check environment
+        env_value = self._get_from_environment(flag_key)
+        if env_value is not None and info['source'] == 'default':
+            info['source'] = 'environment'
+            info['env_override'] = True
+        
+        return info
+    
+    def clear_cache(self, flag_key: Optional[str] = None):
+        """
+        Clear cached feature flag values.
+        
+        Args:
+            flag_key: Specific flag to clear, or None to clear all
+        """
+        if flag_key:
+            cache_key = f"feature_flag:{flag_key}"
+            cache.delete(cache_key)
+            logger.info(f"Cleared cache for feature flag: {flag_key}")
+        else:
+            # Clear all feature flag caches
+            cache.delete("feature_flags:all")
+            for key in self.KNOWN_FLAGS:
+                cache_key = f"feature_flag:{key}"
+                cache.delete(cache_key)
+            logger.info("Cleared all feature flag caches")
+    
+    def initialize_flags_in_db(self):
+        """
+        Initialize all known flags in the database if they don't exist.
+        
+        Uses environment variables for initial values, then respects DB as source of truth.
+        This allows manual changes via admin interface to persist across restarts.
+        
+        Note: Only creates missing flags. Existing flags are never modified automatically.
+        Use sync_feature_flags management command to explicitly sync with env vars.
+        """
+        try:
+            from core.models.feature_flags import FeatureFlag
+            
+            created_count = 0
+            
+            for flag_key, flag_data in self.KNOWN_FLAGS.items():
+                # Check if environment variable is set
+                env_value = self._get_from_environment(flag_key)
+                
+                # Use env value if set, otherwise use default
+                initial_enabled = env_value if env_value is not None else flag_data['default']
+                
+                flag, created = FeatureFlag.objects.get_or_create(
+                    key=flag_key,
+                    defaults={
+                        'name': flag_data['name'],
+                        'description': flag_data['description'],
+                        'enabled': initial_enabled,
+                        'default_value': flag_data['default'],
+                        'env_var_name': flag_data.get('env_var', ''),
+                        'category': flag_data.get('category', 'system'),
+                        'requires_restart': flag_data.get('requires_restart', False),
+                    }
+                )
+                
+                if created:
+                    created_count += 1
+                    source = 'environment' if env_value is not None else 'default'
+                    logger.info(
+                        f"Created feature flag: {flag_key} = {initial_enabled} (from {source})"
+                    )
+            
+            if created_count > 0:
+                logger.info(f"Initialized {created_count} new feature flags in database")
+            
+            return created_count
+            
+        except Exception as e:
+            logger.error(f"Error initializing feature flags: {e}")
+            return 0
+
+
+# Global singleton instance
+feature_flags = FeatureFlagService()

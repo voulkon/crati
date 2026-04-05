@@ -135,9 +135,9 @@ class TextExtractionProcessor(BaseDocumentProcessor):
         )
         
         # Check LIGHT_WORKER mode first (takes precedence)
-        light_worker = os.getenv('LIGHT_WORKER', 'false').lower() == 'true'
+        from core.services.feature_flag_service import feature_flags
         
-        if light_worker:
+        if feature_flags.is_enabled('LIGHT_WORKER'):
             # Light mode: force PyMuPDF
             self.default_extractor = ProcessingProvider.PYMUPDF
             logger.info("🪶 LIGHT_WORKER mode: Using PyMuPDF extractor (Docling disabled)")

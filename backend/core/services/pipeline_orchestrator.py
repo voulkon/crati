@@ -17,6 +17,7 @@ from core.models.import_jobs import ImportJob
 from core.services.entity_amount_extraction_service import EntityAmountExtractionService
 from core.services.document_processor import DocumentAnalysisService
 from core.services.opensearch_service import OpenSearchService
+from core.services.feature_flag_service import feature_flags
 from core.tasks.tasks_entities import fetch_company_data_for_entities
 from core.importers.decisions import DecisionImporter
 from api.redis_keys import AFM_FETCH_LOCK_PREFIX, AFM_FETCH_LOCK_TIMEOUT
@@ -497,7 +498,7 @@ class DecisionPipelineOrchestrator:
     def _step_enrich_companies(self, decision: Decision, health_check: DecisionHealthCheck):
         try:
             # Skip company enrichment if disabled
-            if not settings.HAVE_AFM_FETCH_JOB:
+            if not feature_flags.is_enabled('HAVE_AFM_FETCH_JOB'):
                 logger.info(f"Skipping company enrichment for {decision.ada} (HAVE_AFM_FETCH_JOB=False)")
                 self.update_health_status(health_check, 'relations', HealthStatus.UNKNOWN)
                 return
@@ -590,7 +591,7 @@ class DecisionPipelineOrchestrator:
         try:
             logger.info(f"Step 3: Processing document for {decision.ada}")
             
-            if not settings.EXTRACT_THE_DOCS_FROM_PDFS:
+            if not feature_flags.is_enabled('EXTRACT_THE_DOCS_FROM_PDFS'):
                 logger.info(f"Skipping document processing for {decision.ada} (EXTRACT_THE_DOCS_FROM_PDFS=False)")
                 self.update_health_status(health_check, 'document_extraction', HealthStatus.UNKNOWN)
                 return
@@ -620,7 +621,7 @@ class DecisionPipelineOrchestrator:
 
     def _step_index_opensearch(self, decision: Decision, health_check: DecisionHealthCheck):
         # Skip OpenSearch indexing if disabled
-        if not settings.INDEX_THE_OPENSEARCH:
+        if not feature_flags.is_enabled('INDEX_THE_OPENSEARCH'):
             logger.info(f"Skipping OpenSearch indexing for {decision.ada} (INDEX_THE_OPENSEARCH=False)")
             self.update_health_status(health_check, 'opensearch', HealthStatus.UNKNOWN)
             return

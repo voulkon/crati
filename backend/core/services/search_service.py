@@ -7,6 +7,7 @@ from core.models.organizations import Organization, Unit, Signer
 from core.models.document_analysis import DocumentExtraction, ProcessingStatus
 from core.models.companies import Company, CompanyPerson
 from core.services.opensearch_service import OpenSearchService
+from core.services.feature_flag_service import feature_flags
 from core.utils.performance import query_debugger
 from loguru import logger
 import json
@@ -75,7 +76,7 @@ class SearchService:
             return {'results': [], 'count': 0, 'source': 'none'}
         
         # Skip OpenSearch if disabled, use PostgreSQL directly
-        if not settings.INDEX_THE_OPENSEARCH:
+        if not feature_flags.is_enabled('INDEX_THE_OPENSEARCH'):
             logger.info("OpenSearch disabled (INDEX_THE_OPENSEARCH=False), using PostgreSQL fallback")
             return self._search_documents_postgresql(
                 query, provider, status, is_scanned, limit

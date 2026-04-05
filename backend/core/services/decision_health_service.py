@@ -12,6 +12,7 @@ from core.models.decision_health import DecisionHealthCheck, HealthStatus
 from core.models.entities import DecisionEntityRelationship, AFMEntity
 from core.models.import_jobs import DateCoverage
 from core.services.opensearch_service import OpenSearchService
+from core.services.feature_flag_service import feature_flags
 
 
 class DecisionHealthService:
@@ -29,7 +30,7 @@ class DecisionHealthService:
     
     def __init__(self):
 
-        if settings.INDEX_THE_OPENSEARCH:
+        if feature_flags.is_enabled('INDEX_THE_OPENSEARCH'):
             self.opensearch_service = OpenSearchService()
     
     def check_decision_health(self, decision: Decision, force_refresh: bool = False) -> DecisionHealthCheck:
@@ -69,10 +70,10 @@ class DecisionHealthService:
         self._check_relations(decision, health_check)
         self._check_entities(decision, health_check)
 
-        if settings.EXTRACT_THE_DOCS_FROM_PDFS:
+        if feature_flags.is_enabled('EXTRACT_THE_DOCS_FROM_PDFS'):
             self._check_document_extraction(decision, health_check)
         
-        if settings.INDEX_THE_OPENSEARCH:
+        if feature_flags.is_enabled('INDEX_THE_OPENSEARCH'):
             self._check_opensearch(decision, health_check)
         
         self._check_coverage(decision, health_check)
@@ -345,7 +346,7 @@ class DecisionHealthService:
                 details = {'should_be_indexed': False}
             else:
                 
-                if not settings.INDEX_THE_OPENSEARCH:
+                if not feature_flags.is_enabled('INDEX_THE_OPENSEARCH'):
                     status = HealthStatus.UNKNOWN
                     message = "OpenSearch indexing disabled via settings"
                     details = {

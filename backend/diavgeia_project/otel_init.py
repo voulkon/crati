@@ -17,13 +17,13 @@ def initialize_otel(service_name):
     # Check if Jaeger transmission is disabled via Django settings
     try:
         from django.conf import settings
-        if hasattr(settings, 'TRANSMIT_TO_JAEGER') and not settings.TRANSMIT_TO_JAEGER:
+        if not settings.TRANSMIT_TO_JAEGER:
             # Return a no-op tracer when tracing is disabled
             return trace.get_tracer(__name__)
     except Exception:
-        # If Django settings aren't available yet, check environment variable
-        if os.getenv('TRANSMIT_TO_JAEGER', 'True').lower() == 'false':
-            return trace.get_tracer(__name__)
+        # If Django settings aren't available yet, default to disabled
+        # This should rarely happen as settings should be loaded before otel_init
+        return trace.get_tracer(__name__)
     
     # Handle management commands - create a separate service for them
     if 'manage.py' in sys.argv[0] and len(sys.argv) > 1:

@@ -147,32 +147,36 @@ class DecisionPipelineOrchestrator:
             # self._step_extract_amounts(decision, health_check)
 
             # 2 & 3. Entity and Amount Extraction (combined)
-            logger.info(f"\n{self._separator()}\n📝💰 STAGE 2/8: ENTITY AND AMOUNT EXTRACTION\n{self._separator()}")
+            logger.info(f"\n{self._separator()}\n📝💰 STAGE 2/9: ENTITY AND AMOUNT EXTRACTION\n{self._separator()}")
             self._step_extract_entities_and_amounts(decision, health_check)
 
+            # 3. Direct Assignment Classification
+            logger.info(f"\n{self._separator()}\n🎯 STAGE 3/9: DIRECT ASSIGNMENT CLASSIFICATION\n{self._separator()}")
+            self._step_classify_direct_assignment(decision, health_check)
+
             # 4. Company Data Enrichment
-            logger.info(f"\n{self._separator()}\n🏢 STAGE 4/8: COMPANY ENRICHMENT\n{self._separator()}")
+            logger.info(f"\n{self._separator()}\n🏢 STAGE 4/9: COMPANY ENRICHMENT\n{self._separator()}")
             self._step_enrich_companies(decision, health_check)
 
             # 5. Document Processing
-            logger.info(f"\n{self._separator()}\n📄 STAGE 5/8: DOCUMENT PROCESSING\n{self._separator()}")
+            logger.info(f"\n{self._separator()}\n📄 STAGE 5/9: DOCUMENT PROCESSING\n{self._separator()}")
             self._step_process_document(decision, health_check, force_reprocess)
 
             # 6. OpenSearch Indexing
             if skip_opensearch:
                 logger.info(
                     f"\n{self._separator()}\n"
-                    f"🔎 STAGE 6/8: OPENSEARCH INDEXING (SKIPPED)\n"
+                    f"🔎 STAGE 6/9: OPENSEARCH INDEXING (SKIPPED)\n"
                     f"{self._separator()}\n"
                     f"OpenSearch indexing disabled - skipping to save on infrastructure costs"
                 )
                 self.update_health_status(health_check, 'opensearch', HealthStatus.UNKNOWN)
             else:
-                logger.info(f"\n{self._separator()}\n🔎 STAGE 6/8: OPENSEARCH INDEXING\n{self._separator()}")
+                logger.info(f"\n{self._separator()}\n🔎 STAGE 6/9: OPENSEARCH INDEXING\n{self._separator()}")
                 self._step_index_opensearch(decision, health_check)
 
             # 7. Coverage
-            logger.info(f"\n{self._separator()}\n📊 STAGE 7/8: COVERAGE METRICS\n{self._separator()}")
+            logger.info(f"\n{self._separator()}\n📊 STAGE 7/9: COVERAGE METRICS\n{self._separator()}")
             self._step_verify_coverage(decision, health_check)
 
             logger.info(
@@ -492,6 +496,61 @@ class DecisionPipelineOrchestrator:
             step_result['error'] = str(e)
             logger.error(f"Entity/amount extraction failed for {decision.ada}: {e}", exc_info=True)
             self.update_health_status(health_check, 'entities', HealthStatus.ERROR, str(e))
+        
+        return step_result
+
+    def _step_classify_direct_assignment(
+        self, 
+        decision: Decision, 
+        health_check: DecisionHealthCheck
+    ) -> Dict[str, Any]:
+        """
+        STEP 3: Classify decision as direct assignment.
+        
+        This step determines if decision is a direct assignment (Δ.1) below threshold (€37,200)
+        and stores the result in DecisionClassification model.
+        
+        Uses DirectAssignmentDetectionService which applies business rules:
+        1. Must be decision type Δ.1
+        2. Total amount must be below €37,200
+        
+        Args:
+            decision: Decision to classify
+            health_check: Health check to update
+            
+        Returns:
+            Dict with classification results
+        """
+        step_result = {
+            'step': 'direct_assignment_classification',
+            'success': False,
+            'is_direct_assignment': False,
+            'error': None
+        }
+        
+        try:
+            logger.info(f"Classifying direct assignment for {decision.ada}")
+            
+            # Use the classification service
+            from core.services.direct_assignment_detection_service import classification_service
+            classification = classification_service.classify_and_save(decision)
+            
+            step_result['success'] = True
+            step_result['is_direct_assignment'] = classification.is_direct_assignment
+            
+            if classification.is_direct_assignment:
+                logger.info(f"✓ Decision {decision.ada} classified as direct assignment")
+            else:
+                logger.debug(f"Decision {decision.ada} is NOT a direct assignment")
+            
+            # Mark as healthy (classification always succeeds, even if result is False)
+            self.update_health_status(health_check, 'classification', HealthStatus.HEALTHY)
+            
+        except Exception as e:
+            step_result['error'] = str(e)
+            logger.error(f"Direct assignment classification failed for {decision.ada}: {e}", exc_info=True)
+            # Don't fail the whole pipeline for this
+            self.update_health_status(health_check, 'classification', HealthStatus.WARNING, str(e))
         
         return step_result
 

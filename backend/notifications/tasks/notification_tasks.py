@@ -5,10 +5,11 @@ from notifications.models import NotificationSubscription, Notification, Notific
 from notifications.utils import find_matching_decisions, determine_match_reason
 from notifications.constants import CHECK_FREQUENCY_DAILY, CHECK_FREQUENCY_WEEKLY
 from loguru import logger
+from django.conf import settings
 
 
 @shared_task
-def check_single_subscription(subscription_id, lookback_days=None, use_batch=True):
+def check_single_subscription(subscription_id, lookback_days=None, use_batch=True, send_email=False):
     """
     Check a single subscription for matching decisions.
     Used for on-demand checks triggered by users via the "check now" button.
@@ -19,6 +20,7 @@ def check_single_subscription(subscription_id, lookback_days=None, use_batch=Tru
                       If None (default), checks from last_checked to now for continuity.
                       If specified, checks from (now - lookback_days) to now.
         use_batch: If True, create NotificationBatch; if False, create individual Notifications (default: True)
+        send_email: If True, send email notification when matches are found (default: False)
     
     Returns:
         dict with subscription_id and either batch_id/decisions_added or notifications_created
@@ -68,6 +70,62 @@ def check_single_subscription(subscription_id, lookback_days=None, use_batch=Tru
                 check_window_end
             )
             
+            # Send email notification if requested and batch has decisions
+            email_sent = False
+            if send_email and batch_result.get('batch_id') and batch_result.get('decisions_added', 0) > 0:
+                try:
+                    from core.email_service import NotificationEmailService
+                    
+                    # Get the batch to prepare email data
+                    batch = NotificationBatch.objects.get(id=batch_result['batch_id'])
+                    
+                    # Prepare batch data for email
+                    decisions_list = list(matching_decisions[:10])  # Limit to first 10 for email
+                    batch_data = {
+                        'id': batch.id,
+                        'subscription_name': subscription.name or f"Subscription #{subscription.id}",
+                        'organization_name': subscription.organization.name if subscription.organization else None,
+                        'entity_name': subscription.entity.name if subscription.entity else None,
+                        'decision_count': batch_result.get('decisions_added', 0),
+                        'check_window_start': check_window_start,
+                        'check_window_end': check_window_end,
+                        'decisions': [
+                            {
+                                'id': d.ada,
+                                'subject': d.subject,
+                                'organization': d.organization.name if d.organization else 'Unknown',
+                                'date': d.submission_timestamp,
+                            }
+                            for d in decisions_list
+                        ],
+                    }
+                    
+                    # Send email
+                    frontend_url = settings.FRONTEND_DOMAINS_clean[0] if settings.FRONTEND_DOMAINS_clean else 'https://crati.co'
+                    batch_data['app_url'] = frontend_url
+                    
+                    # Get user's preferred language (default to 'en')
+                    user_language = getattr(subscription.user, 'preferred_language', 'en')
+                    
+                    email_sent = NotificationEmailService.send_notification_batch_summary(
+                        user_email=subscription.user.email,
+                        username=subscription.user.username or subscription.user.email,
+                        batch_data=batch_data,
+                        language=user_language
+                    )
+                    
+                    if email_sent:
+                        # Mark batch as emailed
+                        batch.email_sent = True
+                        batch.email_sent_at = timezone.now()
+                        batch.save(update_fields=['email_sent', 'email_sent_at'])
+                        logger.info(f"Email sent for batch {batch.id} to {subscription.user.email}")
+                    else:
+                        logger.warning(f"Failed to send email for batch {batch.id}")
+                        
+                except Exception as e:
+                    logger.error(f"Error sending email for batch {batch_result.get('batch_id')}: {e}", exc_info=True)
+            
             # Update last_checked
             subscription.last_checked = timezone.now()
             subscription.save(update_fields=['last_checked'])
@@ -82,6 +140,7 @@ def check_single_subscription(subscription_id, lookback_days=None, use_batch=Tru
                 'batch_id': batch_result.get('batch_id'),
                 'decisions_added': batch_result.get('decisions_added', 0),
                 'batch_created': batch_result.get('batch_created', False),
+                'email_sent': email_sent,
                 'lookback_days': lookback_days,
                 'check_window_start': check_window_start.isoformat(),
                 'check_window_end': check_window_end.isoformat(),
@@ -185,7 +244,7 @@ def check_subscriptions_for_new_decisions():
             
             logger.info(
                 f"Subscription {subscription.id} ({subscription.check_frequency}): "
-                f"created {notifications_count} notifications"
+                f"created {batch_result.get('decisions_added', 0)} notifications"
             )
             
         except Exception as e:

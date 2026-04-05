@@ -20,8 +20,8 @@ is_celery_beat = len(sys.argv) > 1 and 'beat' in sys.argv
 # Initialize for Beat (Single process)
 @beat_init.connect
 def init_beat_tracing(*args, **kwargs):
-    transmit_to_jaeger = os.getenv('TRANSMIT_TO_JAEGER', 'True').lower() == 'true'
-    if not transmit_to_jaeger:
+    from django.conf import settings
+    if not settings.TRANSMIT_TO_JAEGER:
         print("🔇 [Beat] Jaeger tracing disabled (TRANSMIT_TO_JAEGER=false)")
         return
     try:
@@ -66,8 +66,8 @@ def init_celery_tracing(*args, **kwargs):
     This is critical because gRPC channels (used by the OTLP exporter) 
     are not fork-safe and break when inherited from the parent process.
     """
-    transmit_to_jaeger = os.getenv('TRANSMIT_TO_JAEGER', 'True').lower() == 'true'
-    if not transmit_to_jaeger:
+    from django.conf import settings
+    if not settings.TRANSMIT_TO_JAEGER:
         print("🔇 [Worker Child] Jaeger tracing disabled (TRANSMIT_TO_JAEGER=false)")
         return
     try:

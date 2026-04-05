@@ -1,5 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
+from django.conf import settings
+from core.services.feature_flag_service import feature_flags
 import os
 
 User = get_user_model()
@@ -22,9 +24,9 @@ class Command(BaseCommand):
         # Check if we should auto-update existing superuser (default: False for safety)
         auto_update = os.getenv("DJANGO_SUPERUSER_AUTO_UPDATE", "False").lower() in ("true", "1", "t")
         
-        # Check if stealth mode with allowlist is enabled
-        stealth_mode = os.getenv("STEALTH_MODE", "False").lower() in ("true", "1", "t")
-        stealth_allowlist = os.getenv("STEALTH_ALLOWLIST", "False").lower() in ("true", "1", "t")
+        # Check if stealth mode with allowlist is enabled (check DB first, then env)
+        stealth_mode = feature_flags.is_enabled('STEALTH_MODE')
+        stealth_allowlist = feature_flags.is_enabled('STEALTH_ALLOWLIST')
         
         # Check if a superuser already exists
         existing_superuser = User.objects.filter(is_superuser=True).first()

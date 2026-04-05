@@ -65,6 +65,20 @@ class NotificationBatch(models.Model):
         help_text=_("Whether the user has dismissed this batch")
     )
     
+    # Email tracking
+    email_sent = models.BooleanField(
+        default=False,
+        verbose_name=_("Email sent"),
+        help_text=_("Whether an email notification has been sent for this batch")
+    )
+    
+    email_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_("Email sent at"),
+        help_text=_("When the email notification was sent")
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(
         auto_now_add=True,

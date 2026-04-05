@@ -3,6 +3,13 @@
   display: inline-block;
 }
 
+/* Django Auth Buttons Container */
+.django-auth-buttons {
+  display: flex;
+  gap: var(--spacing-sm);
+  align-items: center;
+}
+
 /* Loading State */
 .auth-loading {
   display: flex;
@@ -48,6 +55,35 @@
 }
 
 .sign-in-button .auth-icon {
+  font-size: var(--font-md);
+}
+
+/* Sign Up Button */
+.sign-up-button {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--primary-blue);
+  color: white;
+  border: 1px solid var(--primary-blue);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  box-shadow: 0 2px 8px var(--shadow);
+  backdrop-filter: blur(10px);
+  min-width: 90px;
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+}
+
+.sign-up-button:hover {
+  opacity: 0.9;
+  box-shadow: 0 4px 12px var(--shadow-hover);
+  transform: translateY(-1px);
+}
+
+.sign-up-button .auth-icon {
   font-size: var(--font-md);
 }
 

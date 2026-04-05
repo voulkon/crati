@@ -9,7 +9,7 @@ import './DjangoLoginForm.css';
  * Django Login Form
  * Simple email/password form for Django authentication when Clerk is not available
  */
-function DjangoLoginForm({ onSuccess, onCancel }) {
+function DjangoLoginForm({ onSuccess, onCancel, onSwitchToRegister }) {
   const { signIn } = useAuth();
   const { t } = useTranslation();
   const { isDarkMode } = useTheme();
@@ -106,7 +106,16 @@ function DjangoLoginForm({ onSuccess, onCancel }) {
         </form>
         
         <div className="django-login-footer">
-          <p>💡 Use your Django admin credentials</p>
+          <p>
+            Don't have an account?{' '}
+            <button 
+              onClick={onSwitchToRegister}
+              className="django-login-switch"
+              disabled={loading}
+            >
+              Create Account
+            </button>
+          </p>
         </div>
       </div>
     </div>

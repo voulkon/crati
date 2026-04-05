@@ -8,6 +8,7 @@ import {OrganizationIcon, PenIcon, CalendarIcon} from './Icons.js';
 
 import EntityDisplay from './EntityDisplay';
 import { getMainRecipient, getTotalAmount, groupEntityRelationships } from '../utils/decisionUtils';
+import { formatDate } from '../utils/dateUtils';
 
 
 
@@ -118,6 +119,14 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
         {decision.subject}
       </button>
 
+      {/* Date Display - Prominent Position */}
+      <div className="decision-date-prominent" title={t('decisionCard.issueDate')}>
+        <CalendarIcon />
+        <span className="date-value">
+          {formatDate(decision.issue_date)}
+        </span>
+      </div>
+
       {/* Simple recipient and amount display */}
       <div className="decision-main-info">
         {loadingEntities ? (
@@ -181,17 +190,6 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
             ))}
           </div>
         )}
-
-        <div className="metadata-row metadata-date" title={t('decisionCard.issueDate')}>
-          <CalendarIcon />
-          <span className="metadata-value">
-            {new Date(decision.issue_date).toLocaleDateString('en-GB', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric'
-            })}
-          </span>
-        </div>
       </div>
 
       {/* Document Actions Section - Compact */}

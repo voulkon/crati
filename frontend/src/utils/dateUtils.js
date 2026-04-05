@@ -54,6 +54,19 @@ export const formatAmount = (amount) => {
   })}`;
 };
 
+export const formatDate = (dateString, options = {}) => {
+  if (!dateString) return '';
+  
+  const defaultOptions = {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    ...options
+  };
+  
+  return new Date(dateString).toLocaleDateString(undefined, defaultOptions);
+};
+
 export const createDynamicDateRangeUtils = (entityDateRange) => {
   if (!entityDateRange || !entityDateRange.has_data) {
     return null;

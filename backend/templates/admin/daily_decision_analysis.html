@@ -723,7 +723,7 @@
 <div class="analysis-card" style="margin-top: 20px;">
     <h3>Decision Types Mixture</h3>
     <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-        <a href="?date={{ target_date|date:'Y-m-d' }}" 
+        <a href="?date={{ target_date|date:'Y-m-d' }}&mode=analytical" 
            class="type-badge {% if not current_decision_type_uid %}active{% endif %}"
            style="text-decoration: none; padding: 8px 12px; border-radius: 20px; border: 1px solid #ddd; color: #333; display: flex; align-items: center; gap: 8px;">
             <span>All Types</span>
@@ -731,7 +731,7 @@
         </a>
         
         {% for type in analysis.by_type %}
-        <a href="?date={{ target_date|date:'Y-m-d' }}&decision_type_uid={{ type.decision_type__uid }}" 
+        <a href="?date={{ target_date|date:'Y-m-d' }}&mode=analytical&decision_type_uid={{ type.decision_type__uid }}" 
            class="type-badge {% if current_decision_type_uid == type.decision_type__uid %}active{% endif %}"
            style="text-decoration: none; padding: 8px 12px; border-radius: 20px; border: 1px solid #ddd; color: #333; display: flex; align-items: center; gap: 8px;">
             <span>{{ type.decision_type__label|default:"Unknown" }}</span>
@@ -877,7 +877,7 @@
     {% if decision_details.has_previous or decision_details.has_next %}
     <div class="pagination">
         {% if decision_details.has_previous %}
-        <a href="?date={{ target_date|date:'Y-m-d' }}&offset={{ decision_details.previous_offset }}&limit={{ current_limit }}{% if current_decision_type_uid %}&decision_type_uid={{ current_decision_type_uid }}{% endif %}" class="pagination-btn prev-btn">← Previous</a>
+        <a href="?date={{ target_date|date:'Y-m-d' }}&mode=analytical&offset={{ decision_details.previous_offset }}&limit={{ current_limit }}{% if current_decision_type_uid %}&decision_type_uid={{ current_decision_type_uid }}{% endif %}" class="pagination-btn prev-btn">← Previous</a>
         {% else %}
         <span class="pagination-btn disabled">← Previous</span>
         {% endif %}
@@ -887,7 +887,7 @@
         </span>
         
         {% if decision_details.has_next %}
-        <a href="?date={{ target_date|date:'Y-m-d' }}&offset={{ decision_details.next_offset }}&limit={{ current_limit }}{% if current_decision_type_uid %}&decision_type_uid={{ current_decision_type_uid }}{% endif %}" class="pagination-btn next-btn">Next →</a>
+        <a href="?date={{ target_date|date:'Y-m-d' }}&mode=analytical&offset={{ decision_details.next_offset }}&limit={{ current_limit }}{% if current_decision_type_uid %}&decision_type_uid={{ current_decision_type_uid }}{% endif %}" class="pagination-btn next-btn">Next →</a>
         {% else %}
         <span class="pagination-btn disabled">Next →</span>
         {% endif %}

@@ -141,140 +141,27 @@ def get_entities_fast(query, **kwargs):
     # Search entities based on requested types
     if 'organization' in entity_types:
         orgs = search_service.search_organizations(query, limit)
-        results['results']['organizations'] = [
-            {
-                'id': org.uid,
-                'text': org.label,
-                'type': 'organization',
-                'title': highlight_query_in_text(org.label, query, 100),
-                'subtitle': f"{org.category} • {org.latin_name}",
-                'description': f"VAT: {org.vat_number or 'N/A'} • Status: {org.status.title()}",
-                'details': {
-                    'latin_name': org.latin_name,
-                    'category': org.category,
-                    'vat_number': org.vat_number,
-                    'status': org.status,
-                    'website': org.website,
-                    'supervisor': org.supervisor_org_name
-                },
-                'matched_field': determine_matched_field('organization', org, query),
-                'icon': 'building'
-            }
-            for org in orgs
-        ]
+        results['results']['organizations'] = [format_organization(org, query) for org in orgs]
         results['total_count'] += len(orgs)
     
     if 'signer' in entity_types:
         signers = search_service.search_signers(query, organization_id, limit)
-        results['results']['signers'] = [
-            {
-                'id': signer.uid,
-                'text': f"{signer.last_name}, {signer.first_name}",
-                'type': 'signer',
-                'title': highlight_query_in_text(f"{signer.first_name} {signer.last_name}", query, 100),
-                'subtitle': signer.organization.label if signer.organization else 'No organization',
-                'description': f"Signer • {'Active' if signer.active else 'Inactive'}",
-                'details': {
-                    'first_name': signer.first_name,
-                    'last_name': signer.last_name,
-                    'organization': signer.organization.label if signer.organization else None,
-                    'organization_id': signer.organization.uid if signer.organization else None,
-                    'active': signer.active,
-                    'has_org_sign_rights': signer.has_organization_sign_rights,
-                    'active_from': signer.active_from.isoformat() if signer.active_from else None,
-                    'active_until': signer.active_until.isoformat() if signer.active_until else None
-                },
-                'matched_field': determine_matched_field('signer', signer, query),
-                'icon': 'user'
-            }
-            for signer in signers
-        ]
+        results['results']['signers'] = [format_signer(signer, query) for signer in signers]
         results['total_count'] += len(signers)
     
     if 'unit' in entity_types:
         units = search_service.search_units(query, organization_id, limit)
-        results['results']['units'] = [
-            {
-                'id': unit.uid,
-                'text': unit.label,
-                'type': 'unit',
-                'title': highlight_query_in_text(unit.label, query, 100),
-                'subtitle': unit.organization.label if unit.organization else 'No organization',
-                'description': f"Unit • {unit.category} • {'Active' if unit.active else 'Inactive'}",
-                'details': {
-                    'organization': unit.organization.label if unit.organization else None,
-                    'organization_id': unit.organization.uid if unit.organization else None,
-                    'category': unit.category,
-                    'active': unit.active,
-                    'active_from': unit.active_from.isoformat() if unit.active_from else None,
-                    'active_until': unit.active_until.isoformat() if unit.active_until else None,
-                    'parent_unit': unit.parent.label if unit.parent else None
-                },
-                'matched_field': determine_matched_field('unit', unit, query),
-                'icon': 'department'
-            }
-            for unit in units
-        ]
+        results['results']['units'] = [format_unit(unit, query) for unit in units]
         results['total_count'] += len(units)
     
     if 'company' in entity_types:
         companies = search_service.search_companies(query, limit)
-        results['results']['companies'] = [
-            {
-                'id': company.ar_gemi,
-                'text': company.co_name_el or 'No name',
-                'type': 'company',
-                'title': highlight_query_in_text(company.co_name_el or 'No name', query, 100),
-                'subtitle': f"{company.legal_type_name or 'Company'} • {company.municipality_name or 'Unknown location'}",
-                'description': f"AFM: {company.afm or 'N/A'} • Status: {company.status_name or 'Unknown'}",
-                'details': {
-                    'co_name_el': company.co_name_el,
-                    'co_names_en': company.co_names_en,
-                    'co_titles_el': company.co_titles_el,
-                    'co_titles_en': company.co_titles_en,
-                    'afm': company.afm,
-                    'ar_gemi': company.ar_gemi,
-                    'legal_type': company.legal_type_name,
-                    'municipality_name': company.municipality_name,
-                    'prefecture_name': company.prefecture_name,
-                    'status_name': company.status_name,
-                    'incorporation_date': company.incorporation_date,
-                    'website': company.url,
-                    'email': company.email
-                },
-                'matched_field': determine_matched_field('company', company, query),
-                'icon': 'company'
-            }
-            for company in companies
-        ]
+        results['results']['companies'] = [format_company(company, query) for company in companies]
         results['total_count'] += len(companies)
     
     if 'company_person' in entity_types:
         company_persons = search_service.search_company_persons(query, company_id, limit)
-        results['results']['company_persons'] = [
-            {
-                'id': person.id,
-                'text': person.person_name or person.business_name or 'No name',
-                'type': 'company_person',
-                'title': highlight_query_in_text(person.person_name or person.business_name or 'No name', query, 100),
-                'subtitle': f"{person.role or 'Unknown role'} at {person.company.co_name_el if person.company else 'Unknown company'}",
-                'description': f"Company Person • {person.date_from or 'Date unknown'}",
-                'details': {
-                    'person_name': person.person_name,
-                    'business_name': person.business_name,
-                    'role': person.role,
-                    'company_name': person.company.co_name_el if person.company else None,
-                    'company_id': person.company.ar_gemi if person.company else None,
-                    'date_from': person.date_from,
-                    'date_to': person.date_to,
-                    'is_representative_alone': person.is_representative_alone,
-                    'is_representative_in_common': person.is_representative_in_common
-                },
-                'matched_field': determine_matched_field('company_person', person, query),
-                'icon': 'user-tie'
-            }
-            for person in company_persons
-        ]
+        results['results']['company_persons'] = [format_company_person(person, query) for person in company_persons]
         results['total_count'] += len(company_persons)
     
     return results

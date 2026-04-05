@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Filter } from 'lucide-react';
+import { OrganizationIcon } from '../components/Icons';
 import apiClient from '../api/client';
 import DualRangeSlider from '../components/DualRangeSlider';
 import DecisionCard from '../components/DecisionCard';
@@ -511,7 +512,7 @@ const EntityDetailPage = () => {
               className="org-chart-button"
               title={t('entityDetail.viewOrganizationChart')}
             >
-              🏢 {t('entityDetail.viewOrganizationChart')}
+              <OrganizationIcon /> {t('entityDetail.viewOrganizationChart')}
             </button>
           )}
         </div>
@@ -550,7 +551,7 @@ const EntityDetailPage = () => {
                         onClick={() => navigate(`/entity/organization/${orgData.organization.uid}`)}
                         title={t('entityDetail.viewOrganizationDetails')}
                       >
-                        🏢 {orgData.organization.label}
+                        <OrganizationIcon /> {orgData.organization.label}
                       </button>
                       {orgData.decision_count && (
                         <span className="decision-count">

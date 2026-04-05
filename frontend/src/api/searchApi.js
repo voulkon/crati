@@ -192,3 +192,21 @@ export const getAutocompleteSuggestions = async (query, category = null) => {
     throw error;
   }
 };
+
+/**
+ * Get default search suggestions (shown when user focuses on search box)
+ * Returns pre-configured popular entities from admin
+ * @param {number} limit - Maximum number of suggestions
+ * @returns {Promise<Object>} Default suggestions
+ */
+export const getDefaultSuggestions = async (limit = 10) => {
+  const params = new URLSearchParams({ limit });
+
+  try {
+    const response = await apiClient.get(`/search/suggestions/?${params}`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch default suggestions:', error);
+    throw error;
+  }
+};

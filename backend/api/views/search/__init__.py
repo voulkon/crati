@@ -13,6 +13,7 @@ from .entity_search import (
     super_search_api,
     search_stream_api,
     autocomplete_suggestions_api,
+    default_suggestions_api,
     entities_fast_search_api,
 )
 

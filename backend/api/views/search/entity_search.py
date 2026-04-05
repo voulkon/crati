@@ -528,6 +528,23 @@ def company_and_persons_search_api(request):
 @swagger_auto_schema(
     method='get',
     manual_parameters=[
+        openapi.Parameter('limit', openapi.IN_QUERY, description="Results limit", type=openapi.TYPE_INTEGER),
+    ]
+)
+@api_view(['GET'])
+@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+def default_suggestions_api(request):
+    """
+    Get default search suggestions to show when user focuses on search box.
+    Returns pre-configured popular entities from admin.
+    """
+    limit = int(request.GET.get('limit', 10))
+    return Response(get_default_suggestions_for_api())
+
+
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[
         openapi.Parameter('q', openapi.IN_QUERY, description="Search query", type=openapi.TYPE_STRING, required=True),
         openapi.Parameter('include_documents', openapi.IN_QUERY, description="Include document search", type=openapi.TYPE_BOOLEAN),
         openapi.Parameter('limit', openapi.IN_QUERY, description="Results limit per type", type=openapi.TYPE_INTEGER),
@@ -541,16 +558,19 @@ def super_search_api(request):
     - Organizations, Units, Signers
     - Companies and Company Persons  
     - Document content (via OpenSearch)
-    
-    If query is empty, returns default suggestions configured in admin.
     """
     query = request.GET.get('q', '').strip()
+    
+    if not query:
+        return Response({
+            'error': 'Query parameter "q" is required',
+            'query': '',
+            'results': {},
+            'total_count': 0
+        }, status=400)
+    
     include_documents = request.GET.get('include_documents', 'true').lower() == 'true'
     limit = int(request.GET.get('limit', 10))
-    
-    # Return default suggestions if no query
-    if not query:
-        return Response(get_default_suggestions_for_api())
     
     return Response(get_search_data_for_api(
         query,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { streamSearch, getAutocompleteSuggestions } from '../api/searchApi';
+import { streamSearch, getAutocompleteSuggestions, getDefaultSuggestions } from '../api/searchApi';
 import './SuperSearch.css';
 
 const SuperSearch = ({ 
@@ -181,9 +181,22 @@ const SuperSearch = ({
   };
 
   // Handle input focus
-  const handleInputFocus = () => {
+  const handleInputFocus = async () => {
+    // If there are already results from a previous search, show them
     if (results && query.trim()) {
       setShowResults(true);
+      return;
+    }
+    
+    // If input is empty, fetch and show default suggestions
+    if (!query.trim()) {
+      try {
+        const defaultSuggestions = await getDefaultSuggestions(10);
+        setResults(defaultSuggestions);
+        setShowResults(true);
+      } catch (error) {
+        console.error('Failed to fetch default suggestions:', error);
+      }
     }
   };
 

@@ -39,6 +39,10 @@ python manage.py migrate
 echo "Creating superuser if it doesn't exist..."
 python manage.py create_superuser
 
+# Initialize feature flags
+echo "Initializing feature flags..."
+python manage.py initialize_feature_flags
+
 # Run the server
 if [ "$DEBUG" = "True" ]; then
     echo "Starting in debug mode on port ${DJANGO_DEBUG_PORT:-8002}..."

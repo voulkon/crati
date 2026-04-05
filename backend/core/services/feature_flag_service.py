@@ -351,7 +351,11 @@ class FeatureFlagService:
         """
         Initialize all known flags in the database if they don't exist.
         
-        This is useful for setting up the system for the first time.
+        Uses environment variables for initial values, then respects DB as source of truth.
+        This allows manual changes via admin interface to persist across restarts.
+        
+        Note: Only creates missing flags. Existing flags are never modified automatically.
+        Use sync_feature_flags management command to explicitly sync with env vars.
         """
         try:
             from core.models.feature_flags import FeatureFlag
@@ -359,12 +363,18 @@ class FeatureFlagService:
             created_count = 0
             
             for flag_key, flag_data in self.KNOWN_FLAGS.items():
+                # Check if environment variable is set
+                env_value = self._get_from_environment(flag_key)
+                
+                # Use env value if set, otherwise use default
+                initial_enabled = env_value if env_value is not None else flag_data['default']
+                
                 flag, created = FeatureFlag.objects.get_or_create(
                     key=flag_key,
                     defaults={
                         'name': flag_data['name'],
                         'description': flag_data['description'],
-                        'enabled': flag_data['default'],
+                        'enabled': initial_enabled,
                         'default_value': flag_data['default'],
                         'env_var_name': flag_data.get('env_var', ''),
                         'category': flag_data.get('category', 'system'),
@@ -374,9 +384,14 @@ class FeatureFlagService:
                 
                 if created:
                     created_count += 1
-                    logger.info(f"Created feature flag: {flag_key}")
+                    source = 'environment' if env_value is not None else 'default'
+                    logger.info(
+                        f"Created feature flag: {flag_key} = {initial_enabled} (from {source})"
+                    )
             
-            logger.info(f"Initialized {created_count} feature flags in database")
+            if created_count > 0:
+                logger.info(f"Initialized {created_count} new feature flags in database")
+            
             return created_count
             
         except Exception as e:

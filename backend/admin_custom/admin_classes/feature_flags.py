@@ -11,7 +11,7 @@ Provides a user-friendly interface for managing feature flags with:
 
 from django.contrib import admin
 from django.utils.html import format_html
-from django.urls import path
+from django.urls import path, reverse
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.db.models import Count
@@ -58,6 +58,7 @@ class FeatureFlagAdmin(admin.ModelAdmin):
         'enabled_badge',
         'source_info',
         'requires_restart_badge',
+        'last_changed_by',
         'last_checked_display',
         'toggle_action',
     ]
@@ -82,6 +83,7 @@ class FeatureFlagAdmin(admin.ModelAdmin):
         'last_checked_at',
         'current_value_display',
         'environment_value_display',
+        'last_change_info',
     ]
     
     fieldsets = (
@@ -95,7 +97,7 @@ class FeatureFlagAdmin(admin.ModelAdmin):
             'fields': ('default_value', 'env_var_name', 'requires_restart')
         }),
         ('Current Status', {
-            'fields': ('current_value_display', 'environment_value_display'),
+            'fields': ('current_value_display', 'environment_value_display', 'last_change_info'),
             'classes': ('collapse',)
         }),
         ('Timestamps', {
@@ -111,6 +113,78 @@ class FeatureFlagAdmin(admin.ModelAdmin):
         'disable_flags',
         'clear_cache_for_selected',
     ]
+    
+    def save_model(self, request, obj, form, change):
+        """Override to create audit log when flag is changed via admin form."""
+        if change:
+            # Track what changed
+            if 'enabled' in form.changed_data:
+                old_value = FeatureFlag.objects.get(pk=obj.pk).enabled
+                new_value = obj.enabled
+                
+                # Save the object first
+                super().save_model(request, obj, form, change)
+                
+                # Create audit log
+                FeatureFlagAuditLog.objects.create(
+                    feature_flag=obj,
+                    changed_by=request.user.username if request.user.is_authenticated else 'unknown',
+                    change_type='enabled' if new_value else 'disabled',
+                    old_value=old_value,
+                    new_value=new_value,
+                    notes=f'Changed via admin form. Other changes: {", ".join(form.changed_data)}'
+                )
+                
+                messages.info(
+                    request,
+                    f'Audit log created for {obj.key} status change'
+                )
+            else:
+                # No status change, just save
+                super().save_model(request, obj, form, change)
+                
+                # Log metadata update if significant fields changed
+                if any(field in form.changed_data for field in ['name', 'description', 'category', 'is_active']):
+                    FeatureFlagAuditLog.objects.create(
+                        feature_flag=obj,
+                        changed_by=request.user.username if request.user.is_authenticated else 'unknown',
+                        change_type='updated',
+                        old_value=None,
+                        new_value=None,
+                        notes=f'Metadata updated: {", ".join(form.changed_data)}'
+                    )
+        else:
+            # New flag being created
+            super().save_model(request, obj, form, change)
+            
+            FeatureFlagAuditLog.objects.create(
+                feature_flag=obj,
+                changed_by=request.user.username if request.user.is_authenticated else 'unknown',
+                change_type='created',
+                old_value=None,
+                new_value=obj.enabled,
+                notes='Created via admin form'
+            )
+    
+    def get_queryset(self, request):
+        """Optimize queryset by prefetching audit logs."""
+        queryset = super().get_queryset(request)
+        return queryset.prefetch_related('audit_logs')
+    
+    def changelist_view(self, request, extra_context=None):
+        """Override to add initialization prompt when no flags exist."""
+        extra_context = extra_context or {}
+        
+        # Check if flags need initialization
+        flag_count = FeatureFlag.objects.count()
+        known_flags_count = len(feature_flags.KNOWN_FLAGS)
+        
+        extra_context['show_initialize_prompt'] = flag_count == 0
+        extra_context['flag_count'] = flag_count
+        extra_context['known_flags_count'] = known_flags_count
+        extra_context['needs_sync'] = flag_count < known_flags_count
+        
+        return super().changelist_view(request, extra_context)
     
     def get_urls(self):
         """Add custom admin URLs."""
@@ -190,6 +264,25 @@ class FeatureFlagAdmin(admin.ModelAdmin):
         return '-'
     source_info.short_description = 'Source'
     
+    def last_changed_by(self, obj):
+        """Display who last changed this flag."""
+        latest_log = obj.audit_logs.filter(
+            change_type__in=['enabled', 'disabled']
+        ).first()
+        
+        if latest_log:
+            from django.utils.timesince import timesince
+            time_ago = timesince(latest_log.changed_at)
+            return format_html(
+                '<span title="{} - {}">{}<br><small style="color: #666;">{} ago</small></span>',
+                latest_log.changed_at.strftime('%Y-%m-%d %H:%M:%S'),
+                latest_log.change_type,
+                latest_log.changed_by,
+                time_ago
+            )
+        return format_html('<span style="color: #999;">—</span>')
+    last_changed_by.short_description = 'Last Changed By'
+    
     def last_checked_display(self, obj):
         """Display last checked time in a readable format."""
         if obj.last_checked_at:
@@ -200,7 +293,7 @@ class FeatureFlagAdmin(admin.ModelAdmin):
     
     def toggle_action(self, obj):
         """Display toggle button."""
-        url = f'/admin/core/featureflag/{obj.id}/toggle/'
+        url = reverse('admin:featureflag_toggle', args=[obj.id])
         action = 'Disable' if obj.enabled else 'Enable'
         color = '#dc3545' if obj.enabled else '#28a745'
         return format_html(
@@ -232,6 +325,30 @@ class FeatureFlagAdmin(admin.ModelAdmin):
             )
         return 'Not set'
     environment_value_display.short_description = 'Environment Variable'
+    
+    def last_change_info(self, obj):
+        """Display detailed information about the last change."""
+        latest_log = obj.audit_logs.order_by('-changed_at').first()
+        
+        if latest_log:
+            return format_html(
+                '<div style="padding: 10px; background: #f8f9fa; border-left: 3px solid #007bff; border-radius: 3px;">'
+                '<strong>Changed by:</strong> {}<br>'
+                '<strong>Action:</strong> {}<br>'
+                '<strong>When:</strong> {}<br>'
+                '<strong>Old value:</strong> {}<br>'
+                '<strong>New value:</strong> {}<br>'
+                '{}'
+                '</div>',
+                latest_log.changed_by,
+                latest_log.get_change_type_display(),
+                latest_log.changed_at.strftime('%Y-%m-%d %H:%M:%S'),
+                '🔵 ON' if latest_log.old_value else '⚪ OFF' if latest_log.old_value is not None else 'N/A',
+                '🔵 ON' if latest_log.new_value else '⚪ OFF' if latest_log.new_value is not None else 'N/A',
+                f'<strong>Notes:</strong> {latest_log.notes}' if latest_log.notes else ''
+            )
+        return format_html('<span style="color: #999;">No changes recorded yet</span>')
+    last_change_info.short_description = 'Last Change Details'
     
     def toggle_flag(self, request, flag_id):
         """Toggle a feature flag."""

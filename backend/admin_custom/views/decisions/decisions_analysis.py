@@ -20,31 +20,11 @@ def daily_decision_analysis(request):
     except ValueError:
         target_date = date.today() - timedelta(days=1)
 
-    # Get pagination parameters
-    try:
-        offset = int(request.GET.get("offset", 0))
-        limit = int(request.GET.get("limit", 10))
-    except ValueError:
-        offset = 0
-        limit = 10
-
-    # Get filter parameters
-    decision_type_uid = request.GET.get("decision_type_uid")
-
+    # Get mode parameter - default to 'simple' for fast loading
+    mode = request.GET.get("mode", "simple")
+    
     # Initialize analysis service
     analysis_service = DecisionAnalysisService()
-
-    # Get comprehensive analysis
-    # TODO: This is super slow
-    analysis_data = analysis_service.get_daily_decision_analysis(target_date)
-    
-    # Get paginated decision details
-    decision_details = analysis_service.get_daily_decisions_with_details(
-        target_date, 
-        offset, 
-        limit,
-        decision_type_uid=decision_type_uid
-    )
 
     # Calculate navigation dates
     prev_date = target_date - timedelta(days=1)
@@ -54,18 +34,60 @@ def daily_decision_analysis(request):
     if next_date > date.today():
         next_date = None
 
-    context = {
-        "target_date": target_date,
-        "prev_date": prev_date,
-        "next_date": next_date,
-        "analysis": analysis_data,
-        "decision_details": decision_details,
-        "current_offset": offset,
-        "current_limit": limit,
-        "current_decision_type_uid": decision_type_uid,
-    }
+    if mode == "simple":
+        # Fast lightweight view - only 3 queries
+        logger.info(f"Loading simple view for {target_date}")
+        analysis_data = analysis_service.get_daily_decision_quick_summary(target_date)
+        
+        context = {
+            "target_date": target_date,
+            "prev_date": prev_date,
+            "next_date": next_date,
+            "analysis": analysis_data,
+            "mode": "simple",
+        }
+        
+        return render(request, "admin/daily_decision_simple.html", context)
+    
+    else:
+        # Full analytical view - 15+ queries
+        logger.info(f"Loading analytical view for {target_date}")
+        
+        # Get pagination parameters
+        try:
+            offset = int(request.GET.get("offset", 0))
+            limit = int(request.GET.get("limit", 10))
+        except ValueError:
+            offset = 0
+            limit = 10
 
-    return render(request, "admin/daily_decision_analysis.html", context)
+        # Get filter parameters
+        decision_type_uid = request.GET.get("decision_type_uid")
+        
+        # Get comprehensive analysis
+        analysis_data = analysis_service.get_daily_decision_analysis(target_date)
+        
+        # Get paginated decision details
+        decision_details = analysis_service.get_daily_decisions_with_details(
+            target_date, 
+            offset, 
+            limit,
+            decision_type_uid=decision_type_uid
+        )
+
+        context = {
+            "target_date": target_date,
+            "prev_date": prev_date,
+            "next_date": next_date,
+            "analysis": analysis_data,
+            "decision_details": decision_details,
+            "current_offset": offset,
+            "current_limit": limit,
+            "current_decision_type_uid": decision_type_uid,
+            "mode": "analytical",
+        }
+
+        return render(request, "admin/daily_decision_analysis.html", context)
 
 @staff_member_required
 def decision_analysis_api(request):

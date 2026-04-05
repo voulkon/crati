@@ -78,7 +78,7 @@ class CustomAdminSite(admin.AdminSite):
             "app_label": "decision_management",
             "models": [
                 {"name": "Coverage Explorer", "object_name": "CoverageExplorer", "admin_url": "/api/admin/decisions/coverage/", "view_only": True},
-                {"name": "Daily Decision Analysis", "object_name": "DailyDecisionAnalysis", "admin_url": "/api/admin/decisions/daily-analysis/", "view_only": True},
+                {"name": "Daily Decision Analysis", "object_name": "DailyDecisionAnalysis", "admin_url": "/api/admin/decisions/daily-analysis/?mode=simple", "view_only": True},
                 {"name": "Entity Search", "object_name": "EntitySearch", "admin_url": "/api/admin/decisions/entity-search/", "view_only": True},
             ],
         }

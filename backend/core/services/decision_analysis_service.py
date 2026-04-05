@@ -17,6 +17,70 @@ class DecisionAnalysisService:
     """
     publish_date_field_name = 'publish_timestamp'
 
+    def get_daily_decision_quick_summary(self, target_date: date) -> Dict[str, Any]:
+        """
+        Get lightweight summary of decisions for a specific day.
+        Only essential metrics - much faster than full analysis.
+        
+        Args:
+            target_date: Date to analyze
+            
+        Returns:
+            Dictionary with basic metrics (3 queries instead of 15+)
+        """
+        logger.info(f"Quick summary for {target_date}")
+        
+        # Base queryset for the target date
+        decisions_qs = Decision.objects.filter(issue_date__date=target_date)
+        total_count = decisions_qs.count()
+        
+        # Get day of week info
+        day_of_week = target_date.strftime('%A')
+        is_weekend = target_date.weekday() >= 5
+        
+        if total_count == 0:
+            return {
+                'date': target_date,
+                'day_of_week': day_of_week,
+                'is_weekend': is_weekend,
+                'total_count': 0,
+                'has_data': False,
+                'message': f'No decisions found for {target_date} ({day_of_week})'
+            }
+        
+        # Just top 5 types and orgs - single optimized query each
+        top_types = list(
+            decisions_qs.values('decision_type__label', 'decision_type__uid')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:5]
+        )
+        
+        top_orgs = list(
+            decisions_qs.values('organization__label', 'organization__uid')
+            .annotate(count=Count('id'))
+            .order_by('-count')[:5]
+        )
+        
+        # Quick content check - single query
+        content_counts = decisions_qs.aggregate(
+            with_subject=Count('id', filter=~Q(subject__isnull=True) & ~Q(subject__exact='')),
+            with_documents=Count('id', filter=~Q(document_url__isnull=True) & ~Q(document_url__exact=''))
+        )
+        
+        return {
+            'date': target_date,
+            'day_of_week': day_of_week,
+            'is_weekend': is_weekend,
+            'total_count': total_count,
+            'has_data': True,
+            'top_types': top_types,
+            'top_organizations': top_orgs,
+            'with_subject': content_counts['with_subject'],
+            'with_documents': content_counts['with_documents'],
+            'subject_coverage': round(content_counts['with_subject'] / total_count * 100, 1) if total_count > 0 else 0,
+            'document_coverage': round(content_counts['with_documents'] / total_count * 100, 1) if total_count > 0 else 0,
+        }
+
     def get_daily_decision_analysis(self, target_date: date) -> Dict[str, Any]:
         """
         Get comprehensive analysis of decisions for a specific day.

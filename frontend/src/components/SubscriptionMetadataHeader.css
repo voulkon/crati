@@ -1,3 +1,6 @@
+/* Import centralized StatCard styles */
+@import './StatCard.css';
+
 /* Subscription Metadata Header - Component Styles */
 
 .subscription-metadata-header {
@@ -151,66 +154,7 @@
   gap: var(--spacing-lg);
 }
 
-/* Stat Card */
-.stat-card {
-  background: var(--bg-color);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-xl);
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-lg);
-  border: 1px solid var(--border-color);
-  transition: var(--transition-fast);
-}
-
-.stat-card:hover {
-  border-color: var(--primary-blue);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px var(--shadow-hover);
-}
-
-.stat-card.wide {
-  grid-column: 1 / -1;
-}
-
-.stat-icon {
-  color: var(--primary-blue);
-  flex-shrink: 0;
-}
-
-.stat-content {
-  flex: 1;
-}
-
-.stat-value {
-  font-size: var(--font-xl);
-  font-weight: var(--font-bold);
-  color: var(--text-color);
-  line-height: 1.2;
-}
-
-.stat-value.date-range {
-  font-size: var(--font-md);
-  font-weight: var(--font-medium);
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  flex-wrap: wrap;
-}
-
-.stat-value .arrow {
-  font-size: var(--font-lg);
-  color: var(--muted-text);
-}
-
-.stat-label {
-  font-size: var(--font-xs);
-  color: var(--muted-text);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: var(--font-medium);
-  margin-top: var(--spacing-xs);
-}
+/* StatCard styles imported from StatCard.css */
 
 /* Metadata Footer */
 .subscription-metadata-footer {

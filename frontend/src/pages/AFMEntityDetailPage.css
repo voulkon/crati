@@ -1,3 +1,6 @@
+/* Import centralized StatCard styles */
+@import '../components/StatCard.css';
+
 .afm-entity-detail-page {
   padding: var(--spacing-xl);
   max-width: 1200px;
@@ -121,48 +124,7 @@
   margin-bottom: var(--spacing-xxxl);
 }
 
-.stat-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-xl);
-  box-shadow: 0 2px 4px var(--shadow);
-}
-
-.stat-card h3 {
-  margin: 0 0 var(--spacing-md) 0;
-  font-size: var(--font-md);
-  color: var(--primary-blue);
-}
-
-.stat-value {
-  font-size: var(--font-xxxl, 2.5em);
-  font-weight: var(--font-bold);
-  color: var(--secondary-blue);
-  margin-bottom: var(--spacing-sm);
-}
-
-.stat-context {
-  font-size: var(--font-sm);
-  color: var(--muted-text);
-}
-
-.most-frequent-org {
-  background: var(--selection-bg);
-  border: 1px solid var(--primary-blue);
-  color: var(--primary-blue);
-  padding: var(--spacing-xs) var(--spacing-sm);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: var(--transition-fast);
-  font-size: var(--font-xs);
-  margin-top: var(--spacing-xs);
-}
-
-.most-frequent-org:hover {
-  background: var(--primary-blue);
-  color: white;
-}
+/* StatCard styles imported from StatCard.css */
 
 .roles-section {
   margin-bottom: var(--spacing-xxxl);

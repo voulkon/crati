@@ -132,7 +132,7 @@ const SubscriptionMetadataHeader = ({
       <div className="subscription-stats-section">
         <h3 className="stats-title">{t('notifications.overview')}</h3>
         <div className="stats-grid">
-          <div className="stat-card">
+          <div className="stat-card stat-card-icon-layout">
             <ChartIcon className="stat-icon" size={32} />
             <div className="stat-content">
               <div className="stat-value">{totalBatches || 0}</div>
@@ -140,7 +140,7 @@ const SubscriptionMetadataHeader = ({
             </div>
           </div>
 
-          <div className="stat-card">
+          <div className="stat-card stat-card-icon-layout">
             <FileIcon className="stat-icon" size={32} />
             <div className="stat-content">
               <div className="stat-value">{totalDecisions || 0}</div>
@@ -149,7 +149,7 @@ const SubscriptionMetadataHeader = ({
           </div>
 
           {dateRange && (dateRange.from || dateRange.to) && (
-            <div className="stat-card wide">
+            <div className="stat-card stat-card-icon-layout wide">
               <CalendarIcon className="stat-icon" size={32} />
               <div className="stat-content">
                 <div className="stat-label">{t('notifications.dateRange')}</div>

@@ -1,3 +1,6 @@
+/* Import centralized StatCard styles */
+@import '../components/StatCard.css';
+
 /* Relationship Detail Page Styles */
 .relationship-detail-page {
   max-width: 1400px;
@@ -114,31 +117,7 @@
   margin-bottom: 32px;
 }
 
-.stat-card {
-  background: var(--card-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 20px;
-}
-
-.stat-card h3 {
-  font-size: 0.9rem;
-  color: var(--text-muted);
-  margin: 0 0 12px 0;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.stat-value {
-  font-size: 1.8rem;
-  font-weight: 700;
-  color: var(--accent-color);
-}
-
-.stat-value.date-range {
-  font-size: 1rem;
-  color: var(--text-color);
-}
+/* StatCard styles imported from StatCard.css */
 
 .decisions-section {
   background: var(--card-bg);

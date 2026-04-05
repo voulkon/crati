@@ -73,53 +73,7 @@
   margin-bottom: var(--spacing-xxxl);
 }
 
-.stat-card {
-  background-color: var(--card-bg);
-  padding: var(--spacing-xl);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 2px 4px var(--shadow);
-}
-
-.stat-title {
-  margin: 0 0 var(--spacing-sm) 0;
-  color: var(--primary-blue);
-  font-size: var(--font-md);
-}
-
-.stat-value {
-  font-size: var(--font-xxl);
-  font-weight: var(--font-bold);
-  color: var(--secondary-blue);
-}
-
-.stat-context {
-  font-size: var(--font-sm);
-  color: var(--muted-text);
-  margin-top: var(--spacing-xs);
-}
-
-.stat-period {
-  font-size: var(--font-lg);
-  font-weight: var(--font-medium);
-  color: var(--text-color);
-}
-
-.stat-date-range {
-  font-size: var(--font-sm);
-  color: var(--muted-text);
-  margin-top: var(--spacing-xs);
-}
-
-.discrepancy-warning {
-  background-color: var(--warning-bg);
-  color: var(--warning-text);
-  border: 1px solid var(--warning-border);
-  border-radius: var(--radius-sm);
-  padding: var(--spacing-xs);
-  margin-top: var(--spacing-xs);
-  font-size: var(--font-xs);
-}
+/* StatCard styles imported from StatCard.css */
 
 .decisions-section {
   background-color: var(--card-bg);

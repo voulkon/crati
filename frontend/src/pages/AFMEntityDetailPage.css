@@ -250,24 +250,39 @@
 .filters-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--spacing-md);
   margin-bottom: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--selection-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
 }
 
-.filter-toggle-button {
-  background: var(--selection-bg);
-  border: 1px solid var(--primary-blue);
-  color: var(--primary-blue);
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-radius: var(--radius-sm);
+.filters-header.clickable {
   cursor: pointer;
-  font-weight: var(--font-medium);
   transition: var(--transition-fast);
 }
 
-.filter-toggle-button:hover {
-  background: var(--primary-blue);
-  color: white;
+.filters-header.clickable:hover {
+  background: var(--hover-bg);
+  border-color: var(--primary-blue);
+}
+
+.filter-toggle-content {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--primary-blue);
+  font-weight: var(--font-medium);
+  font-size: var(--font-sm);
+  flex: 1;
+  justify-content: center;
+}
+
+.toggle-arrow {
+  margin-left: var(--spacing-xs);
+  color: var(--muted-text);
 }
 
 .clear-filters-button {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Filter } from 'lucide-react';
 import apiClient from '../api/client';
 import { useTranslation } from '../contexts/TranslationContext';
 import useUrlFilters from '../hooks/useUrlFilters';
@@ -289,18 +290,23 @@ const AFMEntityDetailPage = () => {
 
         {/* Role Filters */}
         <div className="filters-section">
-          <div className="filters-header">
-            <button 
-              className="filter-toggle-button"
-              onClick={() => setShowRoleFilter(!showRoleFilter)}
-            >
-              {t('afmEntityDetail.filterByRole')} {showRoleFilter ? '▲' : '▼'}
-            </button>
+          <div 
+            className="filters-header clickable"
+            onClick={() => setShowRoleFilter(!showRoleFilter)}
+          >
+            <div className="filter-toggle-content">
+              <Filter size={18} />
+              <span>{t('afmEntityDetail.filterByRole')}</span>
+              <span className="toggle-arrow">{showRoleFilter ? '▲' : '▼'}</span>
+            </div>
             
             {activeFiltersCount > 0 && (
               <button 
                 className="clear-filters-button"
-                onClick={clearAllFilters}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  clearAllFilters();
+                }}
               >
                 {t('common.clearFilters')} ({activeFiltersCount})
               </button>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Filter } from 'lucide-react';
 import apiClient from '../api/client';
 import DualRangeSlider from '../components/DualRangeSlider';
 import DecisionCard from '../components/DecisionCard';
@@ -750,16 +751,24 @@ const EntityDetailPage = () => {
         </div>
 
         <div className="filters-section">
-          <div className="filters-header">
-            <button 
-              onClick={() => setShowDecisionTypeFilter(!showDecisionTypeFilter)}
-              className="filter-toggle-button"
-            >
-              🔍 {t('entityDetail.filters')} {activeFiltersCount > 0 && `(${activeFiltersCount})`}
-            </button>
+          <div 
+            className="filters-header clickable"
+            onClick={() => setShowDecisionTypeFilter(!showDecisionTypeFilter)}
+          >
+            <div className="filter-toggle-content">
+              <Filter size={18} />
+              <span>{t('entityDetail.filters')} {activeFiltersCount > 0 && `(${activeFiltersCount})`}</span>
+              <span className="toggle-arrow">{showDecisionTypeFilter ? '▲' : '▼'}</span>
+            </div>
             
             {activeFiltersCount > 0 && (
-              <button onClick={clearAllFilters} className="clear-filters-button">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  clearAllFilters();
+                }} 
+                className="clear-filters-button"
+              >
                 {t('entityDetail.clearAllFilters')}
               </button>
             )}

@@ -139,7 +139,8 @@ def register_all_models():
         ImportThresholdAdmin,
         NotificationSubscriptionAdmin, NotificationAdmin,
         NotificationBatchAdmin, NotificationBatchDecisionAdmin,
-        FeatureFlagAdmin, FeatureFlagAuditLogAdmin
+        FeatureFlagAdmin, FeatureFlagAuditLogAdmin,
+        SearchSuggestionAdmin
     )
     
     from core.models.decisions import Decision, Attachment
@@ -151,6 +152,7 @@ def register_all_models():
     from core.models.import_thresholds import ImportThreshold
     from core.models.backups import Backup
     from core.models.feature_flags import FeatureFlag, FeatureFlagAuditLog
+    from core.models.search_suggestions import SearchSuggestion
     from api.models import APIAnalytics, EndpointStats, DailyTraffic
     from users.models import CustomUser, Subscription
     from notifications.models import NotificationSubscription, Notification, NotificationBatch, NotificationBatchDecision
@@ -202,6 +204,9 @@ def register_all_models():
     # Register Feature Flag models
     admin_site.register(FeatureFlag, FeatureFlagAdmin)
     admin_site.register(FeatureFlagAuditLog, FeatureFlagAuditLogAdmin)
+    
+    # Register Search Suggestions
+    admin_site.register(SearchSuggestion, SearchSuggestionAdmin)
     admin_site.register(NotificationBatchDecision, NotificationBatchDecisionAdmin)
 
 

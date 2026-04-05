@@ -38,11 +38,6 @@ class SearchSuggestion(models.Model):
         help_text="UID of the entity (organization.uid, signer.uid, etc.)"
     )
     
-    display_text = models.CharField(
-        max_length=500,
-        help_text="Text to display in the suggestion (automatically populated from entity)"
-    )
-    
     # Ordering and visibility
     order = models.IntegerField(
         default=0,
@@ -87,7 +82,32 @@ class SearchSuggestion(models.Model):
         ]
     
     def __str__(self):
-        return f"{self.get_suggestion_type_display()}: {self.display_text}"
+        return f"{self.get_suggestion_type_display()}: {self.get_entity_display_name()}"
+    
+    def get_entity_display_name(self):
+        """Get the actual name of the referenced entity"""
+        try:
+            if self.suggestion_type == 'organization':
+                from core.models.organizations import Organization
+                return Organization.objects.get(uid=self.entity_id).label
+            elif self.suggestion_type == 'signer':
+                from core.models.organizations import Signer
+                signer = Signer.objects.get(uid=self.entity_id)
+                return f"{signer.first_name} {signer.last_name}"
+            elif self.suggestion_type == 'unit':
+                from core.models.organizations import Unit
+                return Unit.objects.get(uid=self.entity_id).label
+            elif self.suggestion_type == 'company':
+                from core.models.companies import Company
+                company = Company.objects.get(ar_gemi=self.entity_id)
+                return company.co_name_el or 'No name'
+            elif self.suggestion_type == 'company_person':
+                from core.models.companies import CompanyPerson
+                person = CompanyPerson.objects.get(id=self.entity_id)
+                return person.person_name or person.business_name or 'No name'
+        except Exception as e:
+            return f"{self.suggestion_type} #{self.entity_id} (not found)"
+        return self.entity_id
     
     @classmethod
     def get_active_suggestions(cls, limit=10):

@@ -29,6 +29,7 @@ from .ai_pricing import (
     AIJobExecution,
 )
 from .search_analytics import SearchAnalytics, PopularQuery
+from .search_suggestions import SearchSuggestion
 
 from .entities import AFMEntity, DecisionEntityRelationship
 from .companies import  (

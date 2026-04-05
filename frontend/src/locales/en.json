@@ -126,7 +126,8 @@
     "collapse" : "Collapse",
     "filters" : "Filters",
     "all": "All",
-    "loadMore": "Load More"
+    "loadMore": "Load More",
+    "register" : "Register"
   },
   "errors": {
     "failedToLoad": "Failed to load data",

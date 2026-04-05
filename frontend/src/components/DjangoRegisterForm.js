@@ -64,7 +64,7 @@ function DjangoRegisterForm({ onSuccess, onCancel, onSwitchToLogin }) {
     <div className={`django-login-overlay ${isDarkMode ? 'dark' : 'light'}`}>
       <div className="django-login-modal">
         <div className="django-login-header">
-          <h2>✨ {t('common.register') || 'Create Account'}</h2>
+          <h2>{t('common.register') || 'Create Account'}</h2>
           <button 
             className="django-login-close" 
             onClick={onCancel}

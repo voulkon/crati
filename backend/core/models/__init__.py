@@ -12,6 +12,7 @@ from .dictionaries import (
     DictionaryItem,
 )
 from .decisions import DecisionStatus, Decision
+from .decision_classification import DecisionClassification
 from .types import (
     ActType,
     ExtraField,

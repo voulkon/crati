@@ -195,6 +195,7 @@ class FeatureFlagService:
         
         try:
             from core.models.feature_flags import FeatureFlag
+            from datetime import timedelta
             
             flag = FeatureFlag.objects.filter(
                 key=flag_key,
@@ -202,9 +203,12 @@ class FeatureFlagService:
             ).first()
             
             if flag:
-                # Update last_checked_at timestamp (async to avoid blocking)
-                flag.last_checked_at = timezone.now()
-                flag.save(update_fields=['last_checked_at'])
+                # Update last_checked_at only if it's been more than 1 hour
+                # This reduces DB writes while still tracking usage
+                now = timezone.now()
+                if not flag.last_checked_at or (now - flag.last_checked_at) > timedelta(hours=1):
+                    flag.last_checked_at = now
+                    flag.save(update_fields=['last_checked_at'])
                 
                 return flag.enabled
             

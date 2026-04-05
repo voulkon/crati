@@ -27,16 +27,19 @@ class StealthModeMiddleware:
     
     def __init__(self, get_response):
         self.get_response = get_response
-        self.stealth_mode = getattr(settings, 'STEALTH_MODE', False)
-        self.stealth_allowlist = getattr(settings, 'STEALTH_ALLOWLIST', False)
         
     def __call__(self, request):
+        # Check feature flags dynamically on each request to allow instant updates
+        from core.services.feature_flag_service import feature_flags
+        stealth_mode = feature_flags.is_enabled('STEALTH_MODE')
+        stealth_allowlist = feature_flags.is_enabled('STEALTH_ALLOWLIST')
+        
         # Allow OPTIONS requests (CORS preflight) without authentication
         if request.method == 'OPTIONS':
             return self.get_response(request)
         
         # Only enforce in stealth mode and for API endpoints
-        if self.stealth_mode and request.path.startswith('/api/'):
+        if stealth_mode and request.path.startswith('/api/'):
             # Exempt health check and admin endpoints
             exempt_prefixes = [
                 '/api/health',
@@ -70,7 +73,7 @@ class StealthModeMiddleware:
                 
                 # If allowlist is enabled, check if user is allowed
                 # Note: Superusers and staff are always allowed regardless of allowlist
-                if self.stealth_allowlist:
+                if stealth_allowlist:
                     # Always allow superusers and staff
                     if user.is_superuser or user.is_staff:
                         pass  # Allow through

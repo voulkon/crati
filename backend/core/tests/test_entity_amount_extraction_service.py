@@ -41,6 +41,7 @@ def load_extraction_test_cases(test_data_dir: Path) -> list:
     - ada: decision ADA
     - extra_field_values_json: the decision data
     - expected: dict with 'entities' and 'amounts' counts
+                  optionally 'total_amount' (float) to verify sum of amounts
     """
     test_cases = []
     
@@ -48,11 +49,15 @@ def load_extraction_test_cases(test_data_dir: Path) -> list:
         with open(json_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         
+        # Get optional total_amount (None if not present)
+        expected_total_amount = data["expected"].get("total_amount", None)
+        
         test_case = pytest.param(
             data["ada"],
             data["extra_field_values_json"],
             data["expected"]["entities"],
             data["expected"]["amounts"],
+            expected_total_amount,  # Will be None if not in JSON
             id=data.get("id", json_file.stem)  # Use filename as fallback ID
         )
         test_cases.append(test_case)
@@ -69,7 +74,7 @@ class TestEntityAmountExtractionService:
     """Test the unified entity and amount extraction service"""
     
     @pytest.mark.parametrize(
-        "ada,extra_field_values_json,expected_entities,expected_amounts",
+        "ada,extra_field_values_json,expected_entities,expected_amounts,expected_total_amount",
         EXTRACTION_TEST_CASES,
         # No ids parameter needed - they're embedded in pytest.param() from JSON files
     )
@@ -78,7 +83,8 @@ class TestEntityAmountExtractionService:
         ada,
         extra_field_values_json,
         expected_entities,
-        expected_amounts
+        expected_amounts,
+        expected_total_amount
     ):
         """
         Test extraction on real decision data from Diavgeia.
@@ -89,6 +95,7 @@ class TestEntityAmountExtractionService:
         - Entities from person[] arrays and other entity fields
         - Amounts from awardAmount, expenseAmount, and other amount fields
         - Links amounts to entities when both exist
+        - Optionally verifies total amount sum (if specified in test case)
         """
         from conftest import DecisionFactory
         # Create a minimal decision with just the essential fields
@@ -118,6 +125,17 @@ class TestEntityAmountExtractionService:
             f"Expected {expected_entities} entities, found {actual_entities}"
         assert actual_amounts == expected_amounts, \
             f"Expected {expected_amounts} amounts, found {actual_amounts}"
+        
+        # Optionally verify total amount sum (only if specified in test case)
+        if expected_total_amount is not None:
+            from django.db.models import Sum
+            total = DecisionAmountField.objects.filter(
+                decision=decision
+            ).aggregate(total=Sum('amount'))['total']
+            
+            assert total is not None, "Expected amounts but got None"
+            assert abs(total - Decimal(str(expected_total_amount))) < Decimal('0.01'), \
+                f"Expected total amount {expected_total_amount}, found {total}"
         
     # def test_extract_with_counterpart_detailed(self):
     #     """

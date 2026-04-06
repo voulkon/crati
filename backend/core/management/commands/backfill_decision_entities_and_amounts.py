@@ -4,8 +4,7 @@ from django.db.models import Q
 from django.utils.dateparse import parse_date
 from core.models.decisions import Decision
 from core.models.entities import DecisionEntityRelationship, DecisionAmountField
-from core.services.afm_extractor import extract_afms_from_decision
-from core.importers.decisions import DecisionImporter
+from core.services.entity_amount_extraction_service import EntityAmountExtractionService
 from datetime import datetime, date
 from typing import List, Optional
 from loguru import logger
@@ -102,8 +101,8 @@ class Command(BaseCommand):
         self.entities_only = options['entities_only']
         self.amounts_only = options['amounts_only']
         
-        # Initialize the importer for amount extraction
-        self.importer = DecisionImporter()
+        # Initialize the extraction service
+        self.extraction_service = EntityAmountExtractionService()
         
         # Get the queryset of decisions to process
         decisions_qs = self.get_decisions_queryset(options)
@@ -208,24 +207,33 @@ class Command(BaseCommand):
             with transaction.atomic():
                 for decision in batch:
                     try:
-                        # Track what was created for this decision
-                        decision_entities_created = 0
-                        decision_amounts_created = 0
+                        # Determine skip behavior based on flags
+                        # If entities-only: skip if has entities
+                        # If amounts-only: skip if has amounts
+                        # If both: skip if has both entities AND amounts
+                        should_skip = False
+                        if self.entities_only and decision.entity_relationships.exists():
+                            should_skip = True
+                        elif self.amounts_only and decision.amount_fields.exists():
+                            should_skip = True
+                        elif not self.entities_only and not self.amounts_only:
+                            # Both entities and amounts - skip only if both exist
+                            if decision.entity_relationships.exists() and decision.amount_fields.exists():
+                                should_skip = True
                         
-                        # Extract AFM entities if not skipping
-                        if not self.amounts_only:
-                            decision_entities_created = self.extract_afm_entities(decision)
-                            entities_created += decision_entities_created
+                        # Use the unified service to extract both entities and amounts
+                        result = self.extraction_service.extract_from_decision(
+                            decision, 
+                            save_to_db=not self.dry_run,
+                            skip_if_existing=should_skip  # Smart idempotent mode
+                        )
                         
-                        # Extract amounts if not skipping
-                        if not self.entities_only:
-                            decision_amounts_created = self.extract_amounts(decision)
-                            amounts_created += decision_amounts_created
+                        # Track what was created
+                        decision_entities_created = result.entities_created if not self.amounts_only else 0
+                        decision_amounts_created = result.amounts_created if not self.entities_only else 0
                         
-                        # Link amounts to relationships if both were processed
-                        if not self.amounts_only and not self.entities_only:
-                            self.link_amounts_to_relationships(decision)
-                        
+                        entities_created += decision_entities_created
+                        amounts_created += decision_amounts_created
                         processed += 1
                         
                         # Log progress for significant decisions
@@ -235,6 +243,13 @@ class Command(BaseCommand):
                                 f"+{decision_entities_created} entities, "
                                 f"+{decision_amounts_created} amounts"
                             )
+                        
+                        # Log any errors from the extraction
+                        if result.errors:
+                            for error in result.errors:
+                                self.stdout.write(
+                                    self.style.WARNING(f"⚠️  {decision.ada}: {error}")
+                                )
                     
                     except Exception as e:
                         errors += 1
@@ -260,48 +275,3 @@ class Command(BaseCommand):
                 f"Errors: {errors}"
             )
         )
-
-    def extract_afm_entities(self, decision: Decision) -> int:
-        """Extract AFM entities for a decision. Returns count of entities created."""
-        # Check if entities already exist
-        existing_count = DecisionEntityRelationship.objects.filter(decision=decision).count()
-        if existing_count > 0:
-            return 0  # Already has entities
-        
-        try:
-            # Extract AFM entities
-            created_relationships = extract_afms_from_decision(decision, save_to_db=True)
-            return len(created_relationships) if created_relationships else 0
-        except Exception as e:
-            logger.error(f"Error extracting AFM entities for {decision.ada}: {e}")
-            raise
-
-    def extract_amounts(self, decision: Decision) -> int:
-        """Extract amounts for a decision. Returns count of amounts created."""
-        # Check if amounts already exist
-        existing_count = DecisionAmountField.objects.filter(decision=decision).count()
-        if existing_count > 0:
-            return 0  # Already has amounts
-        
-        try:
-            # Count amounts before extraction
-            initial_count = DecisionAmountField.objects.filter(decision=decision).count()
-            
-            # Extract amounts using the importer method
-            self.importer.extract_and_save_amounts(decision)
-            
-            # Count amounts after extraction
-            final_count = DecisionAmountField.objects.filter(decision=decision).count()
-            
-            return final_count - initial_count
-        except Exception as e:
-            logger.error(f"Error extracting amounts for {decision.ada}: {e}")
-            raise
-
-    def link_amounts_to_relationships(self, decision: Decision):
-        """Link amounts to entity relationships for a decision."""
-        try:
-            self.importer._link_amounts_to_relationships(decision)
-        except Exception as e:
-            logger.error(f"Error linking amounts to relationships for {decision.ada}: {e}")
-            raise

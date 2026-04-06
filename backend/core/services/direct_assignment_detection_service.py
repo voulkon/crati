@@ -31,6 +31,13 @@ class DirectAssignmentDetectionService:
     3. Must have a valid amount
     
     Uses FinancialCalculationService for accurate amount calculations.
+    Some examples:
+    9ΔΩΗΩ16-Β2Α
+    Ρ5ΟΓΩΕ6-Ι41
+    6ΜΚ4ΟΚ91-32Χ
+    ΨΠ9446ΨΧΥΙ-ΕΛ3
+    Ρ9Ψ4Ω6Ι-ΤΘ8
+    62ΡΑΟΡΝ0-0Ξ9
     """
     
     # Constants

@@ -202,6 +202,33 @@ class DocumentExtractionFactory(DjangoModelFactory):
     processing_time_ms = 100
 
 
+class DecisionEntityRelationshipFactory(DjangoModelFactory):
+    """Factory for DecisionEntityRelationship model"""
+    
+    class Meta:
+        model = 'core.DecisionEntityRelationship'
+    
+    decision = factory.SubFactory(DecisionFactory)
+    entity = factory.SubFactory(AFMEntityFactory)
+    role = factory.Faker('random_element', elements=['grantee', 'grantor', 'donationReceiver', 'sponsorAFMName'])
+    parent_key_path = factory.Sequence(lambda n: f"sponsor[{n}]")
+
+
+class DecisionAmountFieldFactory(DjangoModelFactory):
+    """Factory for DecisionAmountField model"""
+    
+    class Meta:
+        model = 'core.DecisionAmountField'
+    
+    decision = factory.SubFactory(DecisionFactory)
+    parent_key_path = factory.Sequence(lambda n: f"sponsor[{n}].expenseAmount")
+    source_field_name = 'expenseAmount'
+    amount = factory.Faker('pydecimal', left_digits=5, right_digits=2, positive=True)
+    currency = 'EUR'
+    structure_type = 'nested_object'
+    associated_relationship = None  # Can be set explicitly when needed
+
+
 # ============================================================================
 # Notification Factories
 # ============================================================================

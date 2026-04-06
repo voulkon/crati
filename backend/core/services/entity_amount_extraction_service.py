@@ -96,6 +96,8 @@ class EntityAmountExtractionService:
         'budgetAmount': 'budget',
         'contractAmount': 'contract',
         'amountWithKae': 'kae_breakdown',
+        'awardAmount': 'award',
+        'expenseAmount': 'expense',
     }
     
     # Heuristic keywords for AFM detection (used in HEURISTIC mode)
@@ -314,15 +316,23 @@ class EntityAmountExtractionService:
         if isinstance(efv, dict):
             # Check for amount fields at this level
             amount_info = self._detect_amounts_in_dict(efv, parent_path)
+            extracted_fields = set()
+            
             if amount_info and parent_path:  # Skip root-level containers
                 extractions.append({
                     'parent_path': parent_path,
                     'amount_info': amount_info,
                     'raw_data': efv
                 })
+                # Track which fields had amounts extracted to avoid recursing into them
+                extracted_fields = set(amount_info['fields_found'])
             
-            # Recurse into nested structures
+            # Recurse into nested structures (but skip fields we already extracted amounts from)
             for key, value in efv.items():
+                # Skip recursion into amount fields we've already processed
+                if key in extracted_fields:
+                    continue
+                    
                 new_path = f"{parent_path}.{key}" if parent_path else key
                 if isinstance(value, (dict, list)):
                     extractions.extend(self._extract_amounts(value, decision_ada, new_path))
@@ -453,10 +463,6 @@ class EntityAmountExtractionService:
             parent_path = extraction['parent_path']
             amount_info = extraction['amount_info']
             
-            # Skip container-level patterns
-            if '.' not in parent_path:
-                continue
-            
             for i, amount in enumerate(amount_info['amounts']):
                 amount_field, created = DecisionAmountField.objects.get_or_create(
                     decision=decision,
@@ -562,8 +568,25 @@ class EntityAmountExtractionService:
 # Convenience function for backward compatibility
 def extract_entities_and_amounts(
     decision: Decision, 
-    save_to_db: bool = True
+    save_to_db: bool = True,
+    skip_if_existing: bool = False,
+    approach: ExtractionApproach = ExtractionApproach.KNOWN_FIELDS
 ) -> ExtractionResult:
-    """Extract entities and amounts from a decision."""
-    service = EntityAmountExtractionService()
-    return service.extract_from_decision(decision, save_to_db=save_to_db)
+    """
+    Extract entities and amounts from a decision.
+    
+    Args:
+        decision: The decision to extract from
+        save_to_db: Whether to save results to database
+        skip_if_existing: Skip if relationships/amounts already exist (idempotent mode)
+        approach: How to find AFMs - KNOWN_FIELDS (default), HEURISTIC, or HYBRID
+        
+    Returns:
+        ExtractionResult with details of what was found/created
+    """
+    service = EntityAmountExtractionService(approach=approach)
+    return service.extract_from_decision(
+        decision, 
+        save_to_db=save_to_db, 
+        skip_if_existing=skip_if_existing
+    )

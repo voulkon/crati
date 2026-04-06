@@ -12,6 +12,9 @@ Tests cover:
 - Amount and entity linking
 """
 
+import json
+from pathlib import Path
+
 import pytest
 from decimal import Decimal
 from django.utils import timezone
@@ -24,184 +27,42 @@ from core.models.entities import DecisionEntityRelationship, DecisionAmountField
 
 pytestmark = pytest.mark.django_db
 
-# Test data: Real decisions from Diavgeia
-# Format: (ada, extra_field_values_json, expected_entities, expected_amounts)
-EXTRACTION_TEST_CASES_DIRECT_ASSIGNMENTS = [
-    # Case 1: Direct assignment with counterpart
-    (
-        "Ρ5ΟΓΩΕ6-Ι41",
-        {
-            "cpv": ["79212200-5"],
-            "person": [{
-                "afm": "802497241",
-                "name": "ΕΛΕΓΚΤΙΚΟΣ ΚΡΙΚΟΣ ΜΟΝΟΠΡΟΣΩΠΗ Ι Κ Ε",
-                "afmType": "EL",
-                "enterName": False
-            }],
-            "budgettype": None,
-            "partialead": None,
-            "awardAmount": {"amount": 37200.0, "currency": "EUR"},
-            "entryNumber": None,
-            "documentType": "ΠΡΑΞΗ",
-            "amountWithKae": None,
-            "amountWithVAT": None,
-            "financialYear": None,
-            "assignmentType": "Υπηρεσίες",
-            "textRelatedADA": None,
-            "relatedDecisions": [],
-            "recalledExpenseDecision": None
-        },
-        1,  # Expected entities (1 person)
-        1,  # Expected amounts (1 awardAmount)
-    ),
-    # Case 2: Another direct assignment with counterpart
-    (
-        "ΨΠ9446ΨΧΥΙ-ΕΛ3",
-        {
-            "cpv": ["79400000-8"],
-            "person": [{
-                "afm": "800728365",
-                "name": "TCS TOOLBOX CONSULTING SERVICES ΙΚΕ",
-                "afmType": "EL",
-                "enterName": False
-            }],
-            "budgettype": None,
-            "partialead": None,
-            "awardAmount": {"amount": 37200.0, "currency": "EUR"},
-            "entryNumber": None,
-            "documentType": "ΠΡΑΞΗ",
-            "amountWithKae": None,
-            "amountWithVAT": None,
-            "financialYear": None,
-            "assignmentType": "Υπηρεσίες",
-            "textRelatedADA": None,
-            "relatedDecisions": [{"relatedDecisionsADA": "Ψ5ΗΖ46ΨΧΥΙ-ΠΛ1"}],
-            "recalledExpenseDecision": None
-        },
-        1,  # Expected entities
-        1,  # Expected amounts
-    ),
-    # Case 3: Direct assignment with counterpart (different amount)
-    (
-        "62ΡΑΟΡΝ0-0Ξ9",
-        {
-            "cpv": ["45259000-7"],
-            "person": [{
-                "afm": "050789611",
-                "name": "ΞΑΝΘΑΚΗΣ,,ΝΙΚΟΛΑΟΣ,ΙΩΣΗΦ",
-                "afmType": "EL",
-                "enterName": False
-            }],
-            "budgettype": None,
-            "partialead": None,
-            "awardAmount": {"amount": 37149.5, "currency": "EUR"},
-            "entryNumber": None,
-            "documentType": "ΠΡΑΞΗ",
-            "amountWithKae": None,
-            "amountWithVAT": None,
-            "financialYear": None,
-            "assignmentType": "Έργα",
-            "textRelatedADA": None,
-            "relatedDecisions": [],
-            "recalledExpenseDecision": None
-        },
-        1,  # Expected entities
-        1,  # Expected amounts
-    ),
-    # Case 4: Direct assignment WITHOUT counterpart (empty person array)
-    (
-        "9ΔΩΗΩ16-Β2Α",
-        {
-            "cpv": ["90600000-3"],
-            "person": [],  # No counterpart!
-            "budgettype": None,
-            "partialead": None,
-            "awardAmount": {"amount": 37200.0, "currency": "EUR"},
-            "entryNumber": None,
-            "documentType": "ΠΡΑΞΗ",
-            "amountWithKae": None,
-            "amountWithVAT": None,
-            "financialYear": None,
-            "assignmentType": "Υπηρεσίες",
-            "textRelatedADA": None,
-            "relatedDecisions": [],
-            "recalledExpenseDecision": None
-        },
-        0,  # Expected entities (no person)
-        1,  # Expected amounts (still has awardAmount)
-    ),
-    # Case 5: Another direct assignment WITHOUT counterpart
-    (
-        "6ΜΚ4ΟΚ91-32Χ",
-        {
-            "cpv": ["71621000-7"],
-            "person": [],  # No counterpart!
-            "budgettype": None,
-            "partialead": None,
-            "awardAmount": {"amount": 37200.0, "currency": "EUR"},
-            "entryNumber": None,
-            "documentType": "ΠΡΑΞΗ",
-            "amountWithKae": None,
-            "amountWithVAT": None,
-            "financialYear": None,
-            "assignmentType": "Υπηρεσίες",
-            "textRelatedADA": None,
-            "relatedDecisions": [],
-            "recalledExpenseDecision": None
-        },
-        0,  # Expected entities
-        1,  # Expected amounts
-    ),
-]
-
-EXTRACTION_TEST_CASES_PAYMENTS = [
-    # Case 1: Direct assignment with counterpart
-    (
-        "ΨΤ78ΟΞΧΔ-04Δ",
-        {
-        "org": {
-            "afm": "997476340",
-            "name": "ΚΤΙΡΙΑΚΕΣ ΥΠΟΔΟΜΕΣ ΑΝΩΝΥΜΗ ΕΤΑΙΡΕΙΑ",
-            "afmType": "EL",
-            # "enterName": false
-        },
-        "sponsor": [
-            {
-                "kae": "4510, 6501",
-                "expenseAmount": {
-                    "amount": 2569760.0,
-                    "currency": "EUR"
-                },
-                "sponsorAFMName": {
-                    "afmType": "INT",
-                    "noVATOrg": "10001"
-                }
-            }
-        ],
-        # "budgettype": null,
-        # "partialead": null,
-        # "awardAmount": null,
-        # "entryNumber": null,
-        "documentType": "ΠΡΑΞΗ",
-        # "amountWithKae": null,
-        # "amountWithVAT": null,
-        # "financialYear": null,
-        # "skipVatReason": null,
-        "relatedDecisions": [],
-        "relatedEkgrisiDapanis": [
-            {
-                "textRelatedADA": "6Α0ΤΟΞΧΔ-6ΧΔ"
-            }
-        ],
-        # "recalledExpenseDecision": null
-        },
-        1,  # Expected entities (1 person)
-        1,  # Expected amounts (1 awardAmount)
-    )
-]
+# Define test data directory (relative to this file)
+TEST_DATA_DIR = Path(__file__).parent / "data" / "afm_test_patterns" / "extraction"
 
 
-EXTRACTION_TEST_CASES = EXTRACTION_TEST_CASES_DIRECT_ASSIGNMENTS + EXTRACTION_TEST_CASES_PAYMENTS
+def load_extraction_test_cases(test_data_dir: Path) -> list:
+    """
+    Load all test cases from JSON files in test_data_dir.
+    
+    Recursively scans for .json files and converts them to pytest.param objects.
+    Each JSON file should have:
+    - id: test case identifier
+    - ada: decision ADA
+    - extra_field_values_json: the decision data
+    - expected: dict with 'entities' and 'amounts' counts
+    """
+    test_cases = []
+    
+    for json_file in sorted(test_data_dir.rglob("*.json")):
+        with open(json_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        test_case = pytest.param(
+            data["ada"],
+            data["extra_field_values_json"],
+            data["expected"]["entities"],
+            data["expected"]["amounts"],
+            id=data.get("id", json_file.stem)  # Use filename as fallback ID
+        )
+        test_cases.append(test_case)
+    
+    return test_cases
+
+
+# Load all test cases from JSON files
+EXTRACTION_TEST_CASES = load_extraction_test_cases(TEST_DATA_DIR)
+
 
 
 class TestEntityAmountExtractionService:
@@ -210,13 +71,7 @@ class TestEntityAmountExtractionService:
     @pytest.mark.parametrize(
         "ada,extra_field_values_json,expected_entities,expected_amounts",
         EXTRACTION_TEST_CASES,
-        ids=[
-            "with_counterpart_1",
-            "with_counterpart_2", 
-            "with_counterpart_3",
-            "without_counterpart_1",
-            "without_counterpart_2"
-        ]
+        # No ids parameter needed - they're embedded in pytest.param() from JSON files
     )
     def test_extract_from_real_decisions(
         self,
@@ -228,9 +83,11 @@ class TestEntityAmountExtractionService:
         """
         Test extraction on real decision data from Diavgeia.
         
+        Test cases are loaded from JSON files in data/afm_test_patterns/extraction/
+        
         This verifies that the service correctly extracts:
-        - Entities from person[] arrays
-        - Amounts from awardAmount fields
+        - Entities from person[] arrays and other entity fields
+        - Amounts from awardAmount, expenseAmount, and other amount fields
         - Links amounts to entities when both exist
         """
         from conftest import DecisionFactory

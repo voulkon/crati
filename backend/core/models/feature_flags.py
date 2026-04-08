@@ -8,6 +8,7 @@ Allows runtime configuration of system features through the admin interface.
 from django.db import models
 from django.core.cache import cache
 from django.utils import timezone
+from django.db.models import JSONField
 
 
 class FeatureFlag(models.Model):
@@ -25,9 +26,16 @@ class FeatureFlag(models.Model):
         ('data_indexing', 'Data Indexing'),
         ('data_extraction', 'Data Extraction'),
         ('data_enrichment', 'Data Enrichment'),
+        ('data_ingestion', 'Data Ingestion'),
         ('api', 'API Features'),
         ('frontend', 'Frontend Features'),
         ('system', 'System Features'),
+    ]
+    
+    VALUE_TYPES = [
+        ('boolean', 'Boolean (True/False)'),
+        ('list', 'List (Multiple Values)'),
+        ('string', 'String (Text)'),
     ]
     
     # Core fields
@@ -40,7 +48,26 @@ class FeatureFlag(models.Model):
     
     enabled = models.BooleanField(
         default=True,
-        help_text="Enable or disable this feature"
+        help_text="Enable or disable this feature (for boolean flags)"
+    )
+    
+    # Value type and storage
+    value_type = models.CharField(
+        max_length=20,
+        choices=VALUE_TYPES,
+        default='boolean',
+        help_text="Type of value this flag stores"
+    )
+    
+    list_value = JSONField(
+        null=True,
+        blank=True,
+        help_text="For list-type flags: array of values (e.g., ['Δ.1', 'Β.2.2'])"
+    )
+    
+    string_value = models.TextField(
+        blank=True,
+        help_text="For string-type flags: text value"
     )
     
     # Metadata
@@ -108,8 +135,24 @@ class FeatureFlag(models.Model):
         ]
     
     def __str__(self):
-        status = "✓" if self.enabled else "✗"
-        return f"{status} {self.name} ({self.key})"
+        if self.value_type == 'boolean':
+            status = "✓" if self.enabled else "✗"
+            return f"{status} {self.name} ({self.key})"
+        elif self.value_type == 'list' and self.list_value:
+            count = len(self.list_value) if isinstance(self.list_value, list) else 0
+            return f"📋 {self.name} ({count} items)"
+        else:
+            return f"{self.name} ({self.key})"
+    
+    def get_value(self):
+        """Get the appropriate value based on value_type."""
+        if self.value_type == 'boolean':
+            return self.enabled
+        elif self.value_type == 'list':
+            return self.list_value or []
+        elif self.value_type == 'string':
+            return self.string_value
+        return None
     
     def save(self, *args, **kwargs):
         """Override save to invalidate cache when flag changes."""

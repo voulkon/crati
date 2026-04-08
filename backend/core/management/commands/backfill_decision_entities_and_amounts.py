@@ -33,16 +33,26 @@ class Command(BaseCommand):
     # 6. Backfill only amounts (skip entities)
     python manage.py backfill_decision_entities_and_amounts --amounts-only --start-date 2025-06-30
     
-    # 7. For long-running operations (use with screen/tmux)
-    screen -S backfill
-    python manage.py backfill_decision_entities_and_amounts --check-integrity --quiet --batch-size 500
+    # 7. For long-running operations (use nohup in Docker)
+    nohup python manage.py backfill_decision_entities_and_amounts --check-integrity --quiet --batch-size 1000 > /tmp/backfill.log 2>&1 & echo $!
+    
+    # 8. Monitor the background process
+    tail -f /tmp/backfill.log                          # Watch logs in real-time
+    tail -n 50 /tmp/backfill.log                       # Check last 50 lines
+    grep "Progress:" /tmp/backfill.log | tail -n 5     # Check recent progress
+    grep -i "error\|exception" /tmp/backfill.log       # Check for errors
+    ps aux | grep <PID>                                # Check if process is running
+    
+    # 9. Stop the background process (if needed)
+    kill <PID>
     
     ⚡ Performance Tips:
     - Use --quiet for large datasets to reduce log noise
     - Use --batch-size 500-1000 for optimal performance  
-    - Use screen/tmux for operations that might take hours
+    - Use nohup for operations that might take hours (screen/tmux not available in Docker)
     - Always test with --dry-run first
     - Start with specific dates before full --check-integrity
+    - Monitor progress with: tail -f /tmp/backfill.log
     '''
 
     def add_arguments(self, parser):

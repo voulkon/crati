@@ -31,6 +31,10 @@ class CustomUser(AbstractUser):
     email_verification_token = models.UUIDField(null=True, blank=True, help_text='Token for email verification')
     email_verification_token_expires = models.DateTimeField(null=True, blank=True, help_text='Expiry time for verification token')
     
+    # Password reset for Django-registered users
+    password_reset_token = models.UUIDField(null=True, blank=True, help_text='Token for password reset')
+    password_reset_token_expires = models.DateTimeField(null=True, blank=True, help_text='Expiry time for password reset token')
+    
     # User preferences
     preferred_theme = models.CharField(max_length=20, default='light')  # light/dark
     preferred_palette = models.CharField(max_length=20, default='blue')  # blue/purple/green/etc

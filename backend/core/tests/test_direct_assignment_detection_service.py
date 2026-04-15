@@ -34,14 +34,9 @@ class TestClassificationLogic:
         )
         decision_type = DecisionTypeFactory(uid="Δ.1")
         decision = DecisionFactory(
-            decision_type=decision_type,
-            amount=Decimal("-1000.00")
-        )
-
-        decision_type = DecisionTypeFactory(uid="Δ.1")
-        decision = DecisionFactory(
             decision_type=decision_type
         )
+        
         # Create amount using DecisionAmountField (how the system actually stores amounts)
         DecisionAmountFieldFactory(
             decision=decision,

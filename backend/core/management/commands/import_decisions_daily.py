@@ -40,29 +40,43 @@ class Command(BaseCommand):
             action="store_true",
             help="Use Celery for distributed processing (fetches full day, distributes storage)",
         )
+        parser.add_argument(
+            "--file-log",
+            action="store_true",
+            help="Enable logging to file (default: logs only go to stdout)",
+        )
 
     def handle(self, *args, **options):
         # Setup file logging for this import run
         target_date = options.get("date") or (date.today() - timedelta(days=1))
         force = options.get("force", False)
-        log_dir = "/code/logs"
-        os.makedirs(log_dir, exist_ok=True)
+        file_log = options.get("file_log", False)
+        log_file = None
         
-        log_file = f"{log_dir}/import_decisions_{target_date.strftime('%Y%m%d')}_{datetime.now().strftime('%H%M%S')}.log"
+        if file_log:
+            log_dir = "/code/logs"
+            os.makedirs(log_dir, exist_ok=True)
+            
+            log_file = f"{log_dir}/import_decisions_{target_date.strftime('%Y%m%d')}_{datetime.now().strftime('%H%M%S')}.log"
+            
+            # Configure loguru to write to file
+            logger.add(
+                log_file,
+                rotation="100 MB",
+                retention="30 days",
+                level="INFO",
+                format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {name}:{function}:{line} - {message}",
+                compression="gz"
+            )
         
-        # Configure loguru to write to file
-        logger.add(
-            log_file,
-            rotation="100 MB",
-            retention="30 days",
-            level="INFO",
-            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {name}:{function}:{line} - {message}",
-            compression="gz"
-        )
+        log_msg = f"Starting import for {target_date} (force={force})"
+        if log_file:
+            log_msg += f" - Logs will be saved to: {log_file}"
+        logger.info(log_msg)
         
-        logger.info(f"Starting import for {target_date} (force={force}) - Logs will be saved to: {log_file}")
         self.stdout.write(f"Starting sync for {target_date} (force={force})")
-        self.stdout.write(f"Logs are being saved to: {log_file}")
+        if log_file:
+            self.stdout.write(f"Logs are being saved to: {log_file}")
 
         # Create ImportJob immediately for all modes (distributed and non-distributed)
         # This gives instant visibility regardless of execution mode
@@ -121,11 +135,9 @@ class Command(BaseCommand):
                     
                     self.stdout.write(
                         self.style.SUCCESS(
-                            f"✅ ImportJob #{import_job.id} created and dispatched for {target_date}"
+                            f"✅ ImportJob #{import_job.id} created and dispatched for {target_date}\n"
+                            f"Orchestrator task ID: {orchestrator_task_id}"
                         )
-                    )
-                    self.stdout.write(
-                        f"Orchestrator task ID: {orchestrator_task_id}"
                     )
                     self.stdout.write(
                         f"\nThe system will:"
@@ -182,8 +194,12 @@ class Command(BaseCommand):
                     logger.info("Starting reconciliation")
                     self._reconcile_counts(target_date, result["processed_count"])
                     
-                logger.info(f"Import process completed successfully. Check logs at: {log_file}")
-                self.stdout.write(f"Import completed. Full logs available at: {log_file}")
+                if log_file:
+                    logger.info(f"Import process completed successfully. Check logs at: {log_file}")
+                    self.stdout.write(f"Import completed. Full logs available at: {log_file}")
+                else:
+                    logger.info(f"Import process completed successfully.")
+                    self.stdout.write(f"Import completed.")
                 self.stdout.write(self.style.SUCCESS(f"✅ ImportJob #{import_job.id}: View in admin for batch health status"))
             elif options["distributed"]:
                 logger.info(
@@ -210,7 +226,8 @@ class Command(BaseCommand):
                 pass
             
             self.stdout.write(self.style.ERROR(f"Sync failed: {str(e)}"))
-            self.stdout.write(f"Check detailed error logs at: {log_file}")
+            if log_file:
+                self.stdout.write(f"Check detailed error logs at: {log_file}")
             raise
 
     def _reconcile_counts(self, target_date: date, our_count: int):

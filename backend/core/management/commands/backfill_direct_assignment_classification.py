@@ -52,7 +52,7 @@ class Command(BaseCommand):
     tail -f /tmp/classification.log                          # Watch logs in real-time
     tail -n 50 /tmp/classification.log                       # Check last 50 lines
     grep "Progress:" /tmp/classification.log | tail -n 5     # Check recent progress
-    grep -i "error\|exception" /tmp/classification.log       # Check for errors
+    grep -i "error\\|exception" /tmp/classification.log       # Check for errors
     ps aux | grep <PID>                                      # Check if process is running
     
     # 10. Stop the background process (if needed)

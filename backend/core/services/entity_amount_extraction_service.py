@@ -182,7 +182,7 @@ class EntityAmountExtractionService:
                     amounts_created = self._save_amounts(decision, amount_extractions, entity_relationships)
                     result.amounts_created = amounts_created
                 
-                logger.info(
+                logger.debug(
                     f"Decision {decision.ada}: extracted {result.entities_created} entities, "
                     f"{result.amounts_created} amounts"
                 )

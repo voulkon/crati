@@ -35,7 +35,7 @@ const UserMenu = ({ isOpen, onToggle }) => {
 
   return (
     <>
-      <div className={`user-menu ${isOpen ? 'user-menu-open' : ''}`}>
+      <div className={`user-menu ${isOpen ? 'user-menu-open' : ''} ${isSignedIn ? 'user-menu-authenticated' : ''}`}>
         <div 
           className="user-menu-wrapper"
           style={buttonStyle}
@@ -51,6 +51,10 @@ const UserMenu = ({ isOpen, onToggle }) => {
             chevronTitle={isOpen ? 'Close menu' : 'Open menu'}
           >
             <div className="user-avatar">
+              {/* Auth status indicator */}
+              {isSignedIn && (
+                <div className="auth-status-indicator" title="Signed in" />
+              )}
               {isSignedIn && user?.imageUrl ? (
                 <img src={user.imageUrl} alt={user.firstName} className="avatar-image" />
               ) : (

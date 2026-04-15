@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from '../contexts/TranslationContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -25,6 +26,7 @@ function AuthPromptModal() {
   const { t } = useTranslation();
   const { isLoaded, isSignedIn, isClerkAuth } = useAuth();
   const { getCurrentPaletteColor } = useTheme();
+  const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [showDjangoForm, setShowDjangoForm] = useState(false);
@@ -32,6 +34,12 @@ function AuthPromptModal() {
 
   useEffect(() => {
     const handleAuthRequired = (event) => {
+      // Don't show auth modal on special pages like email verification or password reset
+      const excludedPaths = ['/verify-email', '/reset-password'];
+      if (excludedPaths.some(path => location.pathname.startsWith(path))) {
+        return;
+      }
+      
       // Show modal for both auth types when user is not signed in
       if (isLoaded && !isSignedIn) {
         setMessage(event.detail?.message || t('auth.signInRequired') || 'Please sign in to access this feature');
@@ -48,7 +56,7 @@ function AuthPromptModal() {
     return () => {
       window.removeEventListener('authRequired', handleAuthRequired);
     };
-  }, [isLoaded, isSignedIn, isClerkAuth, t]);
+  }, [isLoaded, isSignedIn, isClerkAuth, t, location.pathname]);
 
   // Don't render if modal is not open
   if (!isOpen) return null;

@@ -49,6 +49,9 @@ function AuthenticatedApp({ controlsLayout }) {
   // Check if we're on the homepage
   const isHomePage = location.pathname === '/';
   
+  // Check if we're on special auth pages (hide UI chrome)
+  const isAuthPage = location.pathname === '/verify-email' || location.pathname === '/reset-password';
+  
   // Library sidebar state
   const [isLibraryOpen, setIsLibraryOpen] = React.useState(false);
   const [bookmarkCount, setBookmarkCount] = React.useState(0);
@@ -127,7 +130,7 @@ function AuthenticatedApp({ controlsLayout }) {
   return (
     <>
       {/* Unified overlay for all split buttons - shows when any is open */}
-      {isAnyOpen && (
+      {isAnyOpen && !isAuthPage && (
         <div 
           className="unified-overlay" 
           onClick={handleOverlayClick}
@@ -144,31 +147,37 @@ function AuthenticatedApp({ controlsLayout }) {
         />
       )}
       
-      {/* Flexible top controls with library toggle and bookmark button */}
-      <TopControls 
-        layout={controlsLayout}
-        onLibraryToggle={handleLibraryToggle}
-        isLibraryOpen={isLibraryOpen}
-        bookmarkCount={bookmarkCount}
-        onNotificationSidebarToggle={handleNotificationToggle}
-        isNotificationSidebarOpen={isNotificationSidebarOpen}
-        onUserMenuToggle={handleUserMenuToggle}
-        isUserMenuOpen={isUserMenuOpen}
-        hideLogo={isHomePage}
-      />
+      {/* Flexible top controls with library toggle and bookmark button - hidden on auth pages */}
+      {!isAuthPage && (
+        <TopControls 
+          layout={controlsLayout}
+          onLibraryToggle={handleLibraryToggle}
+          isLibraryOpen={isLibraryOpen}
+          bookmarkCount={bookmarkCount}
+          onNotificationSidebarToggle={handleNotificationToggle}
+          isNotificationSidebarOpen={isNotificationSidebarOpen}
+          onUserMenuToggle={handleUserMenuToggle}
+          isUserMenuOpen={isUserMenuOpen}
+          hideLogo={isHomePage}
+        />
+      )}
       
-      {/* Library Sidebar */}
-      <LibrarySidebar 
-        isOpen={isLibraryOpen}
-        onClose={() => setIsLibraryOpen(false)}
-        onBookmarkCountChange={setBookmarkCount}
-      />
+      {/* Library Sidebar - hidden on auth pages */}
+      {!isAuthPage && (
+        <LibrarySidebar 
+          isOpen={isLibraryOpen}
+          onClose={() => setIsLibraryOpen(false)}
+          onBookmarkCountChange={setBookmarkCount}
+        />
+      )}
       
-      {/* Notification Sidebar */}
-      <NotificationSidebar 
-        isOpen={isNotificationSidebarOpen}
-        onClose={() => setIsNotificationSidebarOpen(false)}
-      />
+      {/* Notification Sidebar - hidden on auth pages */}
+      {!isAuthPage && (
+        <NotificationSidebar 
+          isOpen={isNotificationSidebarOpen}
+          onClose={() => setIsNotificationSidebarOpen(false)}
+        />
+      )}
       
       <RateLimitIndicator />
       <RateLimitModal />

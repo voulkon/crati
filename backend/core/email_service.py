@@ -187,43 +187,68 @@ class RegistrationEmailService:
         <!DOCTYPE html>
         <html>
         <head>
-            <style>
-                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
-                .content {{ background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; }}
-                .button {{ display: inline-block; padding: 14px 32px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 20px 0; }}
-                .footer {{ text-align: center; padding: 20px; color: #666; font-size: 14px; }}
-                .note {{ background: #f8f9fa; padding: 15px; border-left: 4px solid #667eea; margin: 20px 0; }}
-            </style>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
         </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1 style="margin: 0;">✨ Verify Your Email</h1>
-                </div>
-                <div class="content">
-                    <h2>Welcome to {app_name}, {username}!</h2>
-                    <p>Thank you for creating an account. To get started, please verify your email address by clicking the button below:</p>
-                    
-                    <div style="text-align: center;">
-                        <a href="{verification_url}" class="button">Verify Email Address</a>
-                    </div>
-                    
-                    <div class="note">
-                        <strong>⏰ This link will expire in 24 hours</strong><br>
-                        If you didn't create an account, you can safely ignore this email.
-                    </div>
-                    
-                    <p style="color: #666; font-size: 14px; margin-top: 30px;">
-                        If the button doesn't work, copy and paste this link into your browser:<br>
-                        <a href="{verification_url}" style="color: #667eea; word-break: break-all;">{verification_url}</a>
-                    </p>
-                </div>
-                <div class="footer">
-                    <p>© {app_name} · You're receiving this because you created an account</p>
-                </div>
-            </div>
+        <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333333; background-color: #f5f5f5;">
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 0; padding: 20px; background-color: #f5f5f5;">
+                <tr>
+                    <td align="center">
+                        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="max-width: 600px; margin: 0 auto;">
+                            <!-- Header -->
+                            <tr>
+                                <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+                                    <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">✨ Verify Your Email</h1>
+                                </td>
+                            </tr>
+                            <!-- Content -->
+                            <tr>
+                                <td style="background: #ffffff; padding: 30px; border-left: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0; border-bottom: 1px solid #e0e0e0;">
+                                    <h2 style="margin: 0 0 16px 0; color: #333333; font-size: 20px;">Welcome to {app_name}, {username}!</h2>
+                                    <p style="margin: 0 0 24px 0; color: #333333; font-size: 16px; line-height: 1.6;">Thank you for creating an account. To get started, please verify your email address by clicking the button below:</p>
+                                    
+                                    <!-- Button with proper email client compatibility -->
+                                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin: 24px 0;">
+                                        <tr>
+                                            <td align="center">
+                                                <a href="{verification_url}" target="_blank" style="display: inline-block; padding: 14px 32px; background-color: #667eea; color: #ffffff !important; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; border: none; cursor: pointer; line-height: 1.5; mso-padding-alt: 0; text-align: center;">
+                                                    <!--[if mso]>
+                                                    <i style="letter-spacing: 25px; mso-font-width: -100%; mso-text-raise: 30pt;">&nbsp;</i>
+                                                    <![endif]-->
+                                                    <span style="color: #ffffff; text-decoration: none; mso-text-raise: 15pt;">Verify Email Address</span>
+                                                    <!--[if mso]>
+                                                    <i style="letter-spacing: 25px; mso-font-width: -100%;">&nbsp;</i>
+                                                    <![endif]-->
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                    
+                                    <!-- Note box -->
+                                    <div style="background: #f8f9fa; padding: 15px; border-left: 4px solid #667eea; margin: 20px 0;">
+                                        <p style="margin: 0; color: #333333; font-size: 14px; line-height: 1.6;">
+                                            <strong>⏰ This link will expire in 24 hours</strong><br>
+                                            If you didn't create an account, you can safely ignore this email.
+                                        </p>
+                                    </div>
+                                    
+                                    <!-- Fallback link -->
+                                    <p style="margin: 24px 0 0 0; color: #666666; font-size: 14px; line-height: 1.6;">
+                                        If the button doesn't work, copy and paste this link into your browser:<br>
+                                        <a href="{verification_url}" target="_blank" style="color: #667eea; word-break: break-all; text-decoration: underline;">{verification_url}</a>
+                                    </p>
+                                </td>
+                            </tr>
+                            <!-- Footer -->
+                            <tr>
+                                <td style="padding: 20px; text-align: center; background-color: #f5f5f5;">
+                                    <p style="margin: 0; color: #666666; font-size: 14px;">© {app_name} · You're receiving this because you created an account</p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+            </table>
         </body>
         </html>
         """

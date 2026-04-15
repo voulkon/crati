@@ -86,7 +86,7 @@ class EmailService:
             
             email.send(fail_silently=False)
             
-            logger.info(f"Email sent successfully: '{subject}' to {to_emails}")
+            logger.debug(f"Email sent successfully: '{subject}' to {to_emails}")
             return True
             
         except Exception as e:

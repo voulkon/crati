@@ -92,7 +92,7 @@ def register(request):
                     verification_token=str(verification_token)
                 )
                 if email_sent:
-                    logger.info(f"Verification email sent to: {user.email}")
+                    logger.debug(f"Verification email sent to: {user.email}")
                 else:
                     logger.warning(f"Failed to send verification email to: {user.email}")
             except Exception as e:
@@ -100,7 +100,7 @@ def register(request):
         else:
             logger.warning("Email not configured - user created but no verification email sent")
         
-        logger.info(f"Created Django user (pending verification): {user.email}")
+        logger.debug(f"Created Django user (pending verification): {user.email}")
         
         return Response({
             'message': 'Registration successful! Please check your email to verify your account.',
@@ -176,7 +176,7 @@ def login(request):
     # Get or create DRF token
     token, _ = Token.objects.get_or_create(user=user)
     
-    logger.info(f"Django login: {user.email}")
+    logger.debug(f"Django login: {user.email}")
     
     return Response({
         'user': {
@@ -204,7 +204,7 @@ def logout(request):
     # Delete the user's token (if using token auth)
     try:
         Token.objects.filter(user=request.user).delete()
-        logger.info(f"Logged out user: {request.user.email}")
+        logger.debug(f"Logged out user: {request.user.email}")
     except Exception:
         pass  # No token to delete
     
@@ -280,7 +280,7 @@ def verify_email(request):
             except Exception as e:
                 logger.warning(f"Failed to send welcome email: {e}")
         
-        logger.info(f"Email verified for user: {user.email}")
+        logger.debug(f"Email verified for user: {user.email}")
         
         return Response({
             'message': 'Email verified successfully! You are now logged in.',

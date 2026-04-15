@@ -77,12 +77,12 @@ def django_login(request):
         if language and language in ['en', 'el']:
             user.preferred_language = language
             user.save(update_fields=['preferred_language'])
-            logger.info(f"Updated language preference for {email} to {language}")
+            logger.debug(f"Updated language preference for {email} to {language}")
         
         # Get or create auth token
         token, created = Token.objects.get_or_create(user=user)
         
-        logger.info(f"User {email} logged in successfully")
+        logger.debug(f"User {email} logged in successfully")
         
         return Response({
             'success': True,

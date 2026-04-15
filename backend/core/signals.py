@@ -44,7 +44,7 @@ def record_signal_metric(operation, entity_type, date_obj=None):
         # Log batch metrics periodically
         if _signal_metrics['batch_counters'][batch_key] % SIGNAL_LOG_BATCH_SIZE == 0:
             count = _signal_metrics['batch_counters'][batch_key]
-            logger.info(f"Signal batch: {batch_key} processed {count} operations")
+            logger.debug(f"Signal batch: {batch_key} processed {count} operations")
 
 def prevent_recursion(signal_handler):
     """Decorator to prevent recursive signal calls"""
@@ -257,7 +257,7 @@ def index_document_in_opensearch(sender, instance, created, **kwargs):
     )
     
     if instance.extraction_status == 'COMPLETED' and instance.raw_text:
-        logger.info(f"🔍 Starting OpenSearch indexing for {instance.decision.ada}")
+        logger.debug(f"🔍 Starting OpenSearch indexing for {instance.decision.ada}")
         
         try:
             opensearch_service = OpenSearchService()
@@ -280,7 +280,7 @@ def index_document_in_opensearch(sender, instance, created, **kwargs):
             
             success = opensearch_service.index_document(document_data)
             if success:
-                logger.info(f"✅ Auto-indexed document for decision {instance.decision.ada} in OpenSearch")
+                logger.debug(f"✅ Auto-indexed document for decision {instance.decision.ada} in OpenSearch")
             else:
                 logger.error(f"❌ Failed to auto-index document for decision {instance.decision.ada}")
                 
@@ -359,7 +359,7 @@ def document_extraction_health_check_signal(sender, instance, created, **kwargs)
     ]
     
     if instance.extraction_status in significant_statuses:
-        logger.info(f"Document extraction {instance.extraction_status} for {instance.decision.ada} - scheduling health check")
+        logger.debug(f"Document extraction {instance.extraction_status} for {instance.decision.ada} - scheduling health check")
         
         # Queue immediate health check
         try:

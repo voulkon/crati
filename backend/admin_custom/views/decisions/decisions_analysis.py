@@ -36,7 +36,7 @@ def daily_decision_analysis(request):
 
     if mode == "simple":
         # Fast lightweight view - only 3 queries
-        logger.info(f"Loading simple view for {target_date}")
+        logger.debug(f"Loading simple view for {target_date}")
         analysis_data = analysis_service.get_daily_decision_quick_summary(target_date)
         
         context = {
@@ -51,7 +51,7 @@ def daily_decision_analysis(request):
     
     else:
         # Full analytical view - 15+ queries
-        logger.info(f"Loading analytical view for {target_date}")
+        logger.debug(f"Loading analytical view for {target_date}")
         
         # Get pagination parameters
         try:

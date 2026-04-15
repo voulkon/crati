@@ -46,8 +46,8 @@ class EmailAuthBackend(ModelBackend):
         
         # Check the password
         if user.check_password(password) and self.user_can_authenticate(user):
-            logger.info(f"Successfully authenticated user with email: {username}")
+            logger.debug(f"Successfully authenticated user with email: {username}")
             return user
         
-        logger.debug(f"Password check failed for email: {username}")
+        logger.error(f"Password check failed for email: {username}")
         return None

@@ -78,24 +78,22 @@ class DirectAssignmentDetectionService:
         Returns:
             True if text contains direct assignment patterns
         """
-        try:
-            extraction = decision.text_extraction
-            if not extraction or not extraction.raw_text:
-                return False
-            
-            text = extraction.raw_text
-            
-            # Check each compiled pattern
-            for pattern in self.compiled_patterns:
-                if pattern.search(text):
-                    logger.debug(f"Found direct assignment pattern in {decision.ada} text")
-                    return True
-                    
+        # Use getattr for safer access - missing text_extraction is expected
+        extraction = getattr(decision, 'text_extraction', None)
+        if not extraction:
             return False
-            
-        except Exception as e:
-            logger.warning(f"Error checking text content for {decision.ada}: {e}")
+        
+        text = getattr(extraction, 'raw_text', None)
+        if not text:
             return False
+        
+        # Check each compiled pattern
+        for pattern in self.compiled_patterns:
+            if pattern.search(text):
+                logger.debug(f"Found direct assignment pattern in {decision.ada} text")
+                return True
+                
+        return False
     
     def classify_decision(self, decision: Decision) -> Dict[str, any]:
         """

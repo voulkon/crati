@@ -5,7 +5,7 @@ This service encapsulates the classification algorithm that determines whether
 a decision qualifies as a direct assignment based on:
 1. Decision type (Δ.1)
 2. Amount below threshold (€37,200)
-3. Other future criteria
+3. Text content patterns (keywords indicating direct assignment)
 
 Results are stored in DecisionClassification model for fast querying.
 The pipeline orchestrator calls this service during Stage 8.
@@ -13,11 +13,12 @@ The pipeline orchestrator calls this service during Stage 8.
 
 from decimal import Decimal
 from typing import Dict, Optional
+import re
 from loguru import logger
 from django.db.models import QuerySet, Q
 
 from core.models.decisions import Decision
-from core.models.decision_classification import DecisionClassification
+from core.models.decision_classification import DecisionClassification, DirectAssignmentDetectionMethod
 from core.services.financial_calculation_service import financial_service
 
 
@@ -43,15 +44,58 @@ class DirectAssignmentDetectionService:
     # Constants
     DIRECT_ASSIGNMENT_TYPE_UID = "Δ.1"
     STANDARD_THRESHOLD = Decimal("37200.00")  # €30,000 + 24% VAT
-    CLASSIFIER_VERSION = "v1.0"
+    CLASSIFIER_VERSION = "v2.0"
+    
+    # Text patterns for direct assignment detection
+    # These patterns look for Greek phrases indicating direct assignment
+    TEXT_PATTERNS = [
+        r'απευθείας\s+αν[άα]θεσ[ηή]',  # "απευθείας ανάθεση" or "απευθείας αναθεση"
+        r"απ'\s*ευθείας\s+αν[άα]θεσ[ηή]",  # "απ' ευθείας ανάθεση"
+        r'άμεσ[ηησ]\s+αν[άα]θεσ[ηή]',  # "άμεση ανάθεση"
+        r'ευθεί[αά]\s+αν[άα]θεσ[ηή]',  # "ευθεία ανάθεση"
+    ]
     
     def __init__(self):
         """Initialize service with financial calculation dependency."""
         self.financial_service = financial_service
+        # Compile regex patterns for efficiency
+        self.compiled_patterns = [
+            re.compile(pattern, re.IGNORECASE | re.UNICODE)
+            for pattern in self.TEXT_PATTERNS
+        ]
     
     # =============================================================================
     # CORE CLASSIFICATION LOGIC
     # =============================================================================
+    
+    def _check_text_content(self, decision: Decision) -> bool:
+        """
+        Check if decision's text content contains direct assignment keywords.
+        
+        Args:
+            decision: Decision to check
+            
+        Returns:
+            True if text contains direct assignment patterns
+        """
+        try:
+            extraction = decision.text_extraction
+            if not extraction or not extraction.raw_text:
+                return False
+            
+            text = extraction.raw_text
+            
+            # Check each compiled pattern
+            for pattern in self.compiled_patterns:
+                if pattern.search(text):
+                    logger.debug(f"Found direct assignment pattern in {decision.ada} text")
+                    return True
+                    
+            return False
+            
+        except Exception as e:
+            logger.warning(f"Error checking text content for {decision.ada}: {e}")
+            return False
     
     def classify_decision(self, decision: Decision) -> Dict[str, any]:
         """
@@ -59,6 +103,8 @@ class DirectAssignmentDetectionService:
         
         This method performs the classification WITHOUT saving to database.
         Use classify_and_save() to persist results.
+        
+        Checks both metadata (type & amount) and text content.
         
         Args:
             decision: Decision object to classify
@@ -69,53 +115,107 @@ class DirectAssignmentDetectionService:
             - confidence: float (0.0 to 1.0)
             - reason: str (explanation)
             - amount: Decimal (amount used for classification)
+            - detection_method: DirectAssignmentDetectionMethod enum
         """
-        # Rule 1: Must be type Δ.1
+        # Check text content first (can work without metadata)
+        text_indicates_direct_assignment = self._check_text_content(decision)
+        
+        # Rule 1: Must be type Δ.1 (for metadata-based detection)
         if not decision.decision_type:
+            # No metadata, rely only on text
+            if text_indicates_direct_assignment:
+                return {
+                    'is_direct_assignment': True,
+                    'confidence': 0.8,  # Lower confidence without metadata confirmation
+                    'reason': 'Text content indicates direct assignment (no decision type to confirm)',
+                    'amount': None,
+                    'detection_method': DirectAssignmentDetectionMethod.TEXT
+                }
             return {
                 'is_direct_assignment': False,
                 'confidence': 1.0,
                 'reason': 'No decision type',
-                'amount': None
+                'amount': None,
+                'detection_method': DirectAssignmentDetectionMethod.NONE
             }
         
-        if decision.decision_type.uid != self.DIRECT_ASSIGNMENT_TYPE_UID:
+        metadata_correct_type = decision.decision_type.uid == self.DIRECT_ASSIGNMENT_TYPE_UID
+        
+        if not metadata_correct_type and not text_indicates_direct_assignment:
             return {
                 'is_direct_assignment': False,
                 'confidence': 1.0,
-                'reason': f'Not Δ.1 type (found: {decision.decision_type.uid})',
-                'amount': decision.amount
+                'reason': f'Not Δ.1 type (found: {decision.decision_type.uid}) and no text indicators',
+                'amount': decision.amount,
+                'detection_method': DirectAssignmentDetectionMethod.NONE
             }
         
-        # Rule 2: Must have amount
+        # Rule 2: Must have amount (for metadata-based detection)
         # Use FinancialCalculationService for accurate amount calculation
         breakdown = self.financial_service.get_decision_amount_breakdown(decision)
         total_amount = breakdown['total_amount']
         
         if total_amount is None or total_amount <= 0:
+            # No valid amount, check text
+            if text_indicates_direct_assignment:
+                return {
+                    'is_direct_assignment': True,
+                    'confidence': 0.7,  # Lower confidence without amount confirmation
+                    'reason': 'Text content indicates direct assignment (no valid amount found)',
+                    'amount': None,
+                    'detection_method': DirectAssignmentDetectionMethod.TEXT
+                }
             return {
                 'is_direct_assignment': False,
                 'confidence': 0.5,  # Low confidence - it's Δ.1 but no amount
                 'reason': 'No valid amount found',
-                'amount': None
+                'amount': None,
+                'detection_method': DirectAssignmentDetectionMethod.NONE
             }
         
-        # Rule 3: Amount must be below threshold
-        if total_amount >= self.STANDARD_THRESHOLD:
+        # Rule 3: Amount must be below threshold (for metadata-based detection)
+        metadata_below_threshold = total_amount < self.STANDARD_THRESHOLD
+        
+        # Determine result based on metadata AND text
+        if metadata_correct_type and metadata_below_threshold:
+            # Metadata confirms direct assignment
+            if text_indicates_direct_assignment:
+                detection_method = DirectAssignmentDetectionMethod.BOTH
+                confidence = 1.0
+                reason = f'Δ.1 type with amount €{total_amount} < €{self.STANDARD_THRESHOLD} + text confirmation'
+            else:
+                detection_method = DirectAssignmentDetectionMethod.METADATA
+                confidence = 1.0
+                reason = f'Δ.1 type with amount €{total_amount} < €{self.STANDARD_THRESHOLD}'
+            
+            return {
+                'is_direct_assignment': True,
+                'confidence': confidence,
+                'reason': reason,
+                'amount': total_amount,
+                'detection_method': detection_method
+            }
+        
+        elif text_indicates_direct_assignment:
+            # Text indicates direct assignment but metadata doesn't
+            # This could be a misclassified decision or wrong amount
+            return {
+                'is_direct_assignment': True,
+                'confidence': 0.6,  # Lower confidence when text and metadata conflict
+                'reason': f'Text indicates direct assignment but metadata shows amount €{total_amount} >= €{self.STANDARD_THRESHOLD}',
+                'amount': total_amount,
+                'detection_method': DirectAssignmentDetectionMethod.TEXT
+            }
+        
+        else:
+            # Neither metadata nor text indicate direct assignment
             return {
                 'is_direct_assignment': False,
                 'confidence': 1.0,
                 'reason': f'Amount €{total_amount} >= threshold €{self.STANDARD_THRESHOLD}',
-                'amount': total_amount
+                'amount': total_amount,
+                'detection_method': DirectAssignmentDetectionMethod.NONE
             }
-        
-        # All rules passed - this IS a direct assignment
-        return {
-            'is_direct_assignment': True,
-            'confidence': 1.0,
-            'reason': f'Δ.1 type with amount €{total_amount} < €{self.STANDARD_THRESHOLD}',
-            'amount': total_amount
-        }
     
     def classify_and_save(self, decision: Decision) -> DecisionClassification:
         """
@@ -136,6 +236,7 @@ class DirectAssignmentDetectionService:
             decision=decision,
             defaults={
                 'is_direct_assignment': result['is_direct_assignment'],
+                'detection_method': result['detection_method'],
                 'classifier_version': self.CLASSIFIER_VERSION
             }
         )
@@ -144,6 +245,7 @@ class DirectAssignmentDetectionService:
         logger.debug(
             f"{action} classification for {decision.ada}: "
             f"is_direct_assignment={result['is_direct_assignment']} "
+            f"via {result['detection_method']} "
             f"({result['reason']})"
         )
         
@@ -194,7 +296,7 @@ class DirectAssignmentDetectionService:
         
         logger.info(f"Starting bulk classification of {decisions.count()} decisions")
         
-        for decision in decisions.select_related('decision_type').iterator(chunk_size=batch_size):
+        for decision in decisions.select_related('decision_type').prefetch_related('text_extraction').iterator(chunk_size=batch_size):
             try:
                 result = self.classify_decision(decision)
                 stats['total_processed'] += 1
@@ -209,6 +311,7 @@ class DirectAssignmentDetectionService:
                     # Update existing
                     existing = existing_classifications[decision.id]
                     existing.is_direct_assignment = result['is_direct_assignment']
+                    existing.detection_method = result['detection_method']
                     existing.classifier_version = self.CLASSIFIER_VERSION
                     classifications_to_update.append(existing)
                     stats['updated'] += 1
@@ -218,6 +321,7 @@ class DirectAssignmentDetectionService:
                         DecisionClassification(
                             decision=decision,
                             is_direct_assignment=result['is_direct_assignment'],
+                            detection_method=result['detection_method'],
                             classifier_version=self.CLASSIFIER_VERSION
                         )
                     )
@@ -235,7 +339,7 @@ class DirectAssignmentDetectionService:
                 if len(classifications_to_update) >= batch_size:
                     DecisionClassification.objects.bulk_update(
                         classifications_to_update,
-                        ['is_direct_assignment', 'classifier_version', 'classified_at'],
+                        ['is_direct_assignment', 'detection_method', 'classifier_version', 'classified_at'],
                         batch_size=batch_size
                     )
                     classifications_to_update = []
@@ -256,7 +360,7 @@ class DirectAssignmentDetectionService:
         if classifications_to_update:
             DecisionClassification.objects.bulk_update(
                 classifications_to_update,
-                ['is_direct_assignment', 'classifier_version', 'classified_at'],
+                ['is_direct_assignment', 'detection_method', 'classifier_version', 'classified_at'],
                 batch_size=batch_size
             )
         

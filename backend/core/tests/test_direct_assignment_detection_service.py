@@ -8,6 +8,9 @@ Tests cover:
 - Query helpers
 """
 
+import json
+from pathlib import Path
+
 import pytest
 from decimal import Decimal
 from django.utils import timezone
@@ -17,9 +20,48 @@ from core.services.direct_assignment_detection_service import (
     DirectAssignmentDetectionService,
     classification_service
 )
-from core.models.decision_classification import DecisionClassification
+from core.models.decision_classification import DecisionClassification, DirectAssignmentDetectionMethod
 
 pytestmark = pytest.mark.django_db
+
+# Define test data directory (relative to this file)
+TEST_DATA_DIR = Path(__file__).parent / "data" / "direct_assignment_text_patterns"
+
+
+def load_text_detection_test_cases(test_data_dir: Path) -> list:
+    """
+    Load all test cases from JSON files in test_data_dir.
+    
+    Recursively scans for .json files and converts them to pytest.param objects.
+    Each JSON file should have:
+    - id: test case identifier (required)
+    - ada: decision ADA (optional - for real decision reference)
+    - text_content: the text to test for direct assignment detection
+    - should_detect: boolean indicating if direct assignment should be detected
+    - notes: optional description of the test case
+    """
+    test_cases = []
+    
+    for json_file in sorted(test_data_dir.rglob("*.json")):
+        with open(json_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        # Get optional ADA (None if not present)
+        ada = data.get("ada", None)
+        
+        test_case = pytest.param(
+            data["text_content"],
+            data["should_detect"],
+            ada,  # Include ADA as third parameter
+            id=data.get("id", json_file.stem)  # Use ID from JSON or filename as fallback
+        )
+        test_cases.append(test_case)
+    
+    return test_cases
+
+
+# Load all test cases from JSON files
+TEXT_DETECTION_TEST_CASES = load_text_detection_test_cases(TEST_DATA_DIR)
 
 
 class TestClassificationLogic:
@@ -49,7 +91,271 @@ class TestClassificationLogic:
         assert result['confidence'] == 1.0
         assert result['amount'] == Decimal("30000.00")
         assert "Δ.1" in result['reason']
+        assert result['detection_method'] == DirectAssignmentDetectionMethod.METADATA
     
+    @pytest.mark.parametrize(
+        "text_content,should_detect,ada",
+        TEXT_DETECTION_TEST_CASES,
+    )
+    def test_classify_direct_assignment_text_detection(self, text_content, should_detect, ada):
+        """
+        Test direct assignment detection based on text content patterns.
+        
+        Test cases are loaded from JSON files in data/direct_assignment_text_patterns/
+        
+        Each test case includes:
+        - text_content: The Greek text to analyze
+        - should_detect: Whether direct assignment should be detected
+        - ada: (Optional) Real decision ADA for reference
+        
+        This verifies that the service correctly identifies direct assignment
+        phrases in Greek text, handling various spellings and formats.
+        """
+        from conftest import (
+            DecisionFactory,
+            DecisionTypeFactory,
+            DocumentExtractionFactory
+        )
+        
+        # Create decision WITHOUT Δ.1 type (forcing text-only detection)
+        decision_type = DecisionTypeFactory(uid="Β.1.1")
+        decision = DecisionFactory(
+            decision_type=decision_type,
+            ada=ada if ada else "TEST-ADA"  # Use actual ADA if provided
+        )
+        
+        # Create text extraction
+        DocumentExtractionFactory(
+            decision=decision,
+            raw_text=text_content
+        )
+        
+        result = classification_service.classify_decision(decision)
+        
+        if should_detect:
+            assert result['is_direct_assignment'] is True, \
+                f"Expected to detect direct assignment in text: '{text_content}'" + \
+                (f" (ADA: {ada})" if ada else "")
+            assert result['detection_method'] == DirectAssignmentDetectionMethod.TEXT
+            assert result['confidence'] < 1.0  # Lower confidence without metadata
+        else:
+            assert result['is_direct_assignment'] is False, \
+                f"Should NOT detect direct assignment in text: '{text_content}'" + \
+                (f" (ADA: {ada})" if ada else "")
+            assert result['detection_method'] == DirectAssignmentDetectionMethod.NONE
+    
+    def test_classify_direct_assignment_both_methods(self):
+        """Should detect via BOTH when metadata AND text confirm"""
+        from conftest import (
+            DecisionFactory,
+            DecisionTypeFactory,
+            DecisionAmountFieldFactory,
+            DocumentExtractionFactory
+        )
+        
+        decision_type = DecisionTypeFactory(uid="Δ.1")
+        decision = DecisionFactory(decision_type=decision_type)
+        
+        # Metadata confirms: correct type and amount
+        DecisionAmountFieldFactory(
+            decision=decision,
+            amount=Decimal("25000.00")
+        )
+        
+        # Text also confirms
+        DocumentExtractionFactory(
+            decision=decision,
+            raw_text="Απόφαση απευθείας ανάθεσης προμήθειας υλικών"
+        )
+        
+        result = classification_service.classify_decision(decision)
+        
+        assert result['is_direct_assignment'] is True
+        assert result['detection_method'] == DirectAssignmentDetectionMethod.BOTH
+        assert result['confidence'] == 1.0
+        assert "text confirmation" in result['reason']
+    
+    def test_classify_text_only_no_extraction(self):
+        """Should handle cases where there's no text extraction"""
+        from conftest import (
+            DecisionFactory,
+            DecisionTypeFactory,
+            DecisionAmountFieldFactory
+        )
+        
+        decision_type = DecisionTypeFactory(uid="Δ.1")
+        decision = DecisionFactory(decision_type=decision_type)
+        
+        DecisionAmountFieldFactory(
+            decision=decision,
+            amount=Decimal("20000.00")
+        )
+        
+        # No DocumentExtraction created
+        result = classification_service.classify_decision(decision)
+        
+        # Should still work based on metadata
+        assert result['is_direct_assignment'] is True
+        assert result['detection_method'] == DirectAssignmentDetectionMethod.METADATA
+    
+    def test_classify_text_indicates_but_amount_too_high(self):
+        """Should use TEXT method when text indicates but amount is above threshold"""
+        from conftest import (
+            DecisionFactory,
+            DecisionTypeFactory,
+            DecisionAmountFieldFactory,
+            DocumentExtractionFactory
+        )
+        
+        decision_type = DecisionTypeFactory(uid="Δ.1")
+        decision = DecisionFactory(decision_type=decision_type)
+        
+        # Amount above threshold
+        DecisionAmountFieldFactory(
+            decision=decision,
+            amount=Decimal("50000.00")
+        )
+        
+        # But text indicates direct assignment
+        DocumentExtractionFactory(
+            decision=decision,
+            raw_text="Απόφαση απευθείας ανάθεσης για μεγάλο έργο"
+        )
+        
+        result = classification_service.classify_decision(decision)
+        
+        # Should still classify as direct assignment but with lower confidence
+        assert result['is_direct_assignment'] is True
+        assert result['detection_method'] == DirectAssignmentDetectionMethod.TEXT
+        assert result['confidence'] == 0.6  # Lower confidence due to conflict
+        assert "metadata shows amount" in result['reason']
+    
+    def test_classify_no_type_but_text_indicates(self):
+        """Should detect via text even without decision type"""
+        from conftest import (
+            DecisionFactory,
+            DocumentExtractionFactory
+        )
+        
+        decision = DecisionFactory(decision_type=None)
+        
+        DocumentExtractionFactory(
+            decision=decision,
+            raw_text="Απόφαση απευθείας ανάθεσης καθαρισμού"
+        )
+        
+        result = classification_service.classify_decision(decision)
+        
+        assert result['is_direct_assignment'] is True
+        assert result['detection_method'] == DirectAssignmentDetectionMethod.TEXT
+        assert result['confidence'] == 0.8  # Lower confidence without metadata
+
+
+class TestClassifyAndSave:
+    """Test classification with database persistence"""
+    
+    def test_classify_and_save_metadata_detection(self):
+        """Should save classification with METADATA detection method"""
+        from conftest import (
+            DecisionFactory,
+            DecisionTypeFactory,
+            DecisionAmountFieldFactory
+        )
+        
+        decision_type = DecisionTypeFactory(uid="Δ.1")
+        decision = DecisionFactory(decision_type=decision_type)
+        DecisionAmountFieldFactory(
+            decision=decision,
+            amount=Decimal("25000.00")
+        )
+        
+        classification = classification_service.classify_and_save(decision)
+        
+        assert classification.decision == decision
+        assert classification.is_direct_assignment is True
+        assert classification.detection_method == DirectAssignmentDetectionMethod.METADATA
+        assert classification.classifier_version == "v2.0"
+        assert classification.classified_at is not None
+    
+    def test_classify_and_save_text_detection(self):
+        """Should save classification with TEXT detection method"""
+        from conftest import (
+            DecisionFactory,
+            DocumentExtractionFactory
+        )
+        
+        decision = DecisionFactory(decision_type=None)
+        DocumentExtractionFactory(
+            decision=decision,
+            raw_text="Απόφαση απευθείας ανάθεσης υπηρεσιών"
+        )
+        
+        classification = classification_service.classify_and_save(decision)
+        
+        assert classification.is_direct_assignment is True
+        assert classification.detection_method == DirectAssignmentDetectionMethod.TEXT
+    
+    def test_classify_and_save_both_methods(self):
+        """Should save classification with BOTH detection method"""
+        from conftest import (
+            DecisionFactory,
+            DecisionTypeFactory,
+            DecisionAmountFieldFactory,
+            DocumentExtractionFactory
+        )
+        
+        decision_type = DecisionTypeFactory(uid="Δ.1")
+        decision = DecisionFactory(decision_type=decision_type)
+        DecisionAmountFieldFactory(
+            decision=decision,
+            amount=Decimal("25000.00")
+        )
+        DocumentExtractionFactory(
+            decision=decision,
+            raw_text="Απόφαση απευθείας ανάθεσης"
+        )
+        
+        classification = classification_service.classify_and_save(decision)
+        
+        assert classification.is_direct_assignment is True
+        assert classification.detection_method == DirectAssignmentDetectionMethod.BOTH
+    
+    def test_classify_and_save_updates_existing(self):
+        """Should update existing classification when called again"""
+        from conftest import (
+            DecisionFactory,
+            DecisionTypeFactory,
+            DecisionAmountFieldFactory,
+            DocumentExtractionFactory
+        )
+        
+        decision_type = DecisionTypeFactory(uid="Δ.1")
+        decision = DecisionFactory(decision_type=decision_type)
+        DecisionAmountFieldFactory(
+            decision=decision,
+            amount=Decimal("25000.00")
+        )
+        
+        # First save - metadata only
+        first = classification_service.classify_and_save(decision)
+        first_id = first.decision_id
+        assert first.detection_method == DirectAssignmentDetectionMethod.METADATA
+        
+        # Add text extraction
+        DocumentExtractionFactory(
+            decision=decision,
+            raw_text="Απόφαση απευθείας ανάθεσης"
+        )
+        
+        # Re-classify
+        second = classification_service.classify_and_save(decision)
+        
+        # Should update same record
+        assert second.decision_id == first_id
+        assert second.detection_method == DirectAssignmentDetectionMethod.BOTH
+
+
+# Commented out tests - can be enabled if needed
 #     def test_classify_not_direct_assignment_wrong_type(
 #         self, 
 #         decision_factory, 

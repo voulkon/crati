@@ -3,6 +3,14 @@ from django.utils import timezone
 from django.db.models import Q
 
 
+class DirectAssignmentDetectionMethod(models.TextChoices):
+    """How the direct assignment was detected"""
+    METADATA = 'METADATA', 'Metadata (Type & Amount)'
+    TEXT = 'TEXT', 'Text Content'
+    BOTH = 'BOTH', 'Both Methods'
+    NONE = 'NONE', 'Not Detected'
+
+
 class DecisionClassification(models.Model):
     """One-to-one storage for all classification results"""
     
@@ -20,8 +28,17 @@ class DecisionClassification(models.Model):
         help_text="Δ.1 decision below €37,200 threshold"
     )
     
+    # Detection method tracking
+    detection_method = models.CharField(
+        max_length=20,
+        choices=DirectAssignmentDetectionMethod.choices,
+        default=DirectAssignmentDetectionMethod.NONE,
+        db_index=True,
+        help_text="How the direct assignment was detected"
+    )
+    
     # Metadata
-    classifier_version = models.CharField(max_length=50, default='v1.0')
+    classifier_version = models.CharField(max_length=50, default='v2.0')
     classified_at = models.DateTimeField(auto_now=True)
     
     class Meta:

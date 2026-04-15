@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const AuthContext = createContext();
 
@@ -91,7 +91,7 @@ const BasicAuthProvider = ({ children }) => {
     checkAuth();
   }, [apiUrl]);
 
-  const signIn = async (email, password) => {
+  const signIn = useCallback(async (email, password) => {
     try {
       const response = await fetch(`${apiUrl}/auth/login/`, {
         method: 'POST',
@@ -119,14 +119,14 @@ const BasicAuthProvider = ({ children }) => {
       console.error('Login error:', error);
       return { success: false, error: 'Network error' };
     }
-  };
+  }, [apiUrl]);
 
-  const getAuthToken = async () => {
+  const getAuthToken = useCallback(async () => {
     // Return Django token for API requests
     return localStorage.getItem('django_auth_token');
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     try {
       const token = localStorage.getItem('django_auth_token');
       if (token) {
@@ -144,9 +144,9 @@ const BasicAuthProvider = ({ children }) => {
       setUser(null);
       setIsSignedIn(false);
     }
-  };
+  }, [apiUrl]);
 
-  const register = async (email, password) => {
+  const register = useCallback(async (email, password) => {
     try {
       const response = await fetch(`${apiUrl}/auth/register/`, {
         method: 'POST',
@@ -189,9 +189,9 @@ const BasicAuthProvider = ({ children }) => {
       console.error('Registration error:', error);
       return { success: false, error: 'Network error' };
     }
-  };
+  }, [apiUrl]);
 
-  const verifyEmail = async (token) => {
+  const verifyEmail = useCallback(async (token) => {
     try {
       const response = await fetch(`${apiUrl}/auth/verify-email/`, {
         method: 'POST',
@@ -220,9 +220,9 @@ const BasicAuthProvider = ({ children }) => {
       console.error('Email verification error:', error);
       return { success: false, error: 'Network error' };
     }
-  };
+  }, [apiUrl]);
 
-  const requestPasswordReset = async (email) => {
+  const requestPasswordReset = useCallback(async (email) => {
     try {
       const response = await fetch(`${apiUrl}/auth/request-password-reset/`, {
         method: 'POST',
@@ -243,9 +243,9 @@ const BasicAuthProvider = ({ children }) => {
       console.error('Password reset request error:', error);
       return { success: false, error: 'Network error' };
     }
-  };
+  }, [apiUrl]);
 
-  const resetPassword = async (token, newPassword) => {
+  const resetPassword = useCallback(async (token, newPassword) => {
     try {
       const response = await fetch(`${apiUrl}/auth/reset-password/`, {
         method: 'POST',
@@ -274,7 +274,7 @@ const BasicAuthProvider = ({ children }) => {
       console.error('Password reset error:', error);
       return { success: false, error: 'Network error' };
     }
-  };
+  }, [apiUrl]);
 
   const value = {
     user,

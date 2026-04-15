@@ -345,3 +345,162 @@ class NotificationEmailService:
             context=context,
             language=language,
         )
+
+
+class PasswordResetEmailService:
+    """
+    Service for password reset emails (Django users only).
+    
+    Clerk users should use Clerk's built-in password reset flow.
+    """
+    frontend_url = settings.FRONTEND_HOSTNAMES[0] if settings.FRONTEND_HOSTNAMES else 'https://crati.co'
+    
+    @staticmethod
+    def send_password_reset_email(user_email: str, username: str, reset_token: str) -> bool:
+        """
+        Send password reset link to user.
+        
+        Args:
+            user_email: User's email address
+            username: User's username
+            reset_token: UUID token for password reset
+            
+        Returns:
+            bool: True if sent successfully
+        """
+        from django.conf import settings
+        
+        app_name = getattr(settings, 'APP_NAME', 'Crati.Co')
+        reset_url = f"{PasswordResetEmailService.frontend_url}/reset-password?token={reset_token}"
+        
+        subject = f"Reset your {app_name} password"
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+                .content {{ background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; }}
+                .button {{ display: inline-block; padding: 14px 32px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; margin: 20px 0; }}
+                .footer {{ text-align: center; padding: 20px; color: #666; font-size: 14px; }}
+                .note {{ background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin: 20px 0; }}
+                .warning {{ background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 20px 0; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1 style="margin: 0;">🔒 Password Reset Request</h1>
+                </div>
+                <div class="content">
+                    <h2>Hi {username},</h2>
+                    <p>We received a request to reset your password for your {app_name} account.</p>
+                    
+                    <p>Click the button below to set a new password:</p>
+                    
+                    <div style="text-align: center;">
+                        <a href="{reset_url}" class="button">Reset Password</a>
+                    </div>
+                    
+                    <div class="note">
+                        <strong>⏰ This link will expire in 1 hour</strong><br>
+                        For security reasons, password reset links are only valid for a short time.
+                    </div>
+                    
+                    <div class="warning">
+                        <strong>⚠️ Did not request this?</strong><br>
+                        If you didn't request a password reset, you can safely ignore this email. 
+                        Your password will remain unchanged.
+                    </div>
+                    
+                    <p style="color: #666; font-size: 14px; margin-top: 30px;">
+                        If the button doesn't work, copy and paste this link into your browser:<br>
+                        <a href="{reset_url}" style="color: #667eea; word-break: break-all;">{reset_url}</a>
+                    </p>
+                </div>
+                <div class="footer">
+                    <p>© {app_name} · Security notification</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return EmailService.send_email(
+            subject=subject,
+            to_emails=[user_email],
+            html_content=html_content
+        )
+    
+    @staticmethod
+    def send_password_changed_notification(user_email: str, username: str) -> bool:
+        """
+        Send notification that password was successfully changed.
+        
+        Args:
+            user_email: User's email address
+            username: User's username
+            
+        Returns:
+            bool: True if sent successfully
+        """
+        from django.conf import settings
+        
+        app_name = getattr(settings, 'APP_NAME', 'Crati.Co')
+        
+        subject = f"Your {app_name} password was changed"
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+                .content {{ background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; }}
+                .footer {{ text-align: center; padding: 20px; color: #666; font-size: 14px; }}
+                .info {{ background: #dcfce7; padding: 15px; border-left: 4px solid #10b981; margin: 20px 0; }}
+                .warning {{ background: #f8d7da; padding: 15px; border-left: 4px solid #dc3545; margin: 20px 0; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1 style="margin: 0;">✅ Password Changed</h1>
+                </div>
+                <div class="content">
+                    <h2>Hi {username},</h2>
+                    
+                    <div class="info">
+                        <strong>Your password has been successfully changed.</strong><br>
+                        You can now log in with your new password.
+                    </div>
+                    
+                    <div class="warning">
+                        <strong>⚠️ Didn't make this change?</strong><br>
+                        If you didn't change your password, please contact our support team immediately 
+                        as your account may be compromised.
+                    </div>
+                    
+                    <p>For your security, we recommend:</p>
+                    <ul>
+                        <li>Using a unique password for each service</li>
+                        <li>Using a password manager</li>
+                        <li>Changing your password periodically</li>
+                    </ul>
+                </div>
+                <div class="footer">
+                    <p>© {app_name} · Security notification</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return EmailService.send_email(
+            subject=subject,
+            to_emails=[user_email],
+            html_content=html_content
+        )

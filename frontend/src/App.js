@@ -20,6 +20,7 @@ import LibrarySidebar from "./components/LibrarySidebar";
 import NotificationSidebar from "./components/NotificationSidebar";
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
+import { ConfigProvider } from './contexts/ConfigContext';
 import { TranslationProvider } from './contexts/TranslationContext';
 import { useAllowlistCheck } from './hooks/useAllowlistCheck';
 import TopControls from './components/TopControls';
@@ -30,6 +31,7 @@ import AuthPromptModal from './components/AuthPromptModal';
 import { setTokenGetter } from './api/client';
 import { useTranslation } from './contexts/TranslationContext';
 import { useAuth } from './contexts/AuthContext';
+import PasswordResetPage from './pages/PasswordResetPage';
 
 // Check if Clerk is available
 const isClerkAvailable = () => {
@@ -205,6 +207,8 @@ function AuthenticatedApp({ controlsLayout }) {
         
         {/* Subscription History - All decisions from a subscription */}
         <Route path="/notifications/subscriptions/:subscriptionId/history" element={<SubscriptionHistoryPage />} />
+
+        <Route path="/reset-password" element={<PasswordResetPage />} />
       </Routes>
     </>
   );
@@ -222,11 +226,13 @@ function App({ controlsLayout = 'vertical-right' }) {
     <TranslationProvider>
       <ThemeProvider>
         <AuthProvider>
-          <AppContent 
-            controlsLayout={controlsLayout} 
-            stealthMode={stealthMode} 
-            clerkAvailable={clerkAvailable}
-          />
+          <ConfigProvider>
+            <AppContent 
+              controlsLayout={controlsLayout} 
+              stealthMode={stealthMode} 
+              clerkAvailable={clerkAvailable}
+            />
+          </ConfigProvider>
         </AuthProvider>
       </ThemeProvider>
     </TranslationProvider>

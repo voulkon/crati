@@ -20,7 +20,7 @@ from .views.organization_entity_relationships import (
     temporal_top_relationship_pairs_api
     )
 from users.views import UserDataViewSet
-from .views.django_auth import register, login as django_login, logout as django_logout, me as current_user, verify_email
+from .views.django_auth import register, login as django_login, logout as django_logout, me as current_user, verify_email, request_password_reset, reset_password, verify_reset_token
 from notifications.views import NotificationSubscriptionViewSet, NotificationBatchViewSet
 from notifications.views_metadata import (
     subscription_metadata,
@@ -52,6 +52,11 @@ urlpatterns = [
     path("auth/logout/", django_logout, name="django_logout"),
     path("auth/verify-email/", verify_email, name="django_verify_email"),
     path("auth/me/", current_user, name="current_user"),
+    
+    # Password reset endpoints
+    path("auth/request-password-reset/", request_password_reset, name="request_password_reset"),
+    path("auth/reset-password/", reset_password, name="reset_password"),
+    path("auth/verify-reset-token/", verify_reset_token, name="verify_reset_token"),
     
     # System configuration
     path("system/config/", system_views.system_config, name="system_config"),

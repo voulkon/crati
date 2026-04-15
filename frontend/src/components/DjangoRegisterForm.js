@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useConfig } from '../contexts/ConfigContext';
 import { useTranslation } from '../contexts/TranslationContext';
 import { useTheme } from '../contexts/ThemeContext';
 import './DjangoLoginForm.css';
@@ -11,6 +12,7 @@ import './DjangoLoginForm.css';
  */
 function DjangoRegisterForm({ onSuccess, onCancel, onSwitchToLogin }) {
   const { register } = useAuth();
+  const { minPasswordLength } = useConfig();
   const { t } = useTranslation();
   const { isDarkMode } = useTheme();
   const [email, setEmail] = useState('');
@@ -30,8 +32,8 @@ function DjangoRegisterForm({ onSuccess, onCancel, onSwitchToLogin }) {
     }
 
     // Validate password length
-    if (password.length < 8) {
-      setError('Password must be at least 8 characters long');
+    if (password.length < minPasswordLength) {
+      setError(`Password must be at least ${minPasswordLength} characters long`);
       return;
     }
 
@@ -102,10 +104,10 @@ function DjangoRegisterForm({ onSuccess, onCancel, onSwitchToLogin }) {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 8 characters"
+              placeholder={`At least ${minPasswordLength} characters`}
               required
               disabled={loading}
-              minLength={8}
+              minLength={minPasswordLength}
             />
           </div>
           
@@ -119,7 +121,7 @@ function DjangoRegisterForm({ onSuccess, onCancel, onSwitchToLogin }) {
               placeholder="Re-enter your password"
               required
               disabled={loading}
-              minLength={8}
+              minLength={minPasswordLength}
             />
           </div>
           

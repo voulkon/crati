@@ -22,6 +22,7 @@ def system_config(request):
         },
         "settings": {
             "retry_afm_fetches_after_days": settings.RETRY_AFM_FETCHES_AFTER_NUMBER_OF_DAYS,
+            "min_password_length": getattr(settings, 'MIN_PASSWORD_LENGTH', 8),
         },
         "messages": {
             "opensearch": (

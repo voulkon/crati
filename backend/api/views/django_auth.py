@@ -305,6 +305,248 @@ def verify_email(request):
         )
 
 
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def request_password_reset(request):
+    """
+    Request a password reset email.
+    
+    Request:
+    {
+        "email": "user@example.com"
+    }
+    
+    Response:
+    {
+        "message": "If an account with that email exists, a password reset link has been sent."
+    }
+    
+    Note: Returns the same message whether the user exists or not (for security).
+    """
+    email = request.data.get('email')
+    
+    if not email:
+        return Response(
+            {'error': 'Email is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Try to find the user (don't reveal if user exists or not)
+        user = User.objects.get(email=email, is_active=True)
+        
+        # Only allow password reset for Django users (not Clerk users)
+        if user.clerk_id:
+            # For Clerk users, they should use Clerk's password reset
+            logger.debug(f"Password reset attempted for Clerk user: {email}")
+            # Still return success message (don't reveal it's a Clerk user)
+            return Response({
+                'message': 'If an account with that email exists, a password reset link has been sent.',
+                'note': 'For Clerk users, please use the Clerk password reset flow.'
+            })
+        
+        # Generate password reset token
+        reset_token = uuid.uuid4()
+        user.password_reset_token = reset_token
+        user.password_reset_token_expires = timezone.now() + timedelta(hours=1)  # 1 hour expiry
+        user.save()
+        
+        # Send password reset email
+        email_sent = False
+        if getattr(settings, 'DEFAULT_FROM_EMAIL', None) and settings.DEFAULT_FROM_EMAIL != 'YOUR-ACCESS-KEY-ID':
+            try:
+                from core.email_service import PasswordResetEmailService
+                email_sent = PasswordResetEmailService.send_password_reset_email(
+                    user_email=user.email,
+                    username=user.username,
+                    reset_token=str(reset_token)
+                )
+                if email_sent:
+                    logger.debug(f"Password reset email sent to: {user.email}")
+                else:
+                    logger.warning(f"Failed to send password reset email to: {user.email}")
+            except Exception as e:
+                logger.error(f"Error sending password reset email: {e}", exc_info=True)
+        else:
+            logger.warning("Email not configured - password reset requested but no email sent")
+        
+        # Always return success message (don't reveal if user exists)
+        return Response({
+            'message': 'If an account with that email exists, a password reset link has been sent.',
+            'email_sent': email_sent
+        })
+        
+    except User.DoesNotExist:
+        # Don't reveal that user doesn't exist - return same message
+        logger.debug(f"Password reset requested for non-existent email: {email}")
+        return Response({
+            'message': 'If an account with that email exists, a password reset link has been sent.'
+        })
+    except Exception as e:
+        logger.error(f"Error processing password reset request: {e}", exc_info=True)
+        return Response(
+            {'error': 'Failed to process password reset request'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reset_password(request):
+    """
+    Reset password using the token from email.
+    
+    Request:
+    {
+        "token": "uuid-token-from-email",
+        "new_password": "new_secure_password"
+    }
+    
+    Response:
+    {
+        "message": "Password reset successfully",
+        "user": {...},
+        "token": "drf_token_here"
+    }
+    """
+    reset_token = request.data.get('token')
+    new_password = request.data.get('new_password')
+    
+    if not reset_token or not new_password:
+        return Response(
+            {'error': 'Token and new password are required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Validate password strength
+    min_length = getattr(settings, 'MIN_PASSWORD_LENGTH', 8)
+    if len(new_password) < min_length:
+        return Response(
+            {'error': f'Password must be at least {min_length} characters long'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Find user with this reset token
+        user = User.objects.get(password_reset_token=reset_token)
+        
+        # Check if token has expired
+        if user.password_reset_token_expires and user.password_reset_token_expires < timezone.now():
+            return Response(
+                {'error': 'Password reset token has expired. Please request a new one.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Reset the password
+        user.set_password(new_password)
+        user.password_reset_token = None  # Clear the token
+        user.password_reset_token_expires = None
+        user.save()
+        
+        # Send confirmation email
+        if getattr(settings, 'DEFAULT_FROM_EMAIL', None) and settings.DEFAULT_FROM_EMAIL != 'YOUR-ACCESS-KEY-ID':
+            try:
+                from core.email_service import PasswordResetEmailService
+                PasswordResetEmailService.send_password_changed_notification(
+                    user_email=user.email,
+                    username=user.username
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send password changed notification: {e}")
+        
+        # Create new DRF token for automatic login
+        Token.objects.filter(user=user).delete()  # Delete old token
+        token = Token.objects.create(user=user)
+        
+        logger.debug(f"Password reset successfully for: {user.email}")
+        
+        return Response({
+            'message': 'Password reset successfully! You are now logged in.',
+            'user': {
+                'id': user.id,
+                'email': user.email,
+                'username': user.username,
+            },
+            'token': token.key
+        }, status=status.HTTP_200_OK)
+        
+    except User.DoesNotExist:
+        return Response(
+            {'error': 'Invalid or expired reset token'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    except Exception as e:
+        logger.error(f"Error resetting password: {e}", exc_info=True)
+        return Response(
+            {'error': 'Failed to reset password'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def verify_reset_token(request):
+    """
+    Verify if a password reset token is valid (without resetting the password).
+    
+    Useful for the frontend to check if the token in the URL is valid
+    before showing the password reset form.
+    
+    Request:
+    {
+        "token": "uuid-token-from-email"
+    }
+    
+    Response:
+    {
+        "valid": true,
+        "email": "us***@example.com"  // Masked email
+    }
+    """
+    reset_token = request.data.get('token')
+    
+    if not reset_token:
+        return Response(
+            {'error': 'Token is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        # Find user with this reset token
+        user = User.objects.get(password_reset_token=reset_token)
+        
+        # Check if token has expired
+        if user.password_reset_token_expires and user.password_reset_token_expires < timezone.now():
+            return Response({
+                'valid': False,
+                'error': 'Token has expired'
+            })
+        
+        # Mask the email address for security
+        email_parts = user.email.split('@')
+        if len(email_parts) == 2:
+            masked_email = f"{email_parts[0][:2]}***@{email_parts[1]}"
+        else:
+            masked_email = "***"
+        
+        return Response({
+            'valid': True,
+            'email': masked_email
+        })
+        
+    except User.DoesNotExist:
+        return Response({
+            'valid': False,
+            'error': 'Invalid token'
+        })
+    except Exception as e:
+        logger.error(f"Error verifying reset token: {e}", exc_info=True)
+        return Response(
+            {'error': 'Failed to verify token'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
 @api_view(['GET'])
 def me(request):
     """

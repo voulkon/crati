@@ -9,7 +9,7 @@ import './DjangoLoginForm.css';
  * Django Login Form
  * Simple email/password form for Django authentication when Clerk is not available
  */
-function DjangoLoginForm({ onSuccess, onCancel, onSwitchToRegister }) {
+function DjangoLoginForm({ onSuccess, onCancel, onSwitchToRegister, onForgotPassword }) {
   const { signIn } = useAuth();
   const { t } = useTranslation();
   const { isDarkMode } = useTheme();
@@ -42,7 +42,7 @@ function DjangoLoginForm({ onSuccess, onCancel, onSwitchToRegister }) {
     <div className={`django-login-overlay ${isDarkMode ? 'dark' : 'light'}`}>
       <div className="django-login-modal">
         <div className="django-login-header">
-          <h2>🔑 {t('common.signIn') || 'Sign In'}</h2>
+          <h2>{t('common.signIn') || 'Sign In'}</h2>
           <button 
             className="django-login-close" 
             onClick={onCancel}
@@ -55,7 +55,7 @@ function DjangoLoginForm({ onSuccess, onCancel, onSwitchToRegister }) {
         <form onSubmit={handleSubmit} className="django-login-form">
           {error && (
             <div className="django-login-error">
-              ⚠️ {error}
+              {error}
             </div>
           )}
           
@@ -84,6 +84,17 @@ function DjangoLoginForm({ onSuccess, onCancel, onSwitchToRegister }) {
               required
               disabled={loading}
             />
+          </div>
+          
+          <div className="django-login-forgot-password">
+            <button 
+              type="button"
+              onClick={onForgotPassword}
+              className="django-login-forgot-link"
+              disabled={loading}
+            >
+              Forgot password?
+            </button>
           </div>
           
           <div className="django-login-actions">

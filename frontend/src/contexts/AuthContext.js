@@ -222,6 +222,60 @@ const BasicAuthProvider = ({ children }) => {
     }
   };
 
+  const requestPasswordReset = async (email) => {
+    try {
+      const response = await fetch(`${apiUrl}/auth/request-password-reset/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, message: data.message };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.error || 'Password reset request failed' };
+      }
+    } catch (error) {
+      console.error('Password reset request error:', error);
+      return { success: false, error: 'Network error' };
+    }
+  };
+
+  const resetPassword = async (token, newPassword) => {
+    try {
+      const response = await fetch(`${apiUrl}/auth/reset-password/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token, new_password: newPassword }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Automatically log the user in after successful password reset
+        if (data.token) {
+          localStorage.setItem('django_auth_token', data.token);
+          setUser(data.user);
+          setIsSignedIn(true);
+        }
+        
+        return { success: true, message: data.message };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.error || 'Password reset failed' };
+      }
+    } catch (error) {
+      console.error('Password reset error:', error);
+      return { success: false, error: 'Network error' };
+    }
+  };
+
   const value = {
     user,
     isSignedIn,
@@ -231,6 +285,8 @@ const BasicAuthProvider = ({ children }) => {
     signOut,
     register,
     verifyEmail,
+    requestPasswordReset,
+    resetPassword,
     isClerkAuth: false,
   };
 

@@ -256,9 +256,11 @@ def django_register(request):
         )
     
     # Validate password length
-    if len(password) < 8:
+    from django.conf import settings
+    min_length = getattr(settings, 'MIN_PASSWORD_LENGTH', 8)
+    if len(password) < min_length:
         return Response(
-            {'error': 'Password must be at least 8 characters long'},
+            {'error': f'Password must be at least {min_length} characters long'},
             status=status.HTTP_400_BAD_REQUEST
         )
     

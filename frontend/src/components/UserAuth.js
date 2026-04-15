@@ -3,6 +3,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import DjangoLoginForm from './DjangoLoginForm';
 import DjangoRegisterForm from './DjangoRegisterForm';
+import DjangoPasswordResetRequest from './DjangoPasswordResetRequest';
 import './UserAuth.css';
 
 // Check if Clerk is available
@@ -24,6 +25,7 @@ const UserAuth = () => {
   const { user, isLoading, isSignedIn, isClerkAuth, signOut } = useAuth();
   const [showLoginForm, setShowLoginForm] = useState(false);
   const [showRegisterForm, setShowRegisterForm] = useState(false);
+  const [showPasswordResetRequest, setShowPasswordResetRequest] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -135,6 +137,10 @@ const UserAuth = () => {
               setShowLoginForm(false);
               setShowRegisterForm(true);
             }}
+            onForgotPassword={() => {
+              setShowLoginForm(false);
+              setShowPasswordResetRequest(true);
+            }}
           />
         )}
         
@@ -146,6 +152,13 @@ const UserAuth = () => {
               setShowRegisterForm(false);
               setShowLoginForm(true);
             }}
+          />
+        )}
+        
+        {showPasswordResetRequest && (
+          <DjangoPasswordResetRequest
+            onSuccess={() => setShowPasswordResetRequest(false)}
+            onCancel={() => setShowPasswordResetRequest(false)}
           />
         )}
       </>

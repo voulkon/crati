@@ -5,6 +5,7 @@ import { useTranslation } from '../contexts/TranslationContext';
 import { useTheme } from '../contexts/ThemeContext';
 import DjangoLoginForm from './DjangoLoginForm';
 import DjangoRegisterForm from './DjangoRegisterForm';
+import DjangoPasswordResetRequest from './DjangoPasswordResetRequest';
 
 // Check if Clerk is available
 const isClerkAvailable = () => {
@@ -31,6 +32,7 @@ function AuthPromptModal() {
   const [message, setMessage] = useState('');
   const [showDjangoForm, setShowDjangoForm] = useState(false);
   const [showRegister, setShowRegister] = useState(false);
+  const [showPasswordResetRequest, setShowPasswordResetRequest] = useState(false);
 
   useEffect(() => {
     const handleAuthRequired = (event) => {
@@ -63,6 +65,21 @@ function AuthPromptModal() {
 
   // For Django auth, show the login form directly
   if (showDjangoForm) {
+    if (showPasswordResetRequest) {
+      return (
+        <DjangoPasswordResetRequest
+          onSuccess={() => {
+            setIsOpen(false);
+            setShowDjangoForm(false);
+            setShowPasswordResetRequest(false);
+          }}
+          onCancel={() => {
+            setShowPasswordResetRequest(false);
+          }}
+        />
+      );
+    }
+    
     if (showRegister) {
       return (
         <DjangoRegisterForm
@@ -92,6 +109,7 @@ function AuthPromptModal() {
           setShowDjangoForm(false);
         }}
         onSwitchToRegister={() => setShowRegister(true)}
+        onForgotPassword={() => setShowPasswordResetRequest(true)}
       />
     );
   }

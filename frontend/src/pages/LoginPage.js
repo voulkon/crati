@@ -3,10 +3,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import DjangoLoginForm from '../components/DjangoLoginForm';
 import DjangoRegisterForm from '../components/DjangoRegisterForm';
+import DjangoPasswordResetRequest from '../components/DjangoPasswordResetRequest';
 
 const LoginPage = () => {
   const [showLogin, setShowLogin] = useState(true);
   const [showRegister, setShowRegister] = useState(false);
+  const [showPasswordResetRequest, setShowPasswordResetRequest] = useState(false);
   const { isSignedIn } = useAuth();
   const navigate = useNavigate();
 
@@ -69,6 +71,10 @@ const LoginPage = () => {
             onSuccess={handleLoginSuccess}
             onCancel={() => {}} // Don't allow closing in stealth mode
             onSwitchToRegister={handleSwitchToRegister}
+            onForgotPassword={() => {
+              setShowLogin(false);
+              setShowPasswordResetRequest(true);
+            }}
           />
         )}
         
@@ -77,6 +83,19 @@ const LoginPage = () => {
             onSuccess={handleRegisterSuccess}
             onCancel={() => {}} // Don't allow closing in stealth mode
             onSwitchToLogin={handleSwitchToLogin}
+          />
+        )}
+        
+        {showPasswordResetRequest && (
+          <DjangoPasswordResetRequest
+            onSuccess={() => {
+              setShowPasswordResetRequest(false);
+              setShowLogin(true);
+            }}
+            onCancel={() => {
+              setShowPasswordResetRequest(false);
+              setShowLogin(true);
+            }}
           />
         )}
       </div>

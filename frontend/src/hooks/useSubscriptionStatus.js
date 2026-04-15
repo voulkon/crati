@@ -5,6 +5,7 @@ import {
   checkRelationshipSubscription,
   checkSignerSubscription
 } from '../api/notifications';
+import { useAuth } from '../contexts/AuthContext';
 
 /**
  * Hook to check if the user is subscribed to the current context
@@ -15,8 +16,17 @@ export function useSubscriptionStatus(context) {
   const [subscribed, setSubscribed] = useState(false);
   const [subscription, setSubscription] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const { isSignedIn, isLoaded } = useAuth();
 
   const checkSubscription = useCallback(async () => {
+    // Don't check if user is not signed in
+    if (!isSignedIn) {
+      setSubscribed(false);
+      setSubscription(null);
+      setIsLoading(false);
+      return;
+    }
+
     // Don't check for passive or disabled contexts
     if (!context || context.type === 'passive' || context.type === 'disabled') {
       setSubscribed(false);
@@ -78,11 +88,13 @@ export function useSubscriptionStatus(context) {
     } finally {
       setIsLoading(false);
     }
-  }, [context]);
+  }, [context, isSignedIn]);
 
   useEffect(() => {
-    checkSubscription();
-  }, [checkSubscription]);
+    if (isLoaded) {
+      checkSubscription();
+    }
+  }, [checkSubscription, isLoaded]);
 
   return {
     subscribed,

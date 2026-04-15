@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { toggleBookmarkForCurrentPage, isCurrentPageBookmarked } from '../api/bookmarks';
 import { useTranslation } from '../contexts/TranslationContext';
+import { useAuth } from '../contexts/AuthContext';
 import SplitButton from './SplitButton';
 import './BookmarkButton.css';
 
@@ -12,6 +13,7 @@ import './BookmarkButton.css';
  */
 export default function BookmarkButton({ onLibraryToggle, isLibraryOpen, bookmarkCount }) {
   const { t } = useTranslation();
+  const { isSignedIn, isLoaded } = useAuth();
   const location = useLocation();
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -19,8 +21,13 @@ export default function BookmarkButton({ onLibraryToggle, isLibraryOpen, bookmar
   const [toastMessage, setToastMessage] = useState('');
 
   useEffect(() => {
-    checkBookmarkStatus();
-  }, [location.pathname, location.search]);
+    if (isLoaded && isSignedIn) {
+      checkBookmarkStatus();
+    } else {
+      // Reset bookmark status when not signed in
+      setIsBookmarked(false);
+    }
+  }, [location.pathname, location.search, isSignedIn, isLoaded]);
 
   async function checkBookmarkStatus() {
     try {
@@ -32,6 +39,14 @@ export default function BookmarkButton({ onLibraryToggle, isLibraryOpen, bookmar
   }
 
   async function handleToggleBookmark() {
+    // Prompt user to sign in if not authenticated
+    if (!isSignedIn) {
+      window.dispatchEvent(new CustomEvent('authRequired', {
+        detail: { message: t('auth.signInToBookmark') || 'Please sign in to bookmark pages' }
+      }));
+      return;
+    }
+
     setIsLoading(true);
     try {
       const result = await toggleBookmarkForCurrentPage();

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../contexts/TranslationContext';
+import { useAuth } from '../contexts/AuthContext';
 import { 
     getSubscriptions, 
     getNotificationBatches, 
@@ -22,6 +23,7 @@ import { Bell, ClipboardList, Search, Inbox, X, CheckCheck, Trash2 } from 'lucid
 export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChange }) {
     const navigate = useNavigate();
     const { t } = useTranslation();
+    const { isSignedIn, isLoaded } = useAuth();
     const sidebarRef = useRef(null);
     const resizeHandleRef = useRef(null);
 
@@ -102,6 +104,11 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
 
     // Load data function
     const loadData = useCallback(async () => {
+        // Don't load if user is not signed in
+        if (!isSignedIn) {
+            return;
+        }
+
         setIsLoading(true);
         try {
             const [subsData, notifsData] = await Promise.all([
@@ -120,19 +127,19 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
         } finally {
             setIsLoading(false);
         }
-    }, [onUnreadCountChange]);
+    }, [onUnreadCountChange, isSignedIn]);
 
     // Load data when sidebar opens
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && isLoaded && isSignedIn) {
             loadData();
         }
         // eslint-disable-next-line
-    }, [isOpen, loadData]);
+    }, [isOpen, loadData, isSignedIn, isLoaded]);
 
     // Refetch periodically when open
     useEffect(() => {
-        if (!isOpen) return;
+        if (!isOpen || !isSignedIn) return;
 
         const interval = setInterval(() => {
             loadData();
@@ -140,7 +147,7 @@ export default function NotificationSidebar({ isOpen, onClose, onUnreadCountChan
 
         return () => clearInterval(interval);
         // eslint-disable-next-line
-    }, [isOpen, loadData]);
+    }, [isOpen, loadData, isSignedIn]);
 
     async function handleRefresh() {
         setIsLoading(true);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../contexts/TranslationContext';
+import { useAuth } from '../contexts/AuthContext';
 import apiClient from '../api/client';
 import SuperSearch from '../components/SuperSearch';
 import TopRelationshipPairs from '../components/TopRelationshipPairs';
@@ -9,6 +10,7 @@ import './HomePage.css';
 const HomePage = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { isSignedIn, isLoaded } = useAuth();
   const [topOrganizations, setTopOrganizations] = useState([]);
   const [recentDecisions, setRecentDecisions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,37 +19,52 @@ const HomePage = () => {
   const today = new Date().toISOString().split('T')[0];
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+  // Check if backend requires authentication (stealth mode)
+  const stealthMode = process.env.REACT_APP_STEALTH_MODE === 'true';
+
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+
+      // Parallel API calls for dashboard data
+      const [
+        organizationsResponse,
+        decisionsResponse
+      ] = await Promise.all([
+        // Top organizations this week
+        apiClient.get(`/explore/organizations/?start_date=${weekAgo}&end_date=${today}&limit=6`),
+        
+        // Get recent high-value decisions using optimized endpoint
+        apiClient.get(
+          `/explore/decisions-optimized/?start_date=${weekAgo}&end_date=${today}&sort_by=entity_amount_desc&page_size=5`
+        )
+      ]);
+
+      setTopOrganizations(organizationsResponse.data.organizations || []);
+      setRecentDecisions(decisionsResponse.data.results || []);
+
+    } catch (error) {
+      console.error('Failed to load dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        setLoading(true);
+    // Wait for auth to load
+    if (!isLoaded) {
+      return;
+    }
 
-        // Parallel API calls for dashboard data
-        const [
-          organizationsResponse,
-          decisionsResponse
-        ] = await Promise.all([
-          // Top organizations this week
-          apiClient.get(`/explore/organizations/?start_date=${weekAgo}&end_date=${today}&limit=6`),
-          
-          // Get recent high-value decisions using optimized endpoint
-          apiClient.get(
-            `/explore/decisions-optimized/?start_date=${weekAgo}&end_date=${today}&sort_by=entity_amount_desc&page_size=5`
-          )
-        ]);
-
-        setTopOrganizations(organizationsResponse.data.organizations || []);
-        setRecentDecisions(decisionsResponse.data.results || []);
-
-      } catch (error) {
-        console.error('Failed to load dashboard data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    // If stealth mode is enabled and user is not signed in, don't load data
+    if (stealthMode && !isSignedIn) {
+      setLoading(false);
+      return;
+    }
 
     loadDashboardData();
-  }, [today, weekAgo]);
+    // eslint-disable-next-line
+  }, [today, weekAgo, stealthMode, isSignedIn, isLoaded]);
 
   const formatAmount = (amount) => {
     if (amount >= 1000000) {
@@ -63,6 +80,56 @@ const HomePage = () => {
       <div className="homepage-loading">
         <div className="loading-spinner"></div>
         <p>{t('homepage.loading')}</p>
+      </div>
+    );
+  }
+
+  // Show sign-in prompt if stealth mode is enabled and user is not signed in
+  if (stealthMode && !isSignedIn) {
+    return (
+      <div className="homepage">
+        <div className="homepage-container">
+          {/* Hero Section */}
+          <section className="hero-section">
+            <div className="hero-content">
+              <h1 className="hero-title">
+                {t('homepage.title')}
+              </h1>
+              <p className="hero-subtitle">
+                {t('homepage.subtitle')}
+              </p>
+              
+              {/* Super Search Component - Main Feature */}
+              <div className="hero-search-enhanced">
+                <SuperSearch
+                  placeholder={t('homepage.searchPlaceholder')}
+                  autoFocus={false}
+                  showFullResults={true}
+                  className="homepage-super-search"
+                />
+              </div>
+              
+              {/* Sign-in message */}
+              <div style={{
+                marginTop: '48px',
+                padding: '24px',
+                backgroundColor: 'var(--card-bg, #ffffff)',
+                borderRadius: '12px',
+                textAlign: 'center',
+                maxWidth: '600px',
+                margin: '48px auto 0'
+              }}>
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔐</div>
+                <h2 style={{ marginBottom: '12px' }}>
+                  {t('homepage.signInRequired') || 'Sign In to Explore'}
+                </h2>
+                <p style={{ color: 'var(--muted-text, #666666)' }}>
+                  {t('homepage.signInMessage') || 'Please sign in to view trending organizations, recent decisions, and more.'}
+                </p>
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     );
   }

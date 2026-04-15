@@ -10,6 +10,7 @@ import {
   deleteBookmark
 } from '../api/bookmarks';
 import { useTranslation } from '../contexts/TranslationContext';
+import { useAuth } from '../contexts/AuthContext';
 import './LibrarySidebar.css';
 import {LibraryIconInSidebar, LibraryFavoriteInSidebar, LibraryTimerInSidebar} from './Icons.js';
 
@@ -20,6 +21,7 @@ import {LibraryIconInSidebar, LibraryFavoriteInSidebar, LibraryTimerInSidebar} f
 export default function LibrarySidebar({ isOpen, onClose, onBookmarkCountChange }) {
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { isSignedIn, isLoaded } = useAuth();
   const sidebarRef = useRef(null);
   const resizeHandleRef = useRef(null);
   
@@ -100,16 +102,18 @@ export default function LibrarySidebar({ isOpen, onClose, onBookmarkCountChange 
   }, [sidebarWidth]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && isLoaded && isSignedIn) {
       loadData();
     }
     // eslint-disable-next-line
-  }, [isOpen]);
+  }, [isOpen, isSignedIn, isLoaded]);
 
   useEffect(() => {
-    loadBookmarks();
+    if (isSignedIn) {
+      loadBookmarks();
+    }
     // eslint-disable-next-line
-  }, [selectedFolder, viewMode]);
+  }, [selectedFolder, viewMode, isSignedIn]);
 
   async function loadData() {
     setIsLoading(true);

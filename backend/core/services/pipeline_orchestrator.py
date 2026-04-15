@@ -99,7 +99,7 @@ class DecisionPipelineOrchestrator:
         with logger.contextualize(ingestion_id=ingestion_id, ada=decision_ada):
             logger.info(
                 f"\n{self._separator()}\n"
-                f"🚀 Starting pipeline for decision {decision_ada}\n"
+                f"[START] Starting pipeline for decision {decision_ada}\n"
                 f"   Ingestion ID: {ingestion_id} (use this to filter logs)\n"
                 f"   Force reprocess: {force_reprocess}\n"
                 f"   Skip OpenSearch: {skip_opensearch}\n"
@@ -109,17 +109,17 @@ class DecisionPipelineOrchestrator:
             
             # Stage 0: Import Decision (if DTO provided)
             if decision_dto:
-                logger.info(f"\n{self._separator()}\n📥 STAGE 0/8: IMPORT DECISION\n{self._separator()}")
+                logger.debug(f"\n{self._separator()}\n[IMPORT] STAGE 0/8: IMPORT DECISION\n{self._separator()}")
                 decision = self._step_import_decision(decision_dto, health_check=None)
                 if not decision:
-                    logger.error(f"❌ Failed to import decision {decision_dto.ada}")
+                    logger.error(f"[ERROR] Failed to import decision {decision_dto.ada}")
                     return None
             else:
                 # Get existing decision from database
                 try:
                     decision = Decision.objects.get(ada=decision_ada)
                 except Decision.DoesNotExist:
-                    logger.error(f"❌ Decision {decision_ada} not found in database")
+                    logger.error(f"[ERROR] Decision {decision_ada} not found in database")
                     return None
 
             health_check = self.get_or_create_health_check(decision)
@@ -135,53 +135,45 @@ class DecisionPipelineOrchestrator:
             self.update_health_status(health_check, 'ingestion', HealthStatus.HEALTHY)
 
             # 1. Organization Resolution (moved from DecisionImporter)
-            logger.info(f"\n{self._separator()}\n🏛️ STAGE 1/8: ORGANIZATION RESOLUTION\n{self._separator()}")
+            logger.debug(f"\n{self._separator()}\n[ORG] STAGE 1/9: ORGANIZATION RESOLUTION\n{self._separator()}")
             self._step_resolve_organizations(decision, health_check)
 
-            # 2. Entity Extraction (must come before amounts so relationships exist for linking)
-            # logger.info(f"\n{self._separator()}\n📝 STAGE 2/8: ENTITY EXTRACTION\n{self._separator()}")
-            # self._step_extract_entities(decision, health_check)
-
-            # # 3. Amount Extraction (links to relationships created in step 2)
-            # logger.info(f"\n{self._separator()}\n💰 STAGE 3/8: AMOUNT EXTRACTION\n{self._separator()}")
-            # self._step_extract_amounts(decision, health_check)
-
             # 2 & 3. Entity and Amount Extraction (combined)
-            logger.info(f"\n{self._separator()}\n📝💰 STAGE 2/9: ENTITY AND AMOUNT EXTRACTION\n{self._separator()}")
+            logger.debug(f"\n{self._separator()}\n[ENTITY+AMOUNT] STAGE 2/9: ENTITY AND AMOUNT EXTRACTION\n{self._separator()}")
             self._step_extract_entities_and_amounts(decision, health_check)
 
             # 3. Direct Assignment Classification
-            logger.info(f"\n{self._separator()}\n🎯 STAGE 3/9: DIRECT ASSIGNMENT CLASSIFICATION\n{self._separator()}")
+            logger.debug(f"\n{self._separator()}\n[CLASSIFY] STAGE 3/9: DIRECT ASSIGNMENT CLASSIFICATION\n{self._separator()}")
             self._step_classify_direct_assignment(decision, health_check)
 
             # 4. Company Data Enrichment
-            logger.info(f"\n{self._separator()}\n🏢 STAGE 4/9: COMPANY ENRICHMENT\n{self._separator()}")
+            logger.debug(f"\n{self._separator()}\n[COMPANY] STAGE 4/9: COMPANY ENRICHMENT\n{self._separator()}")
             self._step_enrich_companies(decision, health_check)
 
             # 5. Document Processing
-            logger.info(f"\n{self._separator()}\n📄 STAGE 5/9: DOCUMENT PROCESSING\n{self._separator()}")
+            logger.debug(f"\n{self._separator()}\n[DOCUMENT] STAGE 5/9: DOCUMENT PROCESSING\n{self._separator()}")
             self._step_process_document(decision, health_check, force_reprocess)
 
             # 6. OpenSearch Indexing
             if skip_opensearch:
-                logger.info(
+                logger.debug(
                     f"\n{self._separator()}\n"
-                    f"🔎 STAGE 6/9: OPENSEARCH INDEXING (SKIPPED)\n"
+                    f"[SEARCH] STAGE 6/9: OPENSEARCH INDEXING (SKIPPED)\n"
                     f"{self._separator()}\n"
                     f"OpenSearch indexing disabled - skipping to save on infrastructure costs"
                 )
                 self.update_health_status(health_check, 'opensearch', HealthStatus.UNKNOWN)
             else:
-                logger.info(f"\n{self._separator()}\n🔎 STAGE 6/9: OPENSEARCH INDEXING\n{self._separator()}")
+                logger.debug(f"\n{self._separator()}\n[SEARCH] STAGE 6/9: OPENSEARCH INDEXING\n{self._separator()}")
                 self._step_index_opensearch(decision, health_check)
 
             # 7. Coverage
-            logger.info(f"\n{self._separator()}\n📊 STAGE 7/9: COVERAGE METRICS\n{self._separator()}")
+            logger.debug(f"\n{self._separator()}\n[STATS] STAGE 7/9: COVERAGE METRICS\n{self._separator()}")
             self._step_verify_coverage(decision, health_check)
 
-            logger.info(
+            logger.debug(
                 f"\n{self._separator()}\n"
-                f"✅ Pipeline completed for {decision_ada}\n"
+                f"[OK] Pipeline completed for {decision_ada}\n"
                 f"   Overall Status: {health_check.overall_status}\n"
                 f"   Ingestion ID: {ingestion_id}\n"
                 f"{self._separator()}\n"
@@ -202,15 +194,15 @@ class DecisionPipelineOrchestrator:
             Decision instance or None if import failed
         """
         try:
-            logger.info(f"Importing decision {decision_dto.ada} from DTO")
+            logger.debug(f"Importing decision {decision_dto.ada} from DTO")
             
             # Import using DecisionImporter
             created_count = self.decision_importer.import_many([decision_dto])
             
             if created_count > 0:
-                logger.info(f"Created new decision {decision_dto.ada}")
+                logger.debug(f"Created new decision {decision_dto.ada}")
             else:
-                logger.info(f"Decision {decision_dto.ada} already exists (updated)")
+                logger.debug(f"Decision {decision_dto.ada} already exists (updated)")
             
             # Get the decision instance
             decision = Decision.objects.get(ada=decision_dto.ada)
@@ -246,7 +238,7 @@ class DecisionPipelineOrchestrator:
             from core.fetchers.diavgeia_fetcher import DiavgeiaFetcher
             from core.models import Signer, Unit
             
-            logger.info(f"Resolving organizations for {decision.ada}")
+            logger.debug(f"Resolving organizations for {decision.ada}")
             
             fetcher = DiavgeiaFetcher()
             resolution_results = {
@@ -260,7 +252,7 @@ class DecisionPipelineOrchestrator:
             # Log initial state
             total_signers = decision.signers.count()
             signers_without_org = decision.signers.filter(organization_id__isnull=True).count()
-            logger.info(
+            logger.debug(
                 f"Signers for {decision.ada}: {total_signers} total, "
                 f"{signers_without_org} without organization, "
                 f"{total_signers - signers_without_org} already have organization"
@@ -269,7 +261,7 @@ class DecisionPipelineOrchestrator:
             # Resolve organizations for signers
             for signer in decision.signers.all():
                 if not signer.organization_id:
-                    logger.info(f"Attempting to resolve organization for signer {signer.uid}")
+                    logger.debug(f"Attempting to resolve organization for signer {signer.uid}")
                     
                     try:
                         org_id, resolution_path = self.decision_importer._resolve_signer_organization(
@@ -287,7 +279,7 @@ class DecisionPipelineOrchestrator:
                                 'org_id': org_id,
                                 'path': resolution_path
                             })
-                            logger.info(f"Resolved organization {org_id} for signer {signer.uid}")
+                            logger.debug(f"Resolved organization {org_id} for signer {signer.uid}")
                         else:
                             # Create default organization
                             default_org = self.decision_importer._ensure_default_organization('signer', signer.uid)
@@ -309,18 +301,18 @@ class DecisionPipelineOrchestrator:
             
             # Log signer resolution summary
             if signers_without_org > 0:
-                logger.info(
+                logger.debug(
                     f"Signer resolution summary for {decision.ada}: "
                     f"{resolution_results['signers_resolved']} resolved, "
                     f"{resolution_results['signers_failed']} used default org"
                 )
             else:
-                logger.info(f"All signers for {decision.ada} already have organizations")
+                logger.debug(f"All signers for {decision.ada} already have organizations")
             
             # Log initial state for units
             total_units = decision.units.count()
             units_without_org = decision.units.filter(organization_id__isnull=True).count()
-            logger.info(
+            logger.debug(
                 f"Units for {decision.ada}: {total_units} total, "
                 f"{units_without_org} without organization, "
                 f"{total_units - units_without_org} already have organization"
@@ -329,7 +321,7 @@ class DecisionPipelineOrchestrator:
             # Resolve organizations for units
             for unit in decision.units.all():
                 if not unit.organization_id:
-                    logger.info(f"Attempting to resolve organization for unit {unit.uid}")
+                    logger.debug(f"Attempting to resolve organization for unit {unit.uid}")
                     
                     try:
                         org_id, resolution_path, units_to_import = self.decision_importer._resolve_unit_organization_through_parents(
@@ -347,7 +339,7 @@ class DecisionPipelineOrchestrator:
                                 'org_id': org_id,
                                 'path': resolution_path
                             })
-                            logger.info(f"Resolved organization {org_id} for unit {unit.uid}")
+                            logger.debug(f"Resolved organization {org_id} for unit {unit.uid}")
                         else:
                             # Create default organization
                             default_org = self.decision_importer._ensure_default_organization('unit', unit.uid)
@@ -369,19 +361,19 @@ class DecisionPipelineOrchestrator:
             
             # Log unit resolution summary
             if units_without_org > 0:
-                logger.info(
+                logger.debug(
                     f"Unit resolution summary for {decision.ada}: "
                     f"{resolution_results['units_resolved']} resolved, "
                     f"{resolution_results['units_failed']} used default org"
                 )
             else:
-                logger.info(f"All units for {decision.ada} already have organizations")
+                logger.debug(f"All units for {decision.ada} already have organizations")
             
             # Log summary
             total_resolved = resolution_results['signers_resolved'] + resolution_results['units_resolved']
             total_failed = resolution_results['signers_failed'] + resolution_results['units_failed']
             
-            logger.info(
+            logger.debug(
                 f"Organization resolution completed for {decision.ada}: "
                 f"{total_resolved} resolved, {total_failed} failed"
             )
@@ -390,7 +382,7 @@ class DecisionPipelineOrchestrator:
             if resolution_results['details']:
                 logger.debug(f"Resolution details for {decision.ada}: {resolution_results['details']}")
             else:
-                logger.info(f"No resolution attempts made for {decision.ada} - all entities already have organizations")
+                logger.debug(f"No resolution attempts made for {decision.ada} - all entities already have organizations")
             
             # Mark as healthy even if some failed (we used defaults)
             self.update_health_status(health_check, 'organization', HealthStatus.HEALTHY)
@@ -458,7 +450,7 @@ class DecisionPipelineOrchestrator:
         }
         
         try:
-            logger.info(f"Extracting entities and amounts for {decision.ada}")
+            logger.debug(f"Extracting entities and amounts for {decision.ada}")
             
             # Extract using the unified service (with idempotent mode)
             result = self.extraction_service.extract_from_decision(
@@ -477,7 +469,7 @@ class DecisionPipelineOrchestrator:
                     f"Extraction completed with {len(result.errors)} warnings for {decision.ada}"
                 )
             
-            logger.info(
+            logger.debug(
                 f"Extracted {result.entities_created} entities and "
                 f"{result.amounts_created} amounts from {decision.ada}"
             )
@@ -529,7 +521,7 @@ class DecisionPipelineOrchestrator:
         }
         
         try:
-            logger.info(f"Classifying direct assignment for {decision.ada}")
+            logger.debug(f"Classifying direct assignment for {decision.ada}")
             
             # Use the classification service
             from core.services.direct_assignment_detection_service import classification_service
@@ -539,7 +531,7 @@ class DecisionPipelineOrchestrator:
             step_result['is_direct_assignment'] = classification.is_direct_assignment
             
             if classification.is_direct_assignment:
-                logger.info(f"✓ Decision {decision.ada} classified as direct assignment")
+                logger.debug(f"✓ Decision {decision.ada} classified as direct assignment")
             else:
                 logger.debug(f"Decision {decision.ada} is NOT a direct assignment")
             
@@ -558,11 +550,11 @@ class DecisionPipelineOrchestrator:
         try:
             # Skip company enrichment if disabled
             if not feature_flags.is_enabled('HAVE_AFM_FETCH_JOB'):
-                logger.info(f"Skipping company enrichment for {decision.ada} (HAVE_AFM_FETCH_JOB=False)")
+                logger.debug(f"Skipping company enrichment for {decision.ada} (HAVE_AFM_FETCH_JOB=False)")
                 self.update_health_status(health_check, 'relations', HealthStatus.UNKNOWN)
                 return
             
-            logger.info(f"Step 3: Enriching company data for {decision.ada}")
+            logger.debug(f"Step 3: Enriching company data for {decision.ada}")
             
             # Find entities related to this decision
             relationships = decision.entity_relationships.all()
@@ -612,13 +604,13 @@ class DecisionPipelineOrchestrator:
                         afms_already_locked.append(afm)
                 
                 if afms_already_locked:
-                    logger.info(
+                    logger.debug(
                         f"Skipping {len(afms_already_locked)} AFMs already being processed: "
                         f"{afms_already_locked[:5]}{'...' if len(afms_already_locked) > 5 else ''}"
                     )
                 
                 if afms_to_queue:
-                    logger.info(
+                    logger.debug(
                         f"Queueing company enrichment for {len(afms_to_queue)} unique AFMs "
                         f"(from {len(entities_needing_lookup)} total, {len(afms_already_locked)} already locked)"
                     )
@@ -635,7 +627,7 @@ class DecisionPipelineOrchestrator:
                         lock_owner=lock_owner
                     )
                 else:
-                    logger.info(
+                    logger.debug(
                         f"All {len(unique_afms)} unique AFMs already being processed - nothing to queue"
                     )
             else:
@@ -648,10 +640,10 @@ class DecisionPipelineOrchestrator:
 
     def _step_process_document(self, decision: Decision, health_check: DecisionHealthCheck, force: bool):
         try:
-            logger.info(f"Step 3: Processing document for {decision.ada}")
+            logger.debug(f"Step 3: Processing document for {decision.ada}")
             
             if not feature_flags.is_enabled('EXTRACT_THE_DOCS_FROM_PDFS'):
-                logger.info(f"Skipping document processing for {decision.ada} (EXTRACT_THE_DOCS_FROM_PDFS=False)")
+                logger.debug(f"Skipping document processing for {decision.ada} (EXTRACT_THE_DOCS_FROM_PDFS=False)")
                 self.update_health_status(health_check, 'document_extraction', HealthStatus.UNKNOWN)
                 return
             
@@ -681,12 +673,12 @@ class DecisionPipelineOrchestrator:
     def _step_index_opensearch(self, decision: Decision, health_check: DecisionHealthCheck):
         # Skip OpenSearch indexing if disabled
         if not feature_flags.is_enabled('INDEX_THE_OPENSEARCH'):
-            logger.info(f"Skipping OpenSearch indexing for {decision.ada} (INDEX_THE_OPENSEARCH=False)")
+            logger.debug(f"Skipping OpenSearch indexing for {decision.ada} (INDEX_THE_OPENSEARCH=False)")
             self.update_health_status(health_check, 'opensearch', HealthStatus.UNKNOWN)
             return
         
         try:
-            logger.info(f"Step 5: Indexing in OpenSearch for {decision.ada}")
+            logger.debug(f"Step 5: Indexing in OpenSearch for {decision.ada}")
             
             extraction = DocumentExtraction.objects.filter(decision=decision).first()
             
@@ -726,7 +718,7 @@ class DecisionPipelineOrchestrator:
                 'page_count': extraction.page_count
             }
             
-            logger.info(f"Indexing document for {decision.ada} in OpenSearch")
+            logger.debug(f"Indexing document for {decision.ada} in OpenSearch")
             success = self.search_service.index_document(document_data)
             
             if success:
@@ -764,7 +756,7 @@ class DecisionPipelineOrchestrator:
         Returns:
             Dictionary with processing results and statistics
         """
-        logger.info(f"🚀 Starting batch pipeline for ImportJob #{import_job_id}")
+        logger.info(f"[START] Starting batch pipeline for ImportJob #{import_job_id}")
         start_time = timezone.now()
         
         try:
@@ -839,7 +831,7 @@ class DecisionPipelineOrchestrator:
                     if processed % 100 == 0:
                         logger.info(
                             f"Progress: {processed}/{total_decisions} "
-                            f"({results['successful']} ✅, {results['failed']} ❌, {results['skipped']} ⏭️)"
+                            f"({results['successful']} [OK], {results['failed']} [FAIL], {results['skipped']} [SKIP])"
                         )
                     
                     if stop_on_error and results['failed'] > 0:
@@ -869,7 +861,7 @@ class DecisionPipelineOrchestrator:
         results['decisions_per_second'] = total_decisions / total_time if total_time > 0 else 0
         
         logger.info(
-            f"✅ Batch pipeline completed for ImportJob #{import_job_id} in {total_time:.2f}s\n"
+            f"[OK] Batch pipeline completed for ImportJob #{import_job_id} in {total_time:.2f}s\n"
             f"   Total: {total_decisions}, Successful: {results['successful']}, "
             f"Failed: {results['failed']}, Skipped: {results['skipped']}"
         )
@@ -979,7 +971,7 @@ class DecisionPipelineOrchestrator:
         if component not in step_map:
             raise ValueError(f"Unknown component: {component}. Must be one of: {list(step_map.keys())}")
         
-        logger.info(f"🔄 Retrying {component} for {decision_ada}")
+        logger.info(f"[RETRY] Retrying {component} for {decision_ada}")
         
         try:
             # Steps that accept 'force' parameter
@@ -987,9 +979,9 @@ class DecisionPipelineOrchestrator:
                 step_map[component](decision, health_check, force=force)
             else:
                 step_map[component](decision, health_check)
-            logger.success(f"✅ Successfully retried {component} for {decision_ada}")
+            logger.success(f"[OK] Successfully retried {component} for {decision_ada}")
         except Exception as e:
-            logger.error(f"❌ Failed to retry {component} for {decision_ada}: {e}")
+            logger.error(f"[ERROR] Failed to retry {component} for {decision_ada}: {e}")
             self.update_health_status(
                 health_check, 
                 component, 
@@ -1016,7 +1008,7 @@ class DecisionPipelineOrchestrator:
         Returns:
             Dictionary with retry results
         """
-        logger.info(f"🔄 Retrying failures for ImportJob #{import_job_id}, component: {component or 'all'}")
+        logger.info(f"[RETRY] Retrying failures for ImportJob #{import_job_id}, component: {component or 'all'}")
         
         try:
             import_job = ImportJob.objects.get(id=import_job_id)
@@ -1078,17 +1070,17 @@ class DecisionPipelineOrchestrator:
                     
                     if updated_check.overall_status != HealthStatus.ERROR:
                         results['retried'] += 1
-                        logger.success(f"✅ Retry successful for {ada}")
+                        logger.success(f"[OK] Retry successful for {ada}")
                     else:
                         results['still_failed'] += 1
                         results['errors'].append({
                             'ada': ada,
                             'findings': updated_check.findings
                         })
-                        logger.warning(f"⚠️ Retry failed for {ada}")
+                        logger.warning(f"[WARN] Retry failed for {ada}")
                         
                 except Exception as e:
-                    logger.error(f"❌ Retry failed for {ada}: {e}")
+                    logger.error(f"[ERROR] Retry failed for {ada}: {e}")
                     results['still_failed'] += 1
                     results['errors'].append({
                         'ada': ada,
@@ -1096,7 +1088,7 @@ class DecisionPipelineOrchestrator:
                     })
         
         logger.info(
-            f"✅ Retry completed: {results['retried']} succeeded, "
+            f"[OK] Retry completed: {results['retried']} succeeded, "
             f"{results['still_failed']} still failed"
         )
         
@@ -1118,7 +1110,7 @@ class DecisionPipelineOrchestrator:
         Returns:
             Dictionary with summary statistics
         """
-        logger.info(f"📊 Generating batch summary for ImportJob #{import_job.id}")
+        logger.info(f"[STATS] Generating batch summary for ImportJob #{import_job.id}")
         
         health_checks = DecisionHealthCheck.objects.filter(
             decision__import_job=import_job
@@ -1194,7 +1186,7 @@ class DecisionPipelineOrchestrator:
             summary['health_percentage'] = 0
         
         logger.info(
-            f"📊 Batch summary: {summary['health_percentage']:.1f}% healthy, "
+            f"[STATS] Batch summary: {summary['health_percentage']:.1f}% healthy, "
             f"{summary['error_count']} errors, {summary['warning_count']} warnings"
         )
         

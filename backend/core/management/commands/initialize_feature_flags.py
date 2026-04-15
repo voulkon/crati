@@ -50,41 +50,66 @@ class Command(BaseCommand):
             with transaction.atomic():
                 for flag_key, flag_data in feature_flags.KNOWN_FLAGS.items():
                     try:
-                        # Check if environment variable is set
-                        env_value = feature_flags._get_from_environment(flag_key)
+                        # Determine value type
+                        value_type = flag_data.get('value_type', 'boolean')
                         
-                        # Use env value if set, otherwise use default
-                        initial_enabled = env_value if env_value is not None else flag_data['default']
+                        # Prepare defaults based on value type
+                        defaults = {
+                            'name': flag_data['name'],
+                            'description': flag_data['description'],
+                            'default_value': flag_data.get('default', False) if value_type == 'boolean' else False,
+                            'env_var_name': flag_data.get('env_var', ''),
+                            'category': flag_data.get('category', 'system'),
+                            'requires_restart': flag_data.get('requires_restart', False),
+                            'value_type': value_type,
+                        }
+                        
+                        # Set value based on type
+                        if value_type == 'boolean':
+                            # Check if environment variable is set
+                            env_value = feature_flags._get_from_environment(flag_key)
+                            # Use env value if set, otherwise use default
+                            initial_enabled = env_value if env_value is not None else flag_data['default']
+                            defaults['enabled'] = initial_enabled
+                        elif value_type == 'list':
+                            defaults['list_value'] = flag_data.get('default', [])
+                        elif value_type == 'string':
+                            defaults['string_value'] = flag_data.get('default', '')
                         
                         flag, created = FeatureFlag.objects.get_or_create(
                             key=flag_key,
-                            defaults={
-                                'name': flag_data['name'],
-                                'description': flag_data['description'],
-                                'enabled': initial_enabled,
-                                'default_value': flag_data['default'],
-                                'env_var_name': flag_data.get('env_var', ''),
-                                'category': flag_data.get('category', 'system'),
-                                'requires_restart': flag_data.get('requires_restart', False),
-                            }
+                            defaults=defaults
                         )
 
                         if created:
                             created_count += 1
-                            source = 'env' if env_value is not None else 'default'
-                            status = '🔵 ON' if initial_enabled else '⚪ OFF'
-                            self.stdout.write(
-                                self.style.SUCCESS(f'  ✓ Created: {flag_key}')
-                                + f' = {status} (from {source}) - {flag_data["name"]}'
-                            )
+                            if value_type == 'boolean':
+                                source = 'env' if env_value is not None else 'default'
+                                status = '🔵 ON' if defaults['enabled'] else '⚪ OFF'
+                                self.stdout.write(
+                                    self.style.SUCCESS(f'  ✓ Created: {flag_key}')
+                                    + f' = {status} (from {source}) - {flag_data["name"]}'
+                                )
+                            elif value_type == 'list':
+                                count = len(defaults['list_value']) if defaults['list_value'] else 0
+                                self.stdout.write(
+                                    self.style.SUCCESS(f'  ✓ Created: {flag_key}')
+                                    + f' = 📋 {count} items - {flag_data["name"]}'
+                                )
+                            else:
+                                self.stdout.write(
+                                    self.style.SUCCESS(f'  ✓ Created: {flag_key}')
+                                    + f' - {flag_data["name"]}'
+                                )
                         elif force:
                             # Update existing flag with current configuration
                             flag.name = flag_data['name']
                             flag.description = flag_data['description']
-                            flag.default_value = flag_data['default']
+                            flag.default_value = flag_data.get('default', False) if value_type == 'boolean' else False
                             flag.env_var_name = flag_data.get('env_var', '')
                             flag.category = flag_data.get('category', 'system')
                             flag.requires_restart = flag_data.get('requires_restart', False)
+                            flag.value_type = value_type
                             
                             if not dry_run:
                                 flag.save()

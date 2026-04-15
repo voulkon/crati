@@ -163,6 +163,22 @@ class DecisionIngestionService:
                         logger.warning(f"Unit with UID {unit_param} not found")
 
                 signer_id = search_params.get("signer")
+            
+            # Check feature flag for decision type filtering
+            from core.services.feature_flag_service import feature_flags
+            filtered_types = feature_flags.get_value('FILTER_DECISION_TYPES')
+            if filtered_types and isinstance(filtered_types, list) and len(filtered_types) > 0:
+                # Initialize search_params if None
+                if search_params is None:
+                    search_params = {}
+                # Join types with semicolon (API supports this for multiple types)
+                search_params['type'] = ';'.join(filtered_types)
+                logger.info(
+                    f"Feature flag FILTER_DECISION_TYPES active: filtering by types {filtered_types} "
+                    f"(joined as: {search_params['type']})"
+                )
+            elif filtered_types is not None:
+                logger.info("Feature flag FILTER_DECISION_TYPES is empty - importing all decision types")
 
             decisions = []
             if distributed:

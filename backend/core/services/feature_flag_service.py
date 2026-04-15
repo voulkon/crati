@@ -124,6 +124,18 @@ class FeatureFlagService:
             'category': 'system',
             'requires_restart': True,
         },
+        'FILTER_DECISION_TYPES': {
+            'name': 'Filter Decision Types',
+            'description': 'Limit decision imports to specific decision types. '
+                          'When empty/disabled, all types are imported. '
+                          'When configured with types (e.g., Δ.1, Β.2.2), only those types are fetched. '
+                          'Uses semicolon separator for multiple types in API calls.',
+            'default': [],  # Empty list means no filter (import all types)
+            'env_var': '',  # No environment variable for this flag
+            'category': 'data_ingestion',
+            'requires_restart': False,
+            'value_type': 'list',
+        },
     }
     
     def __init__(self):
@@ -132,7 +144,7 @@ class FeatureFlagService:
     
     def is_enabled(self, flag_key: str, default: Optional[bool] = None) -> bool:
         """
-        Check if a feature flag is enabled.
+        Check if a feature flag is enabled (for boolean flags).
         
         Args:
             flag_key: The feature flag key (e.g., 'STEALTH_MODE')
@@ -147,6 +159,34 @@ class FeatureFlagService:
             3. Provided default parameter
             4. KNOWN_FLAGS default value
             5. False (safe default)
+        """
+        value = self.get_value(flag_key, default=default)
+        # Convert to boolean for backward compatibility
+        if isinstance(value, bool):
+            return value
+        elif isinstance(value, list):
+            return len(value) > 0  # Non-empty list is truthy
+        elif isinstance(value, str):
+            return value.lower() in ('true', '1', 't', 'yes', 'on')
+        return False
+    
+    def get_value(self, flag_key: str, default: Any = None) -> Any:
+        """
+        Get the value of a feature flag (supports boolean, list, string types).
+        
+        Args:
+            flag_key: The feature flag key
+            default: Optional default value to use if flag is not found
+            
+        Returns:
+            The flag value (bool, list, str, etc.) based on its type
+            
+        Resolution order:
+            1. Database value (if exists and is_active=True)
+            2. Environment variable (if exists)
+            3. Provided default parameter
+            4. KNOWN_FLAGS default value
+            5. Type-appropriate default (False for bool, [] for list, '' for string)
         """
         # Try cache first
         cache_key = f"feature_flag:{flag_key}"
@@ -176,11 +216,11 @@ class FeatureFlagService:
         if flag_key in self.KNOWN_FLAGS:
             return self.KNOWN_FLAGS[flag_key]['default']
         
-        # Safe default
+        # Type-appropriate default
         logger.warning(f"Feature flag '{flag_key}' not found in DB, env, or defaults. Returning False.")
         return False
     
-    def _get_from_database(self, flag_key: str) -> Optional[bool]:
+    def _get_from_database(self, flag_key: str) -> Optional[Any]:
         """
         Get feature flag value from database.
         
@@ -188,7 +228,7 @@ class FeatureFlagService:
             flag_key: The feature flag key
             
         Returns:
-            Optional[bool]: The flag value if found and active, None otherwise
+            The flag value (type depends on value_type field), or None if not found
         """
         if not self._db_available:
             return None
@@ -210,7 +250,8 @@ class FeatureFlagService:
                     flag.last_checked_at = now
                     flag.save(update_fields=['last_checked_at'])
                 
-                return flag.enabled
+                # Return value based on type
+                return flag.get_value()
             
             return None
             
@@ -367,31 +408,54 @@ class FeatureFlagService:
             created_count = 0
             
             for flag_key, flag_data in self.KNOWN_FLAGS.items():
-                # Check if environment variable is set
-                env_value = self._get_from_environment(flag_key)
+                # Determine value type
+                value_type = flag_data.get('value_type', 'boolean')
                 
-                # Use env value if set, otherwise use default
-                initial_enabled = env_value if env_value is not None else flag_data['default']
+                # Prepare defaults based on value type
+                defaults = {
+                    'name': flag_data['name'],
+                    'description': flag_data['description'],
+                    'default_value': flag_data.get('default', False) if value_type == 'boolean' else False,
+                    'env_var_name': flag_data.get('env_var', ''),
+                    'category': flag_data.get('category', 'system'),
+                    'requires_restart': flag_data.get('requires_restart', False),
+                    'value_type': value_type,
+                }
+                
+                # Set value based on type
+                if value_type == 'boolean':
+                    # Check if environment variable is set
+                    env_value = self._get_from_environment(flag_key)
+                    # Use env value if set, otherwise use default
+                    initial_enabled = env_value if env_value is not None else flag_data['default']
+                    defaults['enabled'] = initial_enabled
+                elif value_type == 'list':
+                    defaults['list_value'] = flag_data.get('default', [])
+                elif value_type == 'string':
+                    defaults['string_value'] = flag_data.get('default', '')
                 
                 flag, created = FeatureFlag.objects.get_or_create(
                     key=flag_key,
-                    defaults={
-                        'name': flag_data['name'],
-                        'description': flag_data['description'],
-                        'enabled': initial_enabled,
-                        'default_value': flag_data['default'],
-                        'env_var_name': flag_data.get('env_var', ''),
-                        'category': flag_data.get('category', 'system'),
-                        'requires_restart': flag_data.get('requires_restart', False),
-                    }
+                    defaults=defaults
                 )
                 
                 if created:
                     created_count += 1
-                    source = 'environment' if env_value is not None else 'default'
-                    logger.info(
-                        f"Created feature flag: {flag_key} = {initial_enabled} (from {source})"
-                    )
+                    if value_type == 'boolean':
+                        env_value = self._get_from_environment(flag_key)
+                        source = 'environment' if env_value is not None else 'default'
+                        logger.info(
+                            f"Created feature flag: {flag_key} = {defaults['enabled']} (from {source})"
+                        )
+                    elif value_type == 'list':
+                        count = len(defaults['list_value']) if defaults['list_value'] else 0
+                        logger.info(
+                            f"Created feature flag: {flag_key} (list with {count} items)"
+                        )
+                    else:
+                        logger.info(
+                            f"Created feature flag: {flag_key} (string)"
+                        )
             
             if created_count > 0:
                 logger.info(f"Initialized {created_count} new feature flags in database")

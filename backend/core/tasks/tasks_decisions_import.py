@@ -101,6 +101,17 @@ def fetch_daily_decisions_to_redis(self, target_date_str: str,
         if search_params is None:
             search_params = {}
         
+        # Check feature flag for decision type filtering
+        from core.services.feature_flag_service import feature_flags
+        filtered_types = feature_flags.get_value('FILTER_DECISION_TYPES')
+        if filtered_types and isinstance(filtered_types, list) and len(filtered_types) > 0:
+            # Join types with semicolon (API supports this for multiple types)
+            search_params['type'] = ';'.join(filtered_types)
+            logger.info(
+                f"Task {self.request.id}: Filtering by decision types: {filtered_types} "
+                f"(joined as: {search_params['type']})"
+            )
+        
         search_params.update({
             "from_issue_date": target_date.isoformat(),
             "to_issue_date": (target_date + timedelta(days=1)).isoformat(),

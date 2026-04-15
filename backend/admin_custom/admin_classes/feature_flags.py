@@ -19,10 +19,20 @@ from django import forms
 
 from core.models.feature_flags import FeatureFlag, FeatureFlagAuditLog
 from core.services.feature_flag_service import feature_flags
+from core.models.types import ActType
 
 
 class FeatureFlagForm(forms.ModelForm):
-    """Custom form for FeatureFlag with additional validation."""
+    """Custom form for FeatureFlag with dynamic widgets based on value_type."""
+    
+    # Dynamic field for ActType multi-select (only shown for FILTER_DECISION_TYPES)
+    selected_decision_types = forms.ModelMultipleChoiceField(
+        queryset=ActType.objects.all().order_by('uid'),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Select decision types to import. Leave empty to import all types.",
+        label="Decision Types"
+    )
     
     class Meta:
         model = FeatureFlag
@@ -30,7 +40,52 @@ class FeatureFlagForm(forms.ModelForm):
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
             'notes': forms.Textarea(attrs={'rows': 2}),
+            'list_value': forms.Textarea(attrs={'rows': 4, 'placeholder': '["Δ.1", "Β.2.2"]'}),
         }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Customize checkbox labels to show "UID - Label" format
+        self.fields['selected_decision_types'].label_from_instance = lambda obj: f"{obj.uid} - {obj.label}"
+        
+        # If this is FILTER_DECISION_TYPES flag and we have list_value, pre-select types
+        if self.instance and self.instance.pk and self.instance.key == 'FILTER_DECISION_TYPES':
+            if self.instance.list_value:
+                # Pre-select the types based on list_value
+                selected_uids = self.instance.list_value if isinstance(self.instance.list_value, list) else []
+                self.fields['selected_decision_types'].initial = ActType.objects.filter(uid__in=selected_uids)
+        
+        # Show/hide fields based on value_type
+        if self.instance and self.instance.pk:
+            if self.instance.value_type == 'boolean':
+                self.fields['list_value'].widget = forms.HiddenInput()
+                self.fields['string_value'].widget = forms.HiddenInput()
+                self.fields['selected_decision_types'].widget = forms.HiddenInput()
+            elif self.instance.value_type == 'list':
+                self.fields['enabled'].widget = forms.HiddenInput()
+                self.fields['default_value'].widget = forms.HiddenInput()
+                # For FILTER_DECISION_TYPES, show the nice checkbox UI
+                if self.instance.key == 'FILTER_DECISION_TYPES':
+                    # Hide the raw JSON field, show the checkbox UI instead
+                    self.fields['list_value'].widget = forms.HiddenInput()
+                else:
+                    self.fields['selected_decision_types'].widget = forms.HiddenInput()
+            elif self.instance.value_type == 'string':
+                self.fields['enabled'].widget = forms.HiddenInput()
+                self.fields['list_value'].widget = forms.HiddenInput()
+                self.fields['selected_decision_types'].widget = forms.HiddenInput()
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        value_type = cleaned_data.get('value_type', 'boolean')
+        
+        # For FILTER_DECISION_TYPES, sync selected_decision_types to list_value
+        if cleaned_data.get('key') == 'FILTER_DECISION_TYPES' and value_type == 'list':
+            selected_types = cleaned_data.get('selected_decision_types', [])
+            cleaned_data['list_value'] = [act_type.uid for act_type in selected_types]
+        
+        return cleaned_data
 
 
 class FeatureFlagAuditLogInline(admin.TabularInline):
@@ -65,6 +120,7 @@ class FeatureFlagAdmin(admin.ModelAdmin):
     
     list_filter = [
         'category',
+        'value_type',
         'enabled',
         'is_active',
         'requires_restart',
@@ -88,13 +144,18 @@ class FeatureFlagAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('key', 'name', 'category', 'enabled', 'is_active')
+            'fields': ('key', 'name', 'category', 'value_type', 'is_active')
+        }),
+        ('Value Configuration', {
+            'fields': ('enabled', 'list_value', 'string_value', 'selected_decision_types'),
+            'description': 'Configure the value based on the value type selected above.'
         }),
         ('Description', {
             'fields': ('description', 'notes')
         }),
-        ('Configuration', {
-            'fields': ('default_value', 'env_var_name', 'requires_restart')
+        ('Advanced Configuration', {
+            'fields': ('default_value', 'env_var_name', 'requires_restart'),
+            'classes': ('collapse',)
         }),
         ('Current Status', {
             'fields': ('current_value_display', 'environment_value_display', 'last_change_info'),
@@ -217,23 +278,54 @@ class FeatureFlagAdmin(admin.ModelAdmin):
         """Display status icon."""
         if not obj.is_active:
             return format_html('<span style="color: gray;">⊗</span>')
-        return format_html(
-            '<span style="color: {};">●</span>',
-            'green' if obj.enabled else 'red'
-        )
+        
+        # Handle different value types
+        if obj.value_type == 'boolean':
+            return format_html(
+                '<span style="color: {};">●</span>',
+                'green' if obj.enabled else 'red'
+            )
+        elif obj.value_type == 'list':
+            count = len(obj.list_value) if obj.list_value else 0
+            return format_html(
+                '<span style="color: {};">📋</span>',
+                'green' if count > 0 else 'gray'
+            )
+        else:
+            return format_html('<span style="color: blue;">📝</span>')
     status_icon.short_description = ''
     
     def enabled_badge(self, obj):
         """Display enabled status as badge."""
-        if obj.enabled:
+        if obj.value_type == 'boolean':
+            if obj.enabled:
+                return format_html(
+                    '<span style="background-color: #28a745; color: white; padding: 3px 10px; '
+                    'border-radius: 3px; font-weight: bold;">ON</span>'
+                )
             return format_html(
-                '<span style="background-color: #28a745; color: white; padding: 3px 10px; '
-                'border-radius: 3px; font-weight: bold;">ON</span>'
+                '<span style="background-color: #dc3545; color: white; padding: 3px 10px; '
+                'border-radius: 3px; font-weight: bold;">OFF</span>'
             )
-        return format_html(
-            '<span style="background-color: #dc3545; color: white; padding: 3px 10px; '
-            'border-radius: 3px; font-weight: bold;">OFF</span>'
-        )
+        elif obj.value_type == 'list':
+            count = len(obj.list_value) if obj.list_value else 0
+            if count > 0:
+                return format_html(
+                    '<span style="background-color: #007bff; color: white; padding: 3px 10px; '
+                    'border-radius: 3px; font-weight: bold;">{} items</span>',
+                    count
+                )
+            return format_html(
+                '<span style="background-color: #6c757d; color: white; padding: 3px 10px; '
+                'border-radius: 3px;">Empty</span>'
+            )
+        else:  # string
+            has_value = bool(obj.string_value)
+            return format_html(
+                '<span style="background-color: #17a2b8; color: white; padding: 3px 10px; '
+                'border-radius: 3px;">{}</span>',
+                'Set' if has_value else 'Empty'
+            )
     enabled_badge.short_description = 'Status'
     
     def requires_restart_badge(self, obj):
@@ -292,7 +384,10 @@ class FeatureFlagAdmin(admin.ModelAdmin):
     last_checked_display.short_description = 'Last Checked'
     
     def toggle_action(self, obj):
-        """Display toggle button."""
+        """Display toggle button (only for boolean flags)."""
+        if obj.value_type != 'boolean':
+            return format_html('<span style="color: #999;">N/A</span>')
+        
         url = reverse('admin:featureflag_toggle', args=[obj.id])
         action = 'Disable' if obj.enabled else 'Enable'
         color = '#dc3545' if obj.enabled else '#28a745'
@@ -305,12 +400,37 @@ class FeatureFlagAdmin(admin.ModelAdmin):
     
     def current_value_display(self, obj):
         """Display the current effective value of the flag."""
-        current = feature_flags.is_enabled(obj.key)
-        return format_html(
-            '<strong style="color: {};">{}</strong>',
-            'green' if current else 'red',
-            'Enabled' if current else 'Disabled'
-        )
+        current_value = feature_flags.get_value(obj.key)
+        
+        if obj.value_type == 'boolean':
+            is_enabled = bool(current_value)
+            return format_html(
+                '<strong style="color: {};">{}</strong>',
+                'green' if is_enabled else 'red',
+                'Enabled' if is_enabled else 'Disabled'
+            )
+        elif obj.value_type == 'list':
+            if isinstance(current_value, list) and current_value:
+                # For decision types, show them in a nice format
+                if obj.key == 'FILTER_DECISION_TYPES':
+                    items_html = ', '.join([f'<code>{item}</code>' for item in current_value[:10]])
+                    if len(current_value) > 10:
+                        items_html += f' <em>...and {len(current_value) - 10} more</em>'
+                    return format_html(
+                        '<div style="max-width: 400px;"><strong>{} types:</strong><br>{}</div>',
+                        len(current_value),
+                        items_html
+                    )
+                else:
+                    return format_html(
+                        '<code>{}</code>',
+                        str(current_value[:5]) + ('...' if len(current_value) > 5 else '')
+                    )
+            return format_html('<em style="color: #999;">Empty list</em>')
+        else:  # string
+            if current_value:
+                return format_html('<code>{}</code>', str(current_value)[:100])
+            return format_html('<em style="color: #999;">Empty</em>')
     current_value_display.short_description = 'Current Effective Value'
     
     def environment_value_display(self, obj):

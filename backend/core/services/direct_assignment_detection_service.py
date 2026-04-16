@@ -39,6 +39,15 @@ class DirectAssignmentDetectionService:
     ΨΠ9446ΨΧΥΙ-ΕΛ3
     Ρ9Ψ4Ω6Ι-ΤΘ8
     62ΡΑΟΡΝ0-0Ξ9
+    
+    # TODO
+    # Have it detect associated_relationship_id in core_decisionamountfield  - 
+    # it leaves them null for now
+    # ADA ΨΚ29ΟΛ3Υ-0ΤΡ
+    # With:
+    # {"cpv": ["90513700-3", "90513900-5"], "person": [{"afm": "800410090", "name": "ΒΙΟΣΤΕΡΕΑ ΠΑΡΑΓΩΓΗ ΕΔΑΦΟΒΕΛΤΙΩΤΙΚΩΝ ΑΝΩΝΥΜΟΣ ΕΤΑΙΡΕΙΑ", "afmType": "EL", "enterName": false}], "budgettype": null, "partialead": null, "awardAmount": {"amount": 26040.0, "currency": "EUR"}, "entryNumber": null, "documentType": "ΠΡΑΞΗ", "amountWithKae": null, "amountWithVAT": null, "financialYear": null, "assignmentType": "Υπηρεσίες", "textRelatedADA": null, "relatedDecisions": [], "recalledExpenseDecision": null}
+    # TODO
+    
     """
     
     # Constants

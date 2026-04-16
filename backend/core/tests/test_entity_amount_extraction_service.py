@@ -121,6 +121,10 @@ class TestEntityAmountExtractionService:
         actual_entities = DecisionEntityRelationship.objects.filter(decision=decision).count()
         actual_amounts = DecisionAmountField.objects.filter(decision=decision).count()
         
+        # TODO: Make sure it detects associated_relationship_id in core_decisionamountfield
+        # it leaves them null for now when it's a direct assignment
+        # It creates the amount and the entity but doesn't link them (associated_relationship_id is null)
+
         assert actual_entities == expected_entities, \
             f"Expected {expected_entities} entities, found {actual_entities}"
         assert actual_amounts == expected_amounts, \

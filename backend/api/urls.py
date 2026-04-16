@@ -19,6 +19,12 @@ from .views.organization_entity_relationships import (
     entity_top_organizations_api, 
     temporal_top_relationship_pairs_api
     )
+from .views.direct_assignments import (
+    organization_direct_assignment_top_recipients,
+    entity_direct_assignment_top_organizations,
+    direct_assignment_top_pairs_global,
+    direct_assignment_stats
+)
 from users.views import UserDataViewSet
 from .views.django_auth import register, login as django_login, logout as django_logout, me as current_user, verify_email, request_password_reset, reset_password, verify_reset_token
 from notifications.views import NotificationSubscriptionViewSet, NotificationBatchViewSet
@@ -119,6 +125,25 @@ urlpatterns = [
         temporal_top_relationship_pairs_api,
         name='temporal-top-relationships'
     ),
+    
+    # Direct Assignment Analytics (financial flows via direct assignments)
+    path('direct-assignments/stats/', 
+        direct_assignment_stats, 
+        name='direct_assignments_stats'
+    ),
+    path('organizations/<str:organization_uid>/direct-assignments/top-recipients/', 
+        organization_direct_assignment_top_recipients, 
+        name='org_direct_assignment_top_recipients'
+    ),
+    path('entities/<str:afm>/direct-assignments/top-organizations/', 
+        entity_direct_assignment_top_organizations, 
+        name='entity_direct_assignment_top_orgs'
+    ),
+    path('direct-assignments/top-pairs/', 
+        direct_assignment_top_pairs_global, 
+        name='direct_assignment_top_pairs_global'
+    ),
+    
     # Document content
     path('decision/<int:decision_id>/content/', search.get_document_content_api_dev, name='decision_content_dev'),
     

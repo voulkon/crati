@@ -23,6 +23,8 @@ from .views.direct_assignments import (
     organization_direct_assignment_top_recipients,
     entity_direct_assignment_top_organizations,
     direct_assignment_top_pairs_global,
+    direct_assignment_top_entities_global,
+    direct_assignment_top_organizations_global,
     direct_assignment_stats
 )
 from users.views import UserDataViewSet
@@ -130,6 +132,14 @@ urlpatterns = [
     path('direct-assignments/stats/', 
         direct_assignment_stats, 
         name='direct_assignments_stats'
+    ),
+    path('direct-assignments/top-entities/', 
+        direct_assignment_top_entities_global, 
+        name='direct_assignment_top_entities_global'
+    ),
+    path('direct-assignments/top-organizations/', 
+        direct_assignment_top_organizations_global, 
+        name='direct_assignment_top_organizations_global'
     ),
     path('organizations/<str:organization_uid>/direct-assignments/top-recipients/', 
         organization_direct_assignment_top_recipients, 

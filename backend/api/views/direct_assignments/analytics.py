@@ -666,6 +666,374 @@ def direct_assignment_top_pairs_global(request):
 
 @swagger_auto_schema(
     method="get",
+    operation_description="Get top entities (vendors) receiving direct assignment money globally",
+    manual_parameters=[
+        openapi.Parameter(
+            "start_date",
+            openapi.IN_QUERY,
+            description="Start date (ISO 8601: YYYY-MM-DDTHH:MM:SSZ)",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+        openapi.Parameter(
+            "end_date",
+            openapi.IN_QUERY,
+            description="End date (ISO 8601: YYYY-MM-DDTHH:MM:SSZ)",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+        openapi.Parameter(
+            "limit",
+            openapi.IN_QUERY,
+            description="Number of results to return",
+            type=openapi.TYPE_INTEGER,
+            default=20,
+        ),
+        openapi.Parameter(
+            "offset",
+            openapi.IN_QUERY,
+            description="Pagination offset",
+            type=openapi.TYPE_INTEGER,
+            default=0,
+        ),
+        openapi.Parameter(
+            "sort_by",
+            openapi.IN_QUERY,
+            description="Sort by: 'amount' (default) or 'frequency'",
+            type=openapi.TYPE_STRING,
+            enum=["amount", "frequency"],
+            default="amount",
+        ),
+    ],
+)
+@api_view(["GET"])
+@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+@monitor_query_performance(operation="direct_assignments_top_entities_global")
+def direct_assignment_top_entities_global(request):
+    """
+    Get top entities (vendors/companies) receiving direct assignment money globally.
+    
+    LEADERBOARD endpoint - shows which entities receive the most across ALL organizations.
+    Can sort by total amount (champion by €) or by frequency (champion by # of contracts).
+    """
+    # Parse and validate date range
+    start_date, end_date, error_response = _parse_and_validate_date_range(
+        request, 
+        context_label="global entity champions"
+    )
+    if error_response:
+        return error_response
+    
+    start_date_str = request.GET.get("start_date")
+    end_date_str = request.GET.get("end_date")
+    limit = int(request.GET.get("limit", 20))
+    offset = int(request.GET.get("offset", 0))
+    sort_by = request.GET.get("sort_by", "amount")
+    
+    try:
+        roles = financial_service.MONEY_RECEIVED_ROLES
+        
+        # Determine sort order
+        if sort_by == "frequency":
+            order_by = '-decision_count'
+            metric_label = "Most Direct Assignments Received"
+        else:  # amount
+            order_by = '-total_amount'
+            metric_label = "Highest Direct Assignment Revenue"
+        
+        # Get top entities globally
+        results = list(
+            DecisionEntityRelationship.objects
+            .filter(
+                decision__issue_date__gte=start_date,
+                decision__issue_date__lte=end_date,
+                decision__classification__is_direct_assignment=True,
+                role__in=roles
+            )
+            .values(
+                'entity__afm',
+                'entity__name',
+                'entity__entity_type'
+            )
+            .annotate(
+                total_amount=Sum('linked_amounts__amount'),
+                decision_count=Count('decision', distinct=True),
+                avg_amount=Avg('linked_amounts__amount'),
+                max_amount=Max('linked_amounts__amount'),
+                min_amount=Min('linked_amounts__amount'),
+                organization_count=Count('decision__organization', distinct=True)
+            )
+            .filter(total_amount__gt=0)
+            .order_by(order_by)
+            [offset:offset+limit]
+        )
+        
+        # Get total count for pagination
+        total_count = (
+            DecisionEntityRelationship.objects
+            .filter(
+                decision__issue_date__gte=start_date,
+                decision__issue_date__lte=end_date,
+                decision__classification__is_direct_assignment=True,
+                role__in=roles
+            )
+            .values('entity')
+            .distinct()
+            .count()
+        )
+        
+        # Get global summary statistics
+        summary_stats = (
+            DecisionEntityRelationship.objects
+            .filter(
+                decision__issue_date__gte=start_date,
+                decision__issue_date__lte=end_date,
+                decision__classification__is_direct_assignment=True,
+                role__in=roles
+            )
+            .aggregate(
+                total_amount=Sum('linked_amounts__amount'),
+                total_decisions=Count('decision', distinct=True),
+                unique_entities=Count('entity', distinct=True),
+                unique_organizations=Count('decision__organization', distinct=True)
+            )
+        )
+        
+        # Format results
+        formatted_results = [
+            {
+                "rank": offset + i + 1,
+                "entity_afm": r['entity__afm'],
+                "entity_name": r['entity__name'],
+                "entity_type": r['entity__entity_type'],
+                "total_amount": str(r['total_amount']) if r['total_amount'] else "0",
+                "decision_count": r['decision_count'],
+                "organization_count": r['organization_count'],
+                "avg_amount": str(r['avg_amount']) if r['avg_amount'] else "0",
+                "max_amount": str(r['max_amount']) if r['max_amount'] else "0",
+                "min_amount": str(r['min_amount']) if r['min_amount'] else "0"
+            }
+            for i, r in enumerate(results)
+        ]
+        
+        return Response({
+            "metric": metric_label,
+            "sort_by": sort_by,
+            "date_range": {
+                "start": start_date_str,
+                "end": end_date_str,
+            },
+            "results": formatted_results,
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "total_count": total_count,
+                "has_more": offset + limit < total_count,
+            },
+            "summary": {
+                "total_direct_assignment_amount": str(summary_stats['total_amount'] or 0),
+                "total_direct_assignments": summary_stats['total_decisions'] or 0,
+                "unique_entities": summary_stats['unique_entities'] or 0,
+                "unique_organizations": summary_stats['unique_organizations'] or 0
+            }
+        })
+    
+    except Exception as e:
+        logger.error(f"Error in direct_assignment_top_entities_global: {e}")
+        return Response(
+            {
+                "error": f"Internal server error: {str(e)}",
+                "traceback": traceback.format_exc() if settings.DEBUG else None,
+            },
+            status=500,
+        )
+
+
+@swagger_auto_schema(
+    method="get",
+    operation_description="Get top organizations giving out direct assignment money globally",
+    manual_parameters=[
+        openapi.Parameter(
+            "start_date",
+            openapi.IN_QUERY,
+            description="Start date (ISO 8601: YYYY-MM-DDTHH:MM:SSZ)",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+        openapi.Parameter(
+            "end_date",
+            openapi.IN_QUERY,
+            description="End date (ISO 8601: YYYY-MM-DDTHH:MM:SSZ)",
+            type=openapi.TYPE_STRING,
+            required=True,
+        ),
+        openapi.Parameter(
+            "limit",
+            openapi.IN_QUERY,
+            description="Number of results to return",
+            type=openapi.TYPE_INTEGER,
+            default=20,
+        ),
+        openapi.Parameter(
+            "offset",
+            openapi.IN_QUERY,
+            description="Pagination offset",
+            type=openapi.TYPE_INTEGER,
+            default=0,
+        ),
+        openapi.Parameter(
+            "sort_by",
+            openapi.IN_QUERY,
+            description="Sort by: 'amount' (default) or 'frequency'",
+            type=openapi.TYPE_STRING,
+            enum=["amount", "frequency"],
+            default="amount",
+        ),
+    ],
+)
+@api_view(["GET"])
+@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+@monitor_query_performance(operation="direct_assignments_top_organizations_global")
+def direct_assignment_top_organizations_global(request):
+    """
+    Get top organizations giving out direct assignment money globally.
+    
+    LEADERBOARD endpoint - shows which organizations spend the most on direct assignments.
+    Can sort by total amount (biggest spender) or by frequency (most contracts issued).
+    """
+    # Parse and validate date range
+    start_date, end_date, error_response = _parse_and_validate_date_range(
+        request, 
+        context_label="global organization champions"
+    )
+    if error_response:
+        return error_response
+    
+    start_date_str = request.GET.get("start_date")
+    end_date_str = request.GET.get("end_date")
+    limit = int(request.GET.get("limit", 20))
+    offset = int(request.GET.get("offset", 0))
+    sort_by = request.GET.get("sort_by", "amount")
+    
+    try:
+        roles = financial_service.MONEY_RECEIVED_ROLES
+        
+        # Determine sort order
+        if sort_by == "frequency":
+            order_by = '-decision_count'
+            metric_label = "Most Direct Assignments Issued"
+        else:  # amount
+            order_by = '-total_amount'
+            metric_label = "Highest Direct Assignment Spending"
+        
+        # Get top organizations globally
+        results = list(
+            DecisionEntityRelationship.objects
+            .filter(
+                decision__issue_date__gte=start_date,
+                decision__issue_date__lte=end_date,
+                decision__classification__is_direct_assignment=True,
+                role__in=roles
+            )
+            .values(
+                'decision__organization__uid',
+                'decision__organization__label'
+            )
+            .annotate(
+                total_amount=Sum('linked_amounts__amount'),
+                decision_count=Count('decision', distinct=True),
+                avg_amount=Avg('linked_amounts__amount'),
+                max_amount=Max('linked_amounts__amount'),
+                min_amount=Min('linked_amounts__amount'),
+                entity_count=Count('entity', distinct=True)
+            )
+            .filter(total_amount__gt=0)
+            .order_by(order_by)
+            [offset:offset+limit]
+        )
+        
+        # Get total count for pagination
+        total_count = (
+            DecisionEntityRelationship.objects
+            .filter(
+                decision__issue_date__gte=start_date,
+                decision__issue_date__lte=end_date,
+                decision__classification__is_direct_assignment=True,
+                role__in=roles
+            )
+            .values('decision__organization')
+            .distinct()
+            .count()
+        )
+        
+        # Get global summary statistics
+        summary_stats = (
+            DecisionEntityRelationship.objects
+            .filter(
+                decision__issue_date__gte=start_date,
+                decision__issue_date__lte=end_date,
+                decision__classification__is_direct_assignment=True,
+                role__in=roles
+            )
+            .aggregate(
+                total_amount=Sum('linked_amounts__amount'),
+                total_decisions=Count('decision', distinct=True),
+                unique_organizations=Count('decision__organization', distinct=True),
+                unique_entities=Count('entity', distinct=True)
+            )
+        )
+        
+        # Format results
+        formatted_results = [
+            {
+                "rank": offset + i + 1,
+                "organization_uid": r['decision__organization__uid'],
+                "organization_label": r['decision__organization__label'],
+                "total_amount": str(r['total_amount']) if r['total_amount'] else "0",
+                "decision_count": r['decision_count'],
+                "entity_count": r['entity_count'],
+                "avg_amount": str(r['avg_amount']) if r['avg_amount'] else "0",
+                "max_amount": str(r['max_amount']) if r['max_amount'] else "0",
+                "min_amount": str(r['min_amount']) if r['min_amount'] else "0"
+            }
+            for i, r in enumerate(results)
+        ]
+        
+        return Response({
+            "metric": metric_label,
+            "sort_by": sort_by,
+            "date_range": {
+                "start": start_date_str,
+                "end": end_date_str,
+            },
+            "results": formatted_results,
+            "pagination": {
+                "limit": limit,
+                "offset": offset,
+                "total_count": total_count,
+                "has_more": offset + limit < total_count,
+            },
+            "summary": {
+                "total_direct_assignment_amount": str(summary_stats['total_amount'] or 0),
+                "total_direct_assignments": summary_stats['total_decisions'] or 0,
+                "unique_organizations": summary_stats['unique_organizations'] or 0,
+                "unique_entities": summary_stats['unique_entities'] or 0
+            }
+        })
+    
+    except Exception as e:
+        logger.error(f"Error in direct_assignment_top_organizations_global: {e}")
+        return Response(
+            {
+                "error": f"Internal server error: {str(e)}",
+                "traceback": traceback.format_exc() if settings.DEBUG else None,
+            },
+            status=500,
+        )
+
+
+@swagger_auto_schema(
+    method="get",
     operation_description="Get overall statistics about direct assignments",
 )
 @api_view(["GET"])

@@ -133,6 +133,8 @@ def company_decisions(request, company_id):
             )
 
         # Get all decision relationships for this AFM entity with optimized queries
+        direct_assignments_only = request.GET.get("direct_assignments_only", "").lower() in ["true", "1", "yes"]
+        
         relationships = (
             DecisionEntityRelationship.objects.filter(entity=afm_entity)
             .select_related(
@@ -140,6 +142,10 @@ def company_decisions(request, company_id):
             )
             .prefetch_related("linked_amounts")
         )
+        
+        # Apply direct assignments filter
+        if direct_assignments_only:
+            relationships = relationships.filter(decision__classification__is_direct_assignment=True)
 
         decisions_data = []
         for rel in relationships:

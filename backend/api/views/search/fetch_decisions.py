@@ -100,6 +100,13 @@ from .base import calculate_financial_summary, serialize_decision_with_content_i
             description="Maximum amount filter",
             type=openapi.TYPE_NUMBER,
         ),
+        openapi.Parameter(
+            "direct_assignments_only",
+            openapi.IN_QUERY,
+            description="Filter to show only direct assignment decisions (below €37,200 threshold)",
+            type=openapi.TYPE_BOOLEAN,
+            default=False,
+        ),
     ],
 )
 @api_view(["GET"])
@@ -114,6 +121,7 @@ def explore_decisions_optimized_api(request):
     - organization_uid: Get all decisions from a specific organization
     - entity_afm: Get all decisions involving a specific entity
     - Both: Drill down to org-entity relationship decisions
+    - direct_assignments_only: Filter to show only direct assignment decisions
     """
     start_date_str = request.GET.get("start_date")
     end_date_str = request.GET.get("end_date")
@@ -130,6 +138,7 @@ def explore_decisions_optimized_api(request):
     organization_ids_str = request.GET.get("organization_ids", "")
     min_amount_str = request.GET.get("min_amount", "")
     max_amount_str = request.GET.get("max_amount", "")
+    direct_assignments_only = request.GET.get("direct_assignments_only", "").lower() in ["true", "1", "yes"]
 
     # Parse filters
     decision_type_uids = [t.strip() for t in decision_types_str.split(",") if t.strip()] if decision_types_str else []
@@ -198,6 +207,9 @@ def explore_decisions_optimized_api(request):
             decisions_qs = decisions_qs.filter(amount__gte=min_amount)
         if max_amount is not None:
             decisions_qs = decisions_qs.filter(amount__lte=max_amount)
+        if direct_assignments_only:
+            # Filter to show only direct assignment decisions
+            decisions_qs = decisions_qs.filter(classification__is_direct_assignment=True)
 
         # Annotate with entity amounts for sorting
         from django.db.models import OuterRef, Subquery, Sum, DecimalField
@@ -322,6 +334,7 @@ def explore_decisions_optimized_api(request):
                 "organization_ids": organization_ids_str,
                 "min_amount": min_amount,
                 "max_amount": max_amount,
+                "direct_assignments_only": direct_assignments_only,
             },
             "optimization_info": {
                 "entity_data_included": True,

@@ -121,6 +121,7 @@ def afm_entity_decisions(request, afm):
         roles_filter = (
             request.GET.get("roles", "").split(",") if request.GET.get("roles") else []
         )
+        direct_assignments_only = request.GET.get("direct_assignments_only", "").lower() in ["true", "1", "yes"]
 
         # Base query with optimized joins
         relationships = (
@@ -134,6 +135,10 @@ def afm_entity_decisions(request, afm):
         # Apply role filter
         if roles_filter and roles_filter != [""]:
             relationships = relationships.filter(role__in=roles_filter)
+        
+        # Apply direct assignments filter
+        if direct_assignments_only:
+            relationships = relationships.filter(decision__classification__is_direct_assignment=True)
 
         # Apply sorting with proper NULL handling
         from api.utils.sorting import apply_aggregated_amount_sorting

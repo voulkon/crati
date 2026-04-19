@@ -35,6 +35,7 @@ def organization_entity_transactions(request, organization_uid, afm=None):
         sort_order = request.GET.get('sort_order', 'desc')
         limit = min(int(request.GET.get('limit', 50)), 200)  # Cap at 200
         offset = int(request.GET.get('offset', 0))
+        direct_assignments_only = request.GET.get("direct_assignments_only", "").lower() in ["true", "1", "yes"]
         
         # Calculate date filters based on period
         end_date = datetime.now()
@@ -74,6 +75,10 @@ def organization_entity_transactions(request, organization_uid, afm=None):
         # Apply date filter if period is specified
         if start_date:
             base_query = base_query.filter(decision__issue_date__gte=start_date)
+        
+        # Apply direct assignments filter
+        if direct_assignments_only:
+            base_query = base_query.filter(decision__classification__is_direct_assignment=True)
         
         # Apply sorting
         if sort_by == 'date':

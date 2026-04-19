@@ -17,6 +17,7 @@ from typing import Dict, Any
 import traceback
 
 from django.utils.dateparse import parse_datetime
+from django.utils import timezone
 from django.conf import settings
 from django.db.models import Sum, Count, Q, F, Avg, Max, Min
 from loguru import logger
@@ -40,6 +41,7 @@ def _parse_and_validate_date_range(request, context_label: str = None):
     
     Returns:
         Tuple of (start_date, end_date, error_response)
+        Returns timezone-aware datetime objects for proper comparison with DateTimeFields.
     """
     start_date_str = request.GET.get("start_date")
     end_date_str = request.GET.get("end_date")
@@ -60,28 +62,32 @@ def _parse_and_validate_date_range(request, context_label: str = None):
                 status=400
             )
         
-        start_date = start_datetime.date()
-        end_date = end_datetime.date()
+        # Make timezone-aware if naive (Django USE_TZ = True requires this)
+        if timezone.is_naive(start_datetime):
+            start_datetime = timezone.make_aware(start_datetime)
+        if timezone.is_naive(end_datetime):
+            end_datetime = timezone.make_aware(end_datetime)
+            
     except (ValueError, AttributeError) as e:
         return None, None, Response(
             {"error": f"Invalid date format: {str(e)}"},
             status=400
         )
     
-    if start_date > end_date:
+    if start_datetime > end_datetime:
         return None, None, Response(
             {"error": "start_date must be before or equal to end_date"},
             status=400
         )
     
-    if (end_date - start_date).days > 365:
+    if (end_datetime - start_datetime).days > 365:
         context_info = f" for {context_label}" if context_label else ""
         logger.warning(
             f"Large date range requested{context_info}: "
-            f"{start_date} to {end_date} ({(end_date - start_date).days} days)"
+            f"{start_datetime} to {end_datetime} ({(end_datetime - start_datetime).days} days)"
         )
     
-    return start_date, end_date, None
+    return start_datetime, end_datetime, None
 
 
 @swagger_auto_schema(

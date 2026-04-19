@@ -445,8 +445,8 @@ class EntityAmountExtractionService:
                 }
             )
             
-            if rel_created:
-                relationships.append(relationship)
+            # Always include in relationships list (for linking), not just newly created
+            relationships.append(relationship)
         
         return relationships
     
@@ -478,16 +478,19 @@ class EntityAmountExtractionService:
                 
                 if created:
                     created_count += 1
-                    
-                    # Try to link to entity relationship
-                    if not amount_field.associated_relationship and entity_relationships:
-                        matching_rel = self._find_matching_relationship(
-                            parent_path, 
-                            entity_relationships
+                
+                # Try to link to entity relationship (check both new and existing amounts)
+                if not amount_field.associated_relationship and entity_relationships:
+                    matching_rel = self._find_matching_relationship(
+                        parent_path, 
+                        entity_relationships
+                    )
+                    if matching_rel:
+                        amount_field.associated_relationship = matching_rel
+                        amount_field.save(update_fields=['associated_relationship'])
+                        logger.debug(
+                            f"Linked amount {amount_field.source_field_name} to entity {matching_rel.entity.afm}"
                         )
-                        if matching_rel:
-                            amount_field.associated_relationship = matching_rel
-                            amount_field.save(update_fields=['associated_relationship'])
         
         return created_count
     

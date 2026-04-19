@@ -33,22 +33,36 @@ class Command(BaseCommand):
     # 6. Backfill only amounts (skip entities)
     python manage.py backfill_decision_entities_and_amounts --amounts-only --start-date 2025-06-30
     
-    # 7. For long-running operations (use nohup in Docker)
+    # 7. Fix linkages only (fastest - no re-extraction)
+    python manage.py backfill_decision_entities_and_amounts --relink-only --check-integrity
+    
+    # 8. Fix linkages for specific ADA
+    python manage.py backfill_decision_entities_and_amounts --ada ΡΔΕ546ΝΚΟΤ-ΧΩΛ --relink-only
+    
+    # 9. Force re-extraction to fix linkages
+    python manage.py backfill_decision_entities_and_amounts --ada ΡΔΕ546ΝΚΟΤ-ΧΩΛ --force
+    
+    # 10. Test with dry-run first, then apply
+    python manage.py backfill_decision_entities_and_amounts --ada ΡΔΕ546ΝΚΟΤ-ΧΩΛ --dry-run
+    python manage.py backfill_decision_entities_and_amounts --ada ΡΔΕ546ΝΚΟΤ-ΧΩΛ
+    
+    # 11. For long-running operations (use nohup in Docker)
     nohup python manage.py backfill_decision_entities_and_amounts --check-integrity --quiet --batch-size 1000 > /tmp/backfill.log 2>&1 & echo $!
     
-    # 8. Monitor the background process
+    # 12. Monitor the background process
     tail -f /tmp/backfill.log                          # Watch logs in real-time
     tail -n 50 /tmp/backfill.log                       # Check last 50 lines
     grep "Progress:" /tmp/backfill.log | tail -n 5     # Check recent progress
-    grep -i "error\|exception" /tmp/backfill.log       # Check for errors
+    grep -i "error|exception" /tmp/backfill.log        # Check for errors
     ps aux | grep <PID>                                # Check if process is running
     
-    # 9. Stop the background process (if needed)
+    # 13. Stop the background process (if needed)
     kill <PID>
     
     ⚡ Performance Tips:
     - Use --quiet for large datasets to reduce log noise
     - Use --batch-size 500-1000 for optimal performance  
+    - Use --relink-only for fastest linkage fixes (no extraction)
     - Use nohup for operations that might take hours (screen/tmux not available in Docker)
     - Always test with --dry-run first
     - Start with specific dates before full --check-integrity
@@ -98,6 +112,16 @@ class Command(BaseCommand):
             help='Process only a specific ADA (useful for testing)'
         )
         parser.add_argument('--quiet', action='store_true', help='Suppress debug logging')
+        parser.add_argument(
+            '--force',
+            action='store_true',
+            help='Force re-extraction even if entities/amounts exist (useful for fixing linkages)'
+        )
+        parser.add_argument(
+            '--relink-only',
+            action='store_true',
+            help='Only fix linkages between existing entities and amounts (fastest, no extraction)'
+        )
 
     def handle(self, *args, **options):
         # Set logging level based on quiet flag
@@ -110,6 +134,8 @@ class Command(BaseCommand):
         self.batch_size = options['batch_size']
         self.entities_only = options['entities_only']
         self.amounts_only = options['amounts_only']
+        self.force = options['force']
+        self.relink_only = options['relink_only']
         
         # Initialize the extraction service
         self.extraction_service = EntityAmountExtractionService()
@@ -137,6 +163,37 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS("✅ Backfill complete!")
         )
+    
+    def _relink_amounts(self, decision: Decision) -> int:
+        """
+        Fast path: re-link existing amounts to existing entities without re-extraction.
+        
+        Returns:
+            Number of new links created
+        """
+        # Get all existing entities and amounts for this decision
+        entities = list(decision.entity_relationships.all())
+        amounts = decision.amount_fields.filter(associated_relationship__isnull=True)
+        
+        if not entities or not amounts.exists():
+            return 0
+        
+        links_created = 0
+        
+        for amount in amounts:
+            # Try to find matching relationship
+            matching_rel = self.extraction_service._find_matching_relationship(
+                amount.parent_key_path,
+                entities
+            )
+            
+            if matching_rel:
+                amount.associated_relationship = matching_rel
+                if not self.dry_run:
+                    amount.save(update_fields=['associated_relationship'])
+                links_created += 1
+        
+        return links_created
 
     def get_decisions_queryset(self, options):
         """Build the queryset based on command options."""
@@ -209,6 +266,7 @@ class Command(BaseCommand):
         processed = 0
         entities_created = 0
         amounts_created = 0
+        links_created = 0
         errors = 0
         
         for i in range(0, total_decisions, self.batch_size):
@@ -217,49 +275,60 @@ class Command(BaseCommand):
             with transaction.atomic():
                 for decision in batch:
                     try:
-                        # Determine skip behavior based on flags
-                        # If entities-only: skip if has entities
-                        # If amounts-only: skip if has amounts
-                        # If both: skip if has both entities AND amounts
-                        should_skip = False
-                        if self.entities_only and decision.entity_relationships.exists():
-                            should_skip = True
-                        elif self.amounts_only and decision.amount_fields.exists():
-                            should_skip = True
-                        elif not self.entities_only and not self.amounts_only:
-                            # Both entities and amounts - skip only if both exist
-                            if decision.entity_relationships.exists() and decision.amount_fields.exists():
-                                should_skip = True
-                        
-                        # Use the unified service to extract both entities and amounts
-                        result = self.extraction_service.extract_from_decision(
-                            decision, 
-                            save_to_db=not self.dry_run,
-                            skip_if_existing=should_skip  # Smart idempotent mode
-                        )
-                        
-                        # Track what was created
-                        decision_entities_created = result.entities_created if not self.amounts_only else 0
-                        decision_amounts_created = result.amounts_created if not self.entities_only else 0
-                        
-                        entities_created += decision_entities_created
-                        amounts_created += decision_amounts_created
-                        processed += 1
-                        
-                        # Log progress for significant decisions
-                        if decision_entities_created > 0 or decision_amounts_created > 0:
-                            self.stdout.write(
-                                f"✅ {decision.ada}: "
-                                f"+{decision_entities_created} entities, "
-                                f"+{decision_amounts_created} amounts"
-                            )
-                        
-                        # Log any errors from the extraction
-                        if result.errors:
-                            for error in result.errors:
+                        if self.relink_only:
+                            # Fast path: only re-link existing entities and amounts
+                            decision_links = self._relink_amounts(decision)
+                            links_created += decision_links
+                            processed += 1
+                            
+                            if decision_links > 0:
                                 self.stdout.write(
-                                    self.style.WARNING(f"⚠️  {decision.ada}: {error}")
+                                    f"🔗 {decision.ada}: linked {decision_links} amounts"
                                 )
+                        else:
+                            # Determine skip behavior based on flags
+                            # If entities-only: skip if has entities
+                            # If amounts-only: skip if has amounts
+                            # If both: skip if has both entities AND amounts
+                            should_skip = False
+                            if self.entities_only and decision.entity_relationships.exists():
+                                should_skip = True
+                            elif self.amounts_only and decision.amount_fields.exists():
+                                should_skip = True
+                            elif not self.entities_only and not self.amounts_only:
+                                # Both entities and amounts - skip only if both exist
+                                if decision.entity_relationships.exists() and decision.amount_fields.exists():
+                                    should_skip = True
+                            
+                            # Use the unified service to extract both entities and amounts
+                            result = self.extraction_service.extract_from_decision(
+                                decision, 
+                                save_to_db=not self.dry_run,
+                                skip_if_existing=should_skip and not self.force  # Force overrides skip
+                            )
+                            
+                            # Track what was created
+                            decision_entities_created = result.entities_created if not self.amounts_only else 0
+                            decision_amounts_created = result.amounts_created if not self.entities_only else 0
+                            
+                            entities_created += decision_entities_created
+                            amounts_created += decision_amounts_created
+                            processed += 1
+                            
+                            # Log progress for significant decisions
+                            if decision_entities_created > 0 or decision_amounts_created > 0:
+                                self.stdout.write(
+                                    f"✅ {decision.ada}: "
+                                    f"+{decision_entities_created} entities, "
+                                    f"+{decision_amounts_created} amounts"
+                                )
+                            
+                            # Log any errors from the extraction
+                            if result.errors:
+                                for error in result.errors:
+                                    self.stdout.write(
+                                        self.style.WARNING(f"⚠️  {decision.ada}: {error}")
+                                    )
                     
                     except Exception as e:
                         errors += 1
@@ -271,17 +340,33 @@ class Command(BaseCommand):
                         logger.exception(f"Error processing decision {decision.ada}")
             
             # Progress update
-            self.stdout.write(
-                f"📊 Progress: {processed:,}/{total_decisions:,} "
-                f"({processed/total_decisions*100:.1f}%) - "
-                f"Entities: +{entities_created}, Amounts: +{amounts_created}, "
-                f"Errors: {errors}"
-            )
+            if self.relink_only:
+                self.stdout.write(
+                    f"📊 Progress: {processed:,}/{total_decisions:,} "
+                    f"({processed/total_decisions*100:.1f}%) - "
+                    f"Links: +{links_created}, Errors: {errors}"
+                )
+            else:
+                self.stdout.write(
+                    f"📊 Progress: {processed:,}/{total_decisions:,} "
+                    f"({processed/total_decisions*100:.1f}%) - "
+                    f"Entities: +{entities_created}, Amounts: +{amounts_created}, "
+                    f"Errors: {errors}"
+                )
         
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"🎉 Completed! Processed {processed:,} decisions. "
-                f"Created {entities_created:,} entities and {amounts_created:,} amounts. "
-                f"Errors: {errors}"
+        if self.relink_only:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"🎉 Completed! Processed {processed:,} decisions. "
+                    f"Created {links_created:,} links. "
+                    f"Errors: {errors}"
+                )
             )
-        )
+        else:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"🎉 Completed! Processed {processed:,} decisions. "
+                    f"Created {entities_created:,} entities and {amounts_created:,} amounts. "
+                    f"Errors: {errors}"
+                )
+            )

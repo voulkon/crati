@@ -121,9 +121,19 @@ class TestEntityAmountExtractionService:
         actual_entities = DecisionEntityRelationship.objects.filter(decision=decision).count()
         actual_amounts = DecisionAmountField.objects.filter(decision=decision).count()
         
-        # TODO: Make sure it detects associated_relationship_id in core_decisionamountfield
-        # it leaves them null for now when it's a direct assignment
-        # It creates the amount and the entity but doesn't link them (associated_relationship_id is null)
+        # Verify linking: when entities and amounts exist, they should be linked
+        # This handles both patterns:
+        # 1. Numbered pattern: sponsor[0].expenseAmount → sponsor[0]
+        # 2. Direct assignment: person[0] + awardAmount → linked
+        if actual_entities > 0 and actual_amounts > 0:
+            linked_amounts = DecisionAmountField.objects.filter(
+                decision=decision,
+                associated_relationship__isnull=False
+            ).count()
+            
+            # All amounts should be linked when entities are present
+            assert linked_amounts == actual_amounts, \
+                f"Expected all {actual_amounts} amounts to be linked to entities, but only {linked_amounts} were linked"
 
         assert actual_entities == expected_entities, \
             f"Expected {expected_entities} entities, found {actual_entities}"

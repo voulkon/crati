@@ -36,9 +36,30 @@ class FinancialCalculationService:
     but no AFM counterparts).
     """
 
-    # Standard roles that indicate money received/paid
-    MONEY_RECEIVED_ROLES = ["grantee", "donationReceiver", "sponsorAFMName"]
-    MONEY_PAID_ROLES = ["grantor", "donationGiver"]  # Extend as needed
+    # =============================================================================
+    # ROLE CONFIGURATION - Critical for Analytics
+    # =============================================================================
+    # These lists categorize entity relationship roles for financial calculations.
+    # ALL analytics endpoints use these to filter which relationships to include.
+    #
+    # IMPORTANT: When new roles appear in decisions, they MUST be added here!
+    #
+    # MONEY_RECEIVED_ROLES: Entity receives money (vendor, contractor, grantee, etc.)
+    #   - "person", "org": Primary roles in direct assignments (Δ.1) - 11,644+ relationships
+    #   - "grantee": Receives grants
+    #   - "donationReceiver": Receives donations  
+    #   - "sponsorAFMName": Sponsor/contractor receiving payment
+    #
+    # MONEY_PAID_ROLES: Entity pays money (less common)
+    #   - "grantor": Gives grants
+    #   - "donationGiver": Makes donations
+    #
+    # TEST COVERAGE: test_financial_calculation_service.py::TestRoleCoverageDefense
+    # will FAIL if uncategorized roles appear in the database.
+    # =============================================================================
+    
+    MONEY_RECEIVED_ROLES = ["grantee", "donationReceiver", "sponsorAFMName", "person", "org"]
+    MONEY_PAID_ROLES = ["grantor", "donationGiver"]
 
     def __init__(self):
         self.default_currency = "EUR"

@@ -496,7 +496,14 @@ class EntityAmountExtractionService:
         amount_path: str, 
         relationships: List[DecisionEntityRelationship]
     ) -> Optional[DecisionEntityRelationship]:
-        """Find the entity relationship that matches this amount's path."""
+        """
+        Find the entity relationship that matches this amount's path.
+        
+        Matching strategies (in order of preference):
+        1. Exact container match (e.g., sponsor[0].expenseAmount → sponsor[0])
+        2. Direct assignment (single entity + root-level amount like awardAmount)
+        """
+        # Strategy 1: Exact container match
         # Extract container from amount path (e.g., "sponsor[0].amountWithVAT" → "sponsor[0]")
         amount_container = amount_path.rsplit('.', 1)[0] if '.' in amount_path else amount_path
         
@@ -507,7 +514,40 @@ class EntityAmountExtractionService:
             if amount_container == rel_container:
                 return rel
         
+        # Strategy 2: Direct assignment pattern
+        # If amount is at root level (like "awardAmount", "contractAmount")
+        # and there's exactly ONE entity, link them together
+        if self._is_direct_assignment_amount(amount_path) and len(relationships) == 1:
+            logger.debug(
+                f"Direct assignment linking: {amount_path} → {relationships[0].parent_key_path}"
+            )
+            return relationships[0]
+        
         return None
+    
+    def _is_direct_assignment_amount(self, amount_path: str) -> bool:
+        """
+        Check if this is a root-level "direct assignment" amount field.
+        
+        These are amounts that typically apply to the entire decision/contract
+        and should be linked to a single entity if present.
+        
+        Examples: awardAmount, contractAmount, budgetAmount
+        """
+        # Root-level amounts (no array index, no nested path)
+        if '[' in amount_path or '.' in amount_path:
+            return False
+        
+        # Check if it's one of the known direct assignment amount types
+        direct_assignment_fields = {
+            'awardAmount',
+            'contractAmount',
+            'budgetAmount',
+            'amountWithVAT',  # When at root level
+            'amountWithoutVAT',  # When at root level
+        }
+        
+        return amount_path in direct_assignment_fields
     
 
     

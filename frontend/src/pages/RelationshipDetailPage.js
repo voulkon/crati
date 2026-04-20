@@ -37,11 +37,13 @@ const RelationshipDetailPage = () => {
     searchQuery,
     selectedTypes,
     amountFilters,
+    directAssignmentsOnly,
     activeFiltersCount,
     setSortBy,
     setSearchQuery,
     toggleType,
     setAmountFilters,
+    setDirectAssignmentsOnly,
     clearAllFilters
   } = useUrlFilters({ sortBy: 'entity_amount_desc' });
 
@@ -68,6 +70,7 @@ const RelationshipDetailPage = () => {
         if (selectedTypes.length > 0) params.decision_types = selectedTypes.join(',');
         if (amountFilters.minAmount) params.min_amount = amountFilters.minAmount;
         if (amountFilters.maxAmount) params.max_amount = amountFilters.maxAmount;
+        if (directAssignmentsOnly) params.direct_assignments_only = true;
 
         const data = await relationshipsApi.getRelationshipDecisions(afm, orgUid, params);
 
@@ -107,7 +110,7 @@ const RelationshipDetailPage = () => {
     if (afm && orgUid) {
       fetchRelationshipData();
     }
-  }, [afm, orgUid, startDate, endDate, sortBy, searchQuery, selectedTypes, amountFilters]);
+  }, [afm, orgUid, startDate, endDate, sortBy, searchQuery, selectedTypes, amountFilters, directAssignmentsOnly]);
 
   const handleLoadMore = async () => {
     if (!pagination?.has_next || loadingMore) return;
@@ -126,6 +129,7 @@ const RelationshipDetailPage = () => {
       if (selectedTypes.length > 0) params.decision_types = selectedTypes.join(',');
       if (amountFilters.minAmount) params.min_amount = amountFilters.minAmount;
       if (amountFilters.maxAmount) params.max_amount = amountFilters.maxAmount;
+      if (directAssignmentsOnly) params.direct_assignments_only = true;
 
       const data = await relationshipsApi.getRelationshipDecisions(afm, orgUid, params);
       setDecisions(prev => [...prev, ...data.results]);
@@ -262,6 +266,14 @@ const RelationshipDetailPage = () => {
           </h3>
           
           <div className="controls-container">
+            <label className="checkbox-label" style={{ marginRight: '1rem' }}>
+              <input
+                type="checkbox"
+                checked={directAssignmentsOnly}
+                onChange={(e) => setDirectAssignmentsOnly(e.target.checked)}
+              />
+              <span>{t('filters.directAssignmentsOnly', 'Direct Assignments Only')}</span>
+            </label>
             <SortControl sortBy={sortBy} onSortChange={setSortBy} />
             <button 
               className="filter-toggle-button"

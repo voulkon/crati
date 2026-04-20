@@ -29,12 +29,13 @@ const EntityDetailPage = () => {
     selectedTypes: selectedDecisionTypes,
     selectedOrgs: organizationFilters,
     amountFilters,
+    directAssignmentsOnly,
     activeFiltersCount,
     setSortBy,
     setSearchQuery,
     toggleType,
-    toggleOrg,
     setAmountFilters,
+    setDirectAssignmentsOnly,
     clearAllFilters
   } = useUrlFilters({ sortBy: 'amount_desc' });
   
@@ -298,6 +299,11 @@ const EntityDetailPage = () => {
         params.append('organization_ids', organizationFilters.join(','));
       }
 
+      // Add direct assignments filter
+      if (directAssignmentsOnly) {
+        params.append('direct_assignments_only', 'true');
+      }
+
       let endpoint;
       if (explorationMode === 'temporal') {
         endpoint = `/explore/decisions-optimized/?${params.toString()}`;
@@ -325,7 +331,7 @@ const EntityDetailPage = () => {
         setLoadingMore(false);
       }
     }
-  }, [explorationMode, entityType, entityId, timeRange, sortBy, debouncedSearchQuery, selectedDecisionTypes, amountFilters, organizationFilters, t]);
+  }, [explorationMode, entityType, entityId, timeRange, sortBy, debouncedSearchQuery, selectedDecisionTypes, amountFilters, organizationFilters, directAssignmentsOnly, t]);
 
   const loadMoreDecisions = useCallback(() => {
     if (pagination && pagination.has_next && !loadingMore) {
@@ -746,6 +752,15 @@ const EntityDetailPage = () => {
                 )}
               </div>
             </div>
+            
+            <label className="checkbox-label" style={{ marginRight: '1rem' }}>
+              <input
+                type="checkbox"
+                checked={directAssignmentsOnly}
+                onChange={(e) => setDirectAssignmentsOnly(e.target.checked)}
+              />
+              <span>{t('filters.directAssignmentsOnly', 'Direct Assignments Only')}</span>
+            </label>
             
             <SortControl sortBy={sortBy} onSortChange={setSortBy} options="simple" />
           </div>

@@ -28,9 +28,11 @@ const AFMEntityDetailPage = () => {
   const {
     sortBy,
     selectedRoles,
+    directAssignmentsOnly,
     activeFiltersCount,
     setSortBy,
     toggleRole,
+    setDirectAssignmentsOnly,
     clearAllFilters
   } = useUrlFilters({ sortBy: 'amount_desc' });
 
@@ -52,7 +54,8 @@ const AFMEntityDetailPage = () => {
       const decisionsParams = new URLSearchParams({
         sort: sortBy,
         page: loadMore ? (pagination?.current_page + 1 || 2) : 1,
-        ...(selectedRoles.length > 0 && { roles: selectedRoles.join(',') })
+        ...(selectedRoles.length > 0 && { roles: selectedRoles.join(',') }),
+        ...(directAssignmentsOnly && { direct_assignments_only: 'true' })
       });
       
       const decisionsResponse = await apiClient.get(`/entity/afm/${afm}/decisions/?${decisionsParams}`);
@@ -72,11 +75,13 @@ const AFMEntityDetailPage = () => {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [afm, sortBy, selectedRoles, pagination]);
+  }, [afm, sortBy, selectedRoles, directAssignmentsOnly, pagination]);
 
+  // Fetch data when filters change - omitting fetchEntityData to avoid infinite loop
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchEntityData();
-  }, [afm, sortBy, selectedRoles]); // Removed fetchEntityData from deps to avoid infinite loop
+  }, [afm, sortBy, selectedRoles, directAssignmentsOnly]);
 
   const handleLoadMore = () => {
     if (pagination?.has_next && !loadingMore) {
@@ -284,6 +289,14 @@ const AFMEntityDetailPage = () => {
           </h3>
           
           <div className="controls-container">
+            <label className="checkbox-label" style={{ marginRight: '1rem' }}>
+              <input
+                type="checkbox"
+                checked={directAssignmentsOnly}
+                onChange={(e) => setDirectAssignmentsOnly(e.target.checked)}
+              />
+              <span>{t('filters.directAssignmentsOnly', 'Direct Assignments Only')}</span>
+            </label>
             <SortControl sortBy={sortBy} onSortChange={setSortBy} options="simple" />
           </div>
         </div>

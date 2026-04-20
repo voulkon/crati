@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 
 /**
  * Custom hook to manage filter state synchronized with URL parameters
- * Handles: sort, search, types, roles, amounts, organizations, date range
+ * Handles: sort, search, types, roles, amounts, organizations, date range, direct assignments
  */
 const useUrlFilters = (defaultValues = {}) => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -28,8 +28,13 @@ const useUrlFilters = (defaultValues = {}) => {
     minAmount: searchParams.get('minAmount') || defaultValues.minAmount || '',
     maxAmount: searchParams.get('maxAmount') || defaultValues.maxAmount || ''
   });
+  const [directAssignmentsOnly, setDirectAssignmentsOnly] = useState(
+    searchParams.get('direct_assignments_only') === 'true' || defaultValues.directAssignmentsOnly || false
+  );
 
   // Sync state with URL when params change
+  // We intentionally only listen to searchParams changes to avoid circular updates
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const urlSort = searchParams.get('sort');
     const urlSearch = searchParams.get('search') || '';
@@ -38,6 +43,7 @@ const useUrlFilters = (defaultValues = {}) => {
     const urlOrgs = searchParams.get('orgs') ? searchParams.get('orgs').split(',') : [];
     const urlMinAmount = searchParams.get('minAmount') || '';
     const urlMaxAmount = searchParams.get('maxAmount') || '';
+    const urlDirectAssignmentsOnly = searchParams.get('direct_assignments_only') === 'true';
 
     if (urlSort && urlSort !== sortBy) setSortBy(urlSort);
     if (urlSearch !== searchQuery) setSearchQuery(urlSearch);
@@ -47,6 +53,7 @@ const useUrlFilters = (defaultValues = {}) => {
     if (urlMinAmount !== amountFilters.minAmount || urlMaxAmount !== amountFilters.maxAmount) {
       setAmountFilters({ minAmount: urlMinAmount, maxAmount: urlMaxAmount });
     }
+    if (urlDirectAssignmentsOnly !== directAssignmentsOnly) setDirectAssignmentsOnly(urlDirectAssignmentsOnly);
   }, [searchParams]);
 
   // Update URL with current filter state
@@ -59,6 +66,7 @@ const useUrlFilters = (defaultValues = {}) => {
     const finalRoles = updates.selectedRoles !== undefined ? updates.selectedRoles : selectedRoles;
     const finalOrgs = updates.selectedOrgs !== undefined ? updates.selectedOrgs : selectedOrgs;
     const finalAmountFilters = updates.amountFilters !== undefined ? updates.amountFilters : amountFilters;
+    const finalDirectAssignmentsOnly = updates.directAssignmentsOnly !== undefined ? updates.directAssignmentsOnly : directAssignmentsOnly;
 
     if (finalSort && finalSort !== 'recent') newParams.set('sort', finalSort);
     if (finalSearch) newParams.set('search', finalSearch);
@@ -67,9 +75,10 @@ const useUrlFilters = (defaultValues = {}) => {
     if (finalOrgs.length > 0) newParams.set('orgs', finalOrgs.join(','));
     if (finalAmountFilters.minAmount) newParams.set('minAmount', finalAmountFilters.minAmount);
     if (finalAmountFilters.maxAmount) newParams.set('maxAmount', finalAmountFilters.maxAmount);
+    if (finalDirectAssignmentsOnly) newParams.set('direct_assignments_only', 'true');
 
     setSearchParams(newParams);
-  }, [sortBy, searchQuery, selectedTypes, selectedRoles, selectedOrgs, amountFilters, setSearchParams]);
+  }, [sortBy, searchQuery, selectedTypes, selectedRoles, selectedOrgs, amountFilters, directAssignmentsOnly, setSearchParams]);
 
   // Helper functions
   const toggleType = useCallback((type) => {
@@ -102,12 +111,14 @@ const useUrlFilters = (defaultValues = {}) => {
     setSelectedOrgs([]);
     setSearchQuery('');
     setAmountFilters({ minAmount: '', maxAmount: '' });
+    setDirectAssignmentsOnly(false);
     updateUrl({
       selectedTypes: [],
       selectedRoles: [],
       selectedOrgs: [],
       searchQuery: '',
-      amountFilters: { minAmount: '', maxAmount: '' }
+      amountFilters: { minAmount: '', maxAmount: '' },
+      directAssignmentsOnly: false
     });
   }, [updateUrl]);
 
@@ -118,7 +129,8 @@ const useUrlFilters = (defaultValues = {}) => {
     selectedOrgs.length +
     (amountFilters.minAmount ? 1 : 0) + 
     (amountFilters.maxAmount ? 1 : 0) +
-    (searchQuery ? 1 : 0);
+    (searchQuery ? 1 : 0) +
+    (directAssignmentsOnly ? 1 : 0);
 
   return {
     // State
@@ -128,6 +140,7 @@ const useUrlFilters = (defaultValues = {}) => {
     selectedRoles,
     selectedOrgs,
     amountFilters,
+    directAssignmentsOnly,
     activeFiltersCount,
     
     // Setters
@@ -142,6 +155,10 @@ const useUrlFilters = (defaultValues = {}) => {
     setAmountFilters: (value) => {
       setAmountFilters(value);
       updateUrl({ amountFilters: value });
+    },
+    setDirectAssignmentsOnly: (value) => {
+      setDirectAssignmentsOnly(value);
+      updateUrl({ directAssignmentsOnly: value });
     },
     
     // Togglers

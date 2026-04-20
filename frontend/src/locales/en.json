@@ -92,7 +92,8 @@
     "clearSelection": "Clear Selection",
     "showSelected": "Show Selected ({count})",
     "searchTypes": "Search decision types...",
-    "searchOrganizations": "Search organizations..."
+    "searchOrganizations": "Search organizations...",
+    "directAssignmentsOnly" : "Direct assignments only"
   },
   "common": {
     "loading": "Loading...",

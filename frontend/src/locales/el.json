@@ -92,7 +92,8 @@
     "clearSelection": "Καθαρισμός Επιλογής",
     "showSelected": "Εμφάνιση Επιλεγμένων ({count})",
     "searchTypes": "Αναζήτηση τύπων αποφάσεων...",
-    "searchOrganizations": "Αναζήτηση οργανισμών..."
+    "searchOrganizations": "Αναζήτηση οργανισμών...",
+    "directAssignmentsOnly" : "Μόνο απευθείας αναθέσεις"
   },
   "common": {
     "loading": "Φόρτωση...",

@@ -111,12 +111,16 @@ services:
   redis:
     image: redis:8.0.0-alpine
     container_name: diavgeia_redis
+    # Unblock to enable custom config (e.g. for persistence, maxmemory, etc.)
+    # command: redis-server /usr/local/etc/redis/redis.conf
     ports:
       - "${REDIS_PORT:-6379}:6379"
     networks:
       - diavgeia-net
     volumes:
       - redis_data:/data
+      # Also unblock to enable custom config (e.g. for persistence, maxmemory, etc.)
+      # - ./redis-config/redis.conf:/usr/local/etc/redis/redis.conf:ro
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -203,7 +207,7 @@ services:
       - ../.env_files/.env.local.secrets
     environment:
       - CELERY_DEBUG_PORT=${CELERY_DEBUG_PORT:-8004}
-      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST:-db}:${DB_PORT:-5432}/${POSTGRES_DB}
       - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
       - JAEGER_HOST=${JAEGER_HOST:-jaeger}
       - JAEGER_PORT=${JAEGER_PORT:-4317}
@@ -234,7 +238,7 @@ services:
     env_file:
       - ../.env_files/.env.local.secrets
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST:-db}:${DB_PORT:-5432}/${POSTGRES_DB}
       - CELERY_BROKER_URL=amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672//
 
   flower:

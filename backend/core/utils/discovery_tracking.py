@@ -101,7 +101,7 @@ def add_discovery_source_to_decision(
     # Set first discovery source if not already set
     if not decision.first_discovery_source:
         decision.first_discovery_source = source_type
-        logger.info(
+        logger.debug(
             f"Decision {decision.ada} first discovered via: {source_type}"
         )
     
@@ -171,7 +171,7 @@ def tag_decisions_batch(
             batch_size=100
         )
         
-        logger.info(f"Tagged {stats['tagged']} decisions with source: {source_type}")
+        logger.debug(f"Tagged {stats['tagged']} decisions with source: {source_type}")
     
     return stats
 

@@ -37,6 +37,15 @@ def calendar_bulk_import(request):
         start_date = datetime.fromisoformat(start_date_str).date()
         end_date = datetime.fromisoformat(end_date_str).date()
         
+        # Build search params based on entity selection
+        search_params = {}
+        if entity_type == 'organization':
+            search_params['org'] = entity_id
+        elif entity_type == 'unit':
+            search_params['unit'] = entity_id
+        elif entity_type == 'signer':
+            search_params['signer'] = entity_id
+        
         # Use the single source of truth: fetch_daily_decisions_distributed
         # This ensures consistency with validate_imports and other import flows
         try:
@@ -57,14 +66,17 @@ def calendar_bulk_import(request):
                     status=ImportJobStatus.PENDING,
                     created_by=request.user,
                     created_at=datetime.now(),
+                    search_params=search_params,
                 )
                 
-                # Dispatch distributed import task (single source of truth)
+                # Dispatch distributed import task with entity filters
+                # This also respects FILTER_DECISION_TYPES feature flag
                 task = fetch_daily_decisions_distributed.delay(
                     target_date_str=current_date.isoformat(),
                     chunk_size=10,
                     force=False,
-                    job_id=job.id
+                    job_id=job.id,
+                    search_params=search_params
                 )
                 
                 dispatched_tasks.append({

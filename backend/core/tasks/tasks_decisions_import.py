@@ -101,6 +101,11 @@ def fetch_daily_decisions_to_redis(self, target_date_str: str,
         if search_params is None:
             search_params = {}
         
+        # Log any entity filters passed from caller (e.g., Coverage Explorer)
+        entity_filters = [f"{key}={val}" for key in ['org', 'unit', 'signer'] if (val := search_params.get(key))]
+        if entity_filters:
+            logger.info(f"Task {self.request.id}: Entity filters: {', '.join(entity_filters)}")
+        
         # Check feature flag for decision type filtering
         from core.services.feature_flag_service import feature_flags
         filtered_types = feature_flags.get_value('FILTER_DECISION_TYPES')
@@ -559,7 +564,7 @@ def store_decisions_from_pickle(self, pickle_file: str, **kwargs):
 
 
 @shared_task(bind=True)
-def fetch_daily_decisions_distributed(self, target_date_str: str, chunk_size: int = 10, force: bool = False, job_id: Optional[int] = None):
+def fetch_daily_decisions_distributed(self, target_date_str: str, chunk_size: int = 10, force: bool = False, job_id: Optional[int] = None, search_params: Optional[Dict[str, Any]] = None):
     """
     Orchestrator task: Uses existing ImportJob or creates one, then dispatches fetch task.
     
@@ -570,6 +575,7 @@ def fetch_daily_decisions_distributed(self, target_date_str: str, chunk_size: in
         chunk_size: Number of decisions per chunk (default: 10)
         force: Force import even if already completed (default: False)
         job_id: Pre-created ImportJob ID from command (optional)
+        search_params: Additional search filters (e.g., org, signer, unit) (optional)
         
     Returns:
         Dict with orchestration results including job_id for tracking
@@ -633,9 +639,10 @@ def fetch_daily_decisions_distributed(self, target_date_str: str, chunk_size: in
                 f"Orchestrator {self.request.id}: Created ImportJob {import_job.id} for {target_date}"
             )
         
-        # Dispatch the fetch task with job_id
+        # Dispatch the fetch task with job_id and search_params
         fetch_task = fetch_daily_decisions_to_redis.delay(
             target_date_str=target_date_str,
+            search_params=search_params,
             chunk_size=chunk_size,
             job_id=import_job.id
         )

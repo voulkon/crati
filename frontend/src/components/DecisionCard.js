@@ -4,7 +4,7 @@ import { useTranslation } from '../contexts/TranslationContext';
 import apiClient from '../api/client';
 import './DecisionCard.css';
 
-import {OrganizationIcon, PenIcon, CalendarIcon} from './Icons.js';
+import {OrganizationIcon, PenIcon, CalendarIcon, EyeIcon, DownloadIcon, ExternalLinkIcon, BookOpenIcon, LoaderIcon} from './Icons.js';
 
 import EntityDisplay from './EntityDisplay';
 import { getMainRecipient, getTotalAmount, groupEntityRelationships } from '../utils/decisionUtils';
@@ -110,6 +110,7 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
 
   return (
     <div className={`decision-card ${isLastItem ? 'last-item' : ''}`}>
+
       {/* Clickable Title */}
       <button 
         className="decision-subject clickable-title"
@@ -119,18 +120,26 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
         {decision.subject}
       </button>
 
-      {/* Date Display - Prominent Position */}
-      <div className="decision-date-prominent" title={t('decisionCard.issueDate')}>
-        <CalendarIcon />
-        <span className="date-value">
-          {formatDate(decision.issue_date)}
-        </span>
+      {/* Date and Decision Type Display */}
+      <div className="decision-header-info">
+        <div className="decision-date-prominent" title={t('decisionCard.issueDate')}>
+          <CalendarIcon />
+          <span className="date-value">
+            {formatDate(decision.issue_date)}
+          </span>
+        </div>
+        
+        {decision.decision_type && (
+          <div className="decision-type-badge" title={t('decisionCard.decisionType')}>
+            {decision.decision_type.label}
+          </div>
+        )}
       </div>
 
       {/* Simple recipient and amount display */}
       <div className="decision-main-info">
         {loadingEntities ? (
-          <div className="loading-state">⏳ {t('common.loading')}</div>
+          <div className="loading-state"><LoaderIcon className="spinner" size={16} /> {t('common.loading')}</div>
         ) : (
           <>
             <div className="info-content">
@@ -194,15 +203,39 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
 
       {/* Document Actions Section - Compact */}
       <div className="document-actions">
+        {decision.ada && (
+          <a 
+            href={`https://diavgeia.gov.gr/decision/view/${decision.ada}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="document-link external"
+            title={t('decisionCard.viewOnDiavgeia')}
+          >
+            <ExternalLinkIcon size={16} /> {decision.ada}
+          </a>
+        )}
+
+        {decision.ada && (
+          <a 
+            href={`https://diavgeia.gov.gr/doc/${decision.ada}?inline=true`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="document-link view"
+            title={t('decisionCard.viewOriginalDocument')}
+          >
+            <EyeIcon size={16} /> {t('decisionCard.viewDocument')}
+          </a>
+        )}
+
         {decision.document_url && (
           <a 
             href={decision.document_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="document-link original"
-            title={t('decisionCard.viewOriginalDocument')}
+            className="document-link download"
+            title={t('decisionCard.downloadOriginalDocument')}
           >
-            📄 {t('decisionCard.viewOriginalDocument')}
+            <DownloadIcon size={16} /> {t('decisionCard.downloadDocument')}
           </a>
         )}
 
@@ -213,7 +246,7 @@ const DecisionCard = ({ decision, formatAmount, index, isLastItem, onViewDocumen
             className="document-link content-button"
             title={showContent ? t('decisionCard.hideDocumentContent') : t('decisionCard.viewDocumentContent')}
           >
-            {isLoadingContent ? '⏳' : showContent ? '⬆️' : '⬇️'} {showContent ? t('decisionCard.hideText') : t('decisionCard.showText')}
+            {isLoadingContent ? <LoaderIcon className="spinner" size={16} /> : <BookOpenIcon size={16} />} {showContent ? t('decisionCard.hideText') : t('decisionCard.showText')}
           </button>
         )}
       </div>

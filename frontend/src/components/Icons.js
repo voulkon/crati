@@ -14,7 +14,11 @@ export {
     Globe as GlobeIcon,
     Paperclip as PaperclipIcon,
     Search as SearchIcon,
-    Wrench as WrenchIcon
+    Wrench as WrenchIcon,
+    Eye as EyeIcon,
+    Download as DownloadIcon,
+    ExternalLink as ExternalLinkIcon,
+    Loader2 as LoaderIcon
 } from 'lucide-react';
 export { 
     LibraryBig as LibraryToggleIcon, 

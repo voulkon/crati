@@ -3,7 +3,7 @@ from .decisions_utils import (
     get_year_summary_data, 
     get_entity_name
     )
-from core.services.search_service import SearchService
+from admin_custom.views.common_utils import entity_search_ajax
 from django.contrib.admin.views.decorators import staff_member_required
 from django.http import JsonResponse
 from django.shortcuts import render
@@ -179,72 +179,11 @@ def coverage_explorer(request):
 
 @staff_member_required
 def entity_search(request):
-    """Search for organizations, units, or signers for the coverage explorer."""
-    query = request.GET.get("q", "")
-    entity_type = request.GET.get("entity_type", "organization")
-
-    search_service = SearchService()
-    results = []
-
-    if query:
-        if entity_type == "organization":
-            organizations = search_service.search_organizations(query)
-            results = [
-                {
-                    "id": org.uid,
-                    "text": org.label,
-                    "latin_name": org.latin_name,
-                }
-                for org in organizations
-            ]
-
-            # If no organizations found, search for units
-            if not results:
-                units = search_service.search_units(query)
-                results = [
-                    {
-                        "id": unit.uid,
-                        "text": unit.label,
-                        "latin_name": None,  # Units don't have latin_name
-                        "type": "unit",  # Add type to distinguish from organizations
-                    }
-                    for unit in units
-                ]
-        elif entity_type == "unit":
-            units = search_service.search_units(query)
-            results = [
-                {
-                    "id": unit.uid,
-                    "text": unit.label,
-                    "latin_name": None,
-                    "organization": (
-                        unit.organization.label if unit.organization else None
-                    ),
-                    "organization_id": (
-                        unit.organization.uid if unit.organization else None
-                    ),
-                }
-                for unit in units
-            ]
-        else:  # signers
-            signers = search_service.search_signers(query)
-            results = [
-                {
-                    "id": signer.uid,
-                    "text": f"{signer.last_name}, {signer.first_name}",
-                    "last_name": signer.last_name,
-                    "first_name": signer.first_name,
-                    "organization": (
-                        signer.organization.label if signer.organization else None
-                    ),
-                    "organization_id": (
-                        signer.organization.uid if signer.organization else None
-                    ),
-                }
-                for signer in signers
-            ]
-
-    return JsonResponse({"results": results})
+    """
+    Search for organizations, units, or signers for the coverage explorer.
+    Delegates to common entity search utility.
+    """
+    return entity_search_ajax(request)
 
 
 

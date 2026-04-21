@@ -46,6 +46,14 @@ class CustomAdminSite(admin.AdminSite):
             
             # AI Job URLs
             path("jobs/<int:job_id>/estimate/", self._wrap_view('ai_jobs', 'estimate_job_cost_view'), name="estimate_job_cost"),
+            
+            # Search Suggestion URLs
+            path("search-suggestions/manager/", self._wrap_view('search_suggestions', 'search_suggestion_manager'), name="search_suggestion_manager"),
+            path("search-suggestions/entity-search/", self._wrap_view('search_suggestions', 'search_suggestion_entity_search'), name="search_suggestion_entity_search"),
+            path("search-suggestions/<int:pk>/delete/", self._wrap_view('search_suggestions', 'delete_search_suggestion'), name="delete_search_suggestion"),
+            path("search-suggestions/<int:pk>/toggle/", self._wrap_view('search_suggestions', 'toggle_search_suggestion'), name="toggle_search_suggestion"),
+            path("search-suggestions/<int:pk>/move-up/", self._wrap_view('search_suggestions', 'move_suggestion_up'), name="move_suggestion_up"),
+            path("search-suggestions/<int:pk>/move-down/", self._wrap_view('search_suggestions', 'move_suggestion_down'), name="move_suggestion_down"),
         ]
         return custom_urls + urls
     
@@ -83,6 +91,16 @@ class CustomAdminSite(admin.AdminSite):
             ],
         }
         app_list.append(decision_mgmt_app)
+        
+        # Add Search & User Experience section
+        search_ux_app = {
+            "name": "Search & User Experience",
+            "app_label": "search_ux",
+            "models": [
+                {"name": "Search Suggestion Manager", "object_name": "SearchSuggestionManager", "admin_url": "/api/admin/search-suggestions/manager/", "view_only": True},
+            ],
+        }
+        app_list.append(search_ux_app)
 
         # Add custom Organization Tools section
         org_tools_app = {
@@ -139,8 +157,7 @@ def register_all_models():
         ImportThresholdAdmin,
         NotificationSubscriptionAdmin, NotificationAdmin,
         NotificationBatchAdmin, NotificationBatchDecisionAdmin,
-        FeatureFlagAdmin, FeatureFlagAuditLogAdmin,
-        SearchSuggestionAdmin
+        FeatureFlagAdmin, FeatureFlagAuditLogAdmin
     )
     
     from core.models.decisions import Decision, Attachment
@@ -152,7 +169,6 @@ def register_all_models():
     from core.models.import_thresholds import ImportThreshold
     from core.models.backups import Backup
     from core.models.feature_flags import FeatureFlag, FeatureFlagAuditLog
-    from core.models.search_suggestions import SearchSuggestion
     from api.models import APIAnalytics, EndpointStats, DailyTraffic
     from users.models import CustomUser, Subscription
     from notifications.models import NotificationSubscription, Notification, NotificationBatch, NotificationBatchDecision
@@ -205,8 +221,7 @@ def register_all_models():
     admin_site.register(FeatureFlag, FeatureFlagAdmin)
     admin_site.register(FeatureFlagAuditLog, FeatureFlagAuditLogAdmin)
     
-    # Register Search Suggestions
-    admin_site.register(SearchSuggestion, SearchSuggestionAdmin)
+    # Note: SearchSuggestion uses custom manager interface, not default admin
     admin_site.register(NotificationBatchDecision, NotificationBatchDecisionAdmin)
 
 

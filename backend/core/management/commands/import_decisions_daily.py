@@ -38,7 +38,14 @@ class Command(BaseCommand):
         parser.add_argument(
             "--distributed",
             action="store_true",
-            help="Use Celery for distributed processing (fetches full day, distributes storage)",
+            default=True,
+            help="Use Celery for distributed processing (DEFAULT, recommended)",
+        )
+        parser.add_argument(
+            "--no-distributed",
+            dest="distributed",
+            action="store_false",
+            help="[DEPRECATED] Use old single-process mode (not recommended)",
         )
         parser.add_argument(
             "--file-log",
@@ -69,12 +76,22 @@ class Command(BaseCommand):
                 compression="gz"
             )
         
-        log_msg = f"Starting import for {target_date} (force={force})"
+        log_msg = f"Starting import for {target_date} (force={force}, distributed={options['distributed']})"
         if log_file:
             log_msg += f" - Logs will be saved to: {log_file}"
         logger.info(log_msg)
         
-        self.stdout.write(f"Starting sync for {target_date} (force={force})")
+        # Show deprecation warning for non-distributed mode
+        if not options["distributed"]:
+            warning_msg = (
+                "⚠️  WARNING: Non-distributed mode is DEPRECATED and will be removed in a future version.\n"
+                "   The distributed mode (default) is the recommended single source of truth.\n"
+                "   It uses Redis-based pipeline with proper tracking and parallel processing."
+            )
+            logger.warning(warning_msg)
+            self.stdout.write(self.style.WARNING(warning_msg))
+        
+        self.stdout.write(f"Starting sync for {target_date} (force={force}, distributed={options['distributed']})")
         if log_file:
             self.stdout.write(f"Logs are being saved to: {log_file}")
 

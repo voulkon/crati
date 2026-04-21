@@ -553,8 +553,15 @@
   },
   "dateRange": {
     "today": "Today",
+    "week": "Week",
     "thisWeek": "This Week",
+    "month": "Month",
     "thisMonth": "This Month",
-    "thisYear": "This Year"
+    "year": "Year",
+    "thisYear": "This Year",
+    "custom": "Custom",
+    "apply": "Apply",
+    "cancel": "Cancel",
+    "clickToEdit": "Click to edit"
   }
 }

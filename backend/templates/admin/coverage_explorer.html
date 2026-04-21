@@ -95,12 +95,18 @@
         opacity: 0.6;
     }
     .bulk-actions {
-        margin-top: 20px;
+        position: fixed;
+        bottom: 80px;
+        right: 20px;
         display: none;
-        padding: 10px;
+        padding: 15px;
         background-color: #f8f9fa;
         border-radius: 5px;
         border: 1px solid #ddd;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+        z-index: 999;
+        min-width: 300px;
+        max-width: 400px;
     }
     .bulk-actions h3 {
         margin-top: 0;
@@ -508,7 +514,7 @@
 </div>
 
 <!-- Add keyboard help tooltip -->
-<div class="keyboard-help">
+<!-- <div class="keyboard-help">
     <div><strong>Keyboard Navigation:</strong></div>
     {% if view_type == 'multi-year' %}
     <div><span class="kbd">←</span><span class="kbd">→</span> Navigate years</div>
@@ -518,7 +524,7 @@
     <div><span class="kbd">Shift</span> + Click/Arrows for multi-select</div>
     {% endif %}
     <div><span class="kbd">Esc</span> Clear selection</div>
-</div>
+</div> -->
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -814,6 +820,16 @@
         let isSelecting = false;
         let selectionStart = null;
         
+        // Handle double-click to open daily analysis
+        $('.day[data-selectable="true"]').on('dblclick', function(e) {
+            const date = $(this).data('date');
+            if (date) {
+                const url = `/api/admin/decisions/daily-analysis/?date=${date}&mode=simple`;
+                window.open(url, '_blank');
+            }
+            e.preventDefault();
+        });
+
         // Handle day selection
         $('.day[data-selectable="true"]').on('mousedown', function(e) {
             // Start selection

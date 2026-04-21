@@ -5,20 +5,38 @@ import { useTranslation } from '../contexts/TranslationContext';
 import { OrganizationIcon, EntityIcon } from './Icons';
 import './TopCounterparts.css'; // Reuse the same styles
 
+// Import DateRangeContext if available
+let useDateRange;
+try {
+  const DateRangeContext = require('../contexts/DateRangeContext');
+  useDateRange = DateRangeContext.useDateRange;
+} catch (e) {
+  // DateRangeContext not available, will use props only
+}
+
 /**
- * Component to display top Org×Entity relationship pairs in temporal exploration
- * Shows which organization-entity combinations had the highest transaction amounts
+ * Component to display top Org×Entity relationship pairs
+ * Supports both general relationships and direct assignments
+ * Can work standalone or with DateRangeContext
  */
 const TopRelationshipPairs = ({ 
-  dateRange, // { start_date, end_date }
-  limit = 10
+  dateRange: propDateRange, // Optional: override context date range
+  limit = 10,
+  showDirectAssignmentsToggle = true,
+  defaultDirectAssignmentsOnly = true
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const contextDateRange = useDateRange?.()?.dateRange; // Optional: use context if available
+  
+  // Use prop dateRange if provided, otherwise fall back to context
+  const dateRange = propDateRange || contextDateRange;
+  
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState(false);
+  const [directAssignmentsOnly, setDirectAssignmentsOnly] = useState(defaultDirectAssignmentsOnly);
 
   useEffect(() => {
     const fetchTopPairs = async () => {
@@ -31,19 +49,52 @@ const TopRelationshipPairs = ({
         setLoading(true);
         setError(null);
 
-        const params = new URLSearchParams({
-          start_date: dateRange.start_date,
-          end_date: dateRange.end_date,
-          limit: limit
-        });
-
-        const response = await apiClient.get(`/explore/temporal/top-relationships/?${params}`);
+        let response;
         
-        setData({
-          date_range: response.data.date_range,
-          results: response.data.results,
-          total_count: response.data.pagination.total_count
-        });
+        if (directAssignmentsOnly) {
+          // Use direct assignments endpoint
+          const params = new URLSearchParams({
+            start_date: dateRange.start_date,
+            end_date: dateRange.end_date,
+            limit: limit,
+            offset: 0
+          });
+          
+          response = await apiClient.get(`/direct-assignments/top-pairs/?${params}`);
+          
+          // Transform response to match expected format
+          setData({
+            date_range: {
+              start_date: response.data.date_range.start,
+              end_date: response.data.date_range.end
+            },
+            results: response.data.results.map(item => ({
+              'decision__organization__uid': item.organization.uid,
+              'decision__organization__label': item.organization.label,
+              'entity__afm': item.entity.afm,
+              'entity__name': item.entity.name,
+              'entity__entity_type': item.entity.entity_type,
+              'total_amount': parseFloat(item.total_amount),
+              'decision_count': item.decision_count
+            })),
+            total_count: response.data.results.length
+          });
+        } else {
+          // Use general relationships endpoint
+          const params = new URLSearchParams({
+            start_date: dateRange.start_date,
+            end_date: dateRange.end_date,
+            limit: limit
+          });
+
+          response = await apiClient.get(`/explore/temporal/top-relationships/?${params}`);
+          
+          setData({
+            date_range: response.data.date_range,
+            results: response.data.results,
+            total_count: response.data.pagination.total_count
+          });
+        }
       } catch (err) {
         console.error('Error fetching top relationship pairs:', err);
         setError(err.message);
@@ -53,7 +104,7 @@ const TopRelationshipPairs = ({
     };
 
     fetchTopPairs();
-  }, [dateRange, limit]);
+  }, [dateRange, limit, directAssignmentsOnly]);
 
   const formatAmount = (amount) => {
     if (!amount || amount === 0) return t('common.noAmount');
@@ -91,12 +142,27 @@ const TopRelationshipPairs = ({
     <div className="top-counterparts-section">
       <div className="section-header">
         <h3 className="section-title">{t('relationships.topPairs')}</h3>
-        <button 
-          className="expand-toggle"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? t('common.collapse') : t('common.expand')} {expanded ? '▲' : '▼'}
-        </button>
+        <div className="section-controls">
+          {showDirectAssignmentsToggle && (
+            <label className="toggle-switch">
+              <input
+                type="checkbox"
+                checked={directAssignmentsOnly}
+                onChange={(e) => setDirectAssignmentsOnly(e.target.checked)}
+              />
+              <span className="toggle-slider"></span>
+              <span className="toggle-label">
+                {t('filters.directAssignmentsOnly') || 'Direct Assignments Only'}
+              </span>
+            </label>
+          )}
+          <button 
+            className="expand-toggle"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? t('common.collapse') : t('common.expand')} {expanded ? '▲' : '▼'}
+          </button>
+        </div>
       </div>
 
       <div className="counterparts-info">

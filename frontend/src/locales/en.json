@@ -550,5 +550,11 @@
     "minAmount": "Min Amount",
     "totalMatches": "Total Matches",
     "batch" : "Batch Number"
+  },
+  "dateRange": {
+    "today": "Today",
+    "thisWeek": "This Week",
+    "thisMonth": "This Month",
+    "thisYear": "This Year"
   }
 }

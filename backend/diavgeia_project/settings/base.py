@@ -93,3 +93,9 @@ LIGHT_WORKER = os.getenv("LIGHT_WORKER", "False").lower() == "true"
 #   Reduces Docker image size and memory footprint
 
 RETRY_AFM_FETCHES_AFTER_NUMBER_OF_DAYS = int(os.getenv("RETRY_AFM_FETCHES_AFTER_NUMBER_OF_DAYS", "60"))
+
+# Import Job Queue Concurrency Control
+# Maximum number of ImportJobs that can run simultaneously
+# Set to 1 for sequential processing (prevents Redis/OpenSearch memory exhaustion)
+# Set to higher values for parallel processing (requires more memory)
+IMPORT_MAX_CONCURRENT_JOBS = int(os.getenv("IMPORT_MAX_CONCURRENT_JOBS", "1"))

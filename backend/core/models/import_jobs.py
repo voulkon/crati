@@ -149,6 +149,18 @@ class ImportJob(models.Model):
                 self.status = ImportJobStatus.PARTIALLY_COMPLETED
             self.completed_at = timezone.now()
             self.save(update_fields=['status', 'completed_at'])
+            
+            # Notify queue to dispatch next job
+            from core.services.import_job_queue import ImportJobQueue
+            try:
+                queue = ImportJobQueue()
+                queue.on_job_completed(self.id)
+            except Exception as e:
+                # Don't fail the job if queue notification fails
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Failed to notify queue of job completion: {e}"
+                )
     
     def mark_chunk_failed(self, error_msg: str = None, decisions_count: int = 0):
         """Atomically increment failed chunk counter"""
@@ -174,6 +186,18 @@ class ImportJob(models.Model):
                 self.status = ImportJobStatus.PARTIALLY_COMPLETED
             self.completed_at = timezone.now()
             self.save(update_fields=['status', 'completed_at'])
+            
+            # Notify queue to dispatch next job
+            from core.services.import_job_queue import ImportJobQueue
+            try:
+                queue = ImportJobQueue()
+                queue.on_job_completed(self.id)
+            except Exception as e:
+                # Don't fail the job if queue notification fails
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Failed to notify queue of job completion: {e}"
+                )
 
 class ImportFailure(models.Model):
     """Tracks specific failures during an import job for later reprocessing"""

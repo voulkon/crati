@@ -21,5 +21,14 @@ CACHES = {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
             "PASSWORD": REDIS_PASSWORD,  # Empty string if no password
         },
-    }
+    },
+    # Dedicated DB 2 for import decision chunks (separate from Django cache and Celery)
+    "import_chunks": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": f"redis://{REDIS_HOST}:{REDIS_PORT}/2",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            "PASSWORD": REDIS_PASSWORD,
+        },
+    },
 }

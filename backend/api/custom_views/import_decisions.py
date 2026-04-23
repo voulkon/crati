@@ -46,58 +46,56 @@ def calendar_bulk_import(request):
         elif entity_type == 'signer':
             search_params['signer'] = entity_id
         
-        # Use the single source of truth: fetch_daily_decisions_distributed
-        # This ensures consistency with validate_imports and other import flows
+        # Use the ImportJobQueue to manage concurrency and prevent Redis overload
+        # This ensures only MAX_CONCURRENT_JOBS run simultaneously
         try:
-            from core.tasks.tasks_decisions_import import fetch_daily_decisions_distributed
+            from core.services.import_job_queue import ImportJobQueue
             
-            # Dispatch one task per day in the range
-            dispatched_tasks = []
+            queue = ImportJobQueue()
+            
+            # Queue one job per day in the range
+            queued_jobs = []
             current_date = start_date
             
             while current_date <= end_date:
-                # Create ImportJob for this specific date
-                job = ImportJob.objects.create(
-                    start_date=current_date,
-                    end_date=current_date,
+                # Queue job (will auto-dispatch if capacity available)
+                job = queue.enqueue_job(
+                    target_date=current_date,
+                    search_params=search_params,
+                    created_by=request.user,
                     organization_id=entity_id if entity_type == 'organization' else None,
                     unit_id=entity_id if entity_type == 'unit' else None,
                     signer_id=entity_id if entity_type == 'signer' else None,
-                    status=ImportJobStatus.PENDING,
-                    created_by=request.user,
-                    created_at=datetime.now(),
-                    search_params=search_params,
+                    auto_dispatch=True,  # Auto-dispatch if capacity available
                 )
                 
-                # Dispatch distributed import task with entity filters
-                # This also respects FILTER_DECISION_TYPES feature flag
-                task = fetch_daily_decisions_distributed.delay(
-                    target_date_str=current_date.isoformat(),
-                    chunk_size=10,
-                    force=False,
-                    job_id=job.id,
-                    search_params=search_params
-                )
-                
-                dispatched_tasks.append({
+                queued_jobs.append({
                     'date': current_date.isoformat(),
                     'job_id': job.id,
-                    'task_id': task.id
+                    'status': job.status,
                 })
                 
                 logger.info(
-                    f"Coverage Explorer: Dispatched import for {current_date} "
-                    f"({entity_type} {entity_id}), ImportJob #{job.id}, Task {task.id}"
+                    f"Coverage Explorer: Queued import for {current_date} "
+                    f"({entity_type} {entity_id}), ImportJob #{job.id}, Status: {job.status}"
                 )
                 
                 current_date += timedelta(days=1)
             
-            # Return success with all dispatched tasks
+            # Get queue status for user feedback
+            queue_status = queue.get_queue_status()
+            
+            # Return success with queued jobs
             return JsonResponse({
                 'success': True,
-                'tasks': dispatched_tasks,
-                'count': len(dispatched_tasks),
-                'message': f'Dispatched {len(dispatched_tasks)} import tasks for {entity_type} {entity_id} from {start_date_str} to {end_date_str}'
+                'jobs': queued_jobs,
+                'count': len(queued_jobs),
+                'queue_status': queue_status,
+                'message': (
+                    f'Queued {len(queued_jobs)} import jobs for {entity_type} {entity_id} '
+                    f'from {start_date_str} to {end_date_str}. '
+                    f'Jobs will run sequentially (max {queue_status["max_concurrent"]} concurrent).'
+                )
             })
             
         except Exception as e:

@@ -5,7 +5,8 @@ Central registry of Redis keys used throughout the application.
 # Key namespaces
 STATS_NS = "stats"
 RATELIMIT_NS = "ratelimit"
-IMPORT_CHUNKS_NS = "import"  # 🆕 Import decision chunks namespace
+IMPORT_CHUNKS_NS = "import"  # Import decision chunks namespace
+IMPORT_JOB_QUEUE_NS = "import_job_queue"  # Import job queue namespace
 
 # Stats keys
 TOTAL_REQUESTS = f"{STATS_NS}:total_requests"
@@ -24,9 +25,14 @@ ENDPOINT_IPS_PREFIX = f"{STATS_NS}:endpoint_ips:"  # stats:endpoint_ips:<endpoin
 USER_RATELIMIT_PREFIX = f"{RATELIMIT_NS}:user:"
 IP_RATELIMIT_PREFIX = f"{RATELIMIT_NS}:ip:"
 
-# 🆕 Import decision chunks keys
+# Import decision chunks keys
 IMPORT_CHUNK_PREFIX = f"{IMPORT_CHUNKS_NS}:chunk:"  # import:chunk:<job_id>_chunk_<n>
 IMPORT_JOB_METADATA_PREFIX = f"{IMPORT_CHUNKS_NS}:job:"  # import:job:<job_id>
+
+#  Import job queue keys
+IMPORT_JOB_QUEUE_PENDING = f"{IMPORT_JOB_QUEUE_NS}:pending"
+IMPORT_JOB_QUEUE_ACTIVE = f"{IMPORT_JOB_QUEUE_NS}:active"
+IMPORT_JOB_QUEUE_LOCK = f"{IMPORT_JOB_QUEUE_NS}:lock"
 
 # Default expiration times (in seconds)
 STATS_EXPIRE = 60 * 60 * 24 * 30  # 30 days

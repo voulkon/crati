@@ -237,21 +237,27 @@ def validate_and_backfill_imports(
                         day_result['existing_job_id'] = existing_job.id
                         results['reimport_skipped'] += 1
                     else:
-                        # Dispatch re-import using the distributed task
-                        from core.tasks.tasks_decisions_import import fetch_daily_decisions_distributed
+                        # Use ImportJobQueue to respect concurrency limits
+                        from core.services.import_job_queue import ImportJobQueue
                         
-                        reimport_task = fetch_daily_decisions_distributed.delay(
-                            target_date_str=current_date.isoformat(),
-                            chunk_size=chunk_size,
-                            force=force_reimport
+                        queue = ImportJobQueue()
+                        search_params = {'force': force_reimport}
+                        
+                        job = queue.enqueue_job(
+                            target_date=current_date,
+                            search_params=search_params,
+                            created_by=None,  # System-triggered validation
+                            auto_dispatch=True,  # Auto-dispatch if capacity available
                         )
                         
                         logger.success(
-                            f"   🔄 Dispatched re-import task {reimport_task.id} for {current_date}"
+                            f"   🔄 Queued re-import job #{job.id} for {current_date} "
+                            f"(status: {job.status})"
                         )
                         
                         day_result['action_taken'] = 'reimport_dispatched'
-                        day_result['reimport_task_id'] = reimport_task.id
+                        day_result['job_id'] = job.id
+                        day_result['job_status'] = job.status
                         results['reimport_dispatched'] += 1
             
             results['details'].append(day_result)
@@ -322,21 +328,26 @@ def validate_single_day(
             result['action_taken'] = 'no_action_needed'
             return result
         
-        # Trigger re-import
-        from core.tasks.tasks_decisions_import import fetch_daily_decisions_distributed
+        # Trigger re-import using ImportJobQueue to respect concurrency limits
+        from core.services.import_job_queue import ImportJobQueue
         
-        reimport_task = fetch_daily_decisions_distributed.delay(
-            target_date_str=target_date.isoformat(),
-            chunk_size=chunk_size,
-            force=force_reimport
+        queue = ImportJobQueue()
+        search_params = {'force': force_reimport}
+        
+        job = queue.enqueue_job(
+            target_date=target_date,
+            search_params=search_params,
+            created_by=None,  # System-triggered validation
+            auto_dispatch=True,  # Auto-dispatch if capacity available
         )
         
         logger.success(
-            f"🔄 Dispatched re-import task {reimport_task.id} for {target_date}"
+            f"🔄 Queued re-import job #{job.id} for {target_date} (status: {job.status})"
         )
         
         result['action_taken'] = 'reimport_dispatched'
-        result['reimport_task_id'] = reimport_task.id
+        result['job_id'] = job.id
+        result['job_status'] = job.status
         
         return result
         

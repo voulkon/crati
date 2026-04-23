@@ -85,14 +85,15 @@ def fetch_daily_decisions_to_redis(self, target_date_str: str,
             )
             logger.info(f"Task {self.request.id}: Created new ImportJob {import_job.id} for {target_date}")
         
-        # Update job status to FETCHING (transition from PENDING)
+        # Update job status to FETCHING (if called via queue, already FETCHING - this is idempotent)
+        # If called directly or as fallback, this transitions from PENDING
         import_job.status = ImportJobStatus.FETCHING
         import_job.celery_task_id = self.request.id
         if search_params:
             import_job.search_params = {**(import_job.search_params or {}), **search_params}
         import_job.save(update_fields=['status', 'celery_task_id', 'search_params'])
         
-        logger.info(f"Task {self.request.id}: Updated ImportJob {import_job.id} to FETCHING status")
+        logger.info(f"Task {self.request.id}: ImportJob {import_job.id} in FETCHING status")
         
         # Create fetcher and get decisions for the full day
         fetcher = DiavgeiaFetcher()
@@ -568,13 +569,14 @@ def fetch_daily_decisions_distributed(self, target_date_str: str, chunk_size: in
     """
     Orchestrator task: Uses existing ImportJob or creates one, then dispatches fetch task.
     
-    This is the main entry point for daily decision imports.
+    ⚠️ DEPRECATED: Direct calls to this task are discouraged. Use ImportJobQueue.enqueue_job() instead.
+    This task is kept for backward compatibility and is called internally by ImportJobQueue.
     
     Args:
         target_date_str: Date to fetch in ISO format (e.g., "2025-03-09")
         chunk_size: Number of decisions per chunk (default: 10)
         force: Force import even if already completed (default: False)
-        job_id: Pre-created ImportJob ID from command (optional)
+        job_id: Pre-created ImportJob ID from ImportJobQueue (optional)
         search_params: Additional search filters (e.g., org, signer, unit) (optional)
         
     Returns:
@@ -627,16 +629,18 @@ def fetch_daily_decisions_distributed(self, target_date_str: str, chunk_size: in
                     }
             
             # Create ImportJob for visibility
+            # ⚠️ Set status to FETCHING immediately to prevent race conditions
             import_job = ImportJob.objects.create(
                 start_date=target_date,
                 end_date=target_date,
                 celery_task_id=self.request.id,
-                status=ImportJobStatus.PENDING,
+                status=ImportJobStatus.FETCHING,  # Immediate transition to prevent concurrency issues
                 search_params={'chunk_size': chunk_size, 'force': force},
             )
             
-            logger.info(
-                f"Orchestrator {self.request.id}: Created ImportJob {import_job.id} for {target_date}"
+            logger.warning(
+                f"Orchestrator {self.request.id}: Created ImportJob {import_job.id} for {target_date} "
+                f"(DEPRECATED: Use ImportJobQueue.enqueue_job() instead of calling this task directly)"
             )
         
         # Dispatch the fetch task with job_id and search_params

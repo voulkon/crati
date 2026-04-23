@@ -16,9 +16,9 @@ Redis DB Usage:
 - DB 2: Import decision chunks (this service) ✅
 """
 import json
-import redis
 from typing import List, Dict, Any, Optional
 from django.conf import settings
+from django_redis import get_redis_connection
 from loguru import logger
 from datetime import datetime, date
 from decimal import Decimal
@@ -54,31 +54,15 @@ class RedisDecisionCache:
     REDIS_DB = 2
     
     def __init__(self):
-        """Initialize Redis connection using Django settings"""
-        redis_host = settings.REDIS_HOST
-        redis_port = settings.REDIS_PORT
-        redis_password = settings.REDIS_PASSWORD
+        """Initialize Redis connection using Django's connection pool"""
+        # Reuse Django's connection pool for DB 2 (import_chunks)
+        # This prevents connection exhaustion and resource leaks
+        self.redis_client = get_redis_connection("import_chunks")
         
-        self.redis_client = redis.Redis(
-            host=redis_host,
-            port=redis_port,
-            password=redis_password if redis_password else None,
-            db=self.REDIS_DB,  # 🔒 Dedicated DB 2 for import chunks
-            decode_responses=False,  # We'll handle JSON encoding ourselves
-            socket_connect_timeout=5,
-            socket_timeout=5,
+        logger.debug(
+            f"Redis decision cache connected via connection pool "
+            f"DB {self.REDIS_DB} (dedicated for import chunks)"
         )
-        
-        # Test connection
-        try:
-            self.redis_client.ping()
-            logger.debug(
-                f"✅ Redis decision cache connected to {redis_host}:{redis_port} "
-                f"DB {self.REDIS_DB} (dedicated for import chunks)"
-            )
-        except redis.ConnectionError as e:
-            logger.error(f"❌ Failed to connect to Redis: {e}")
-            raise
     
     def store_chunk(
         self, 

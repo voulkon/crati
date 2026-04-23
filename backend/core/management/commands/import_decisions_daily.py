@@ -129,33 +129,42 @@ class Command(BaseCommand):
             else:
                 # Check if we should use the new distributed approach
                 if options["distributed"]:
-                    # Use the new distributed approach - pass our ImportJob to orchestrator
-                    from core.tasks.tasks_decisions_import import fetch_daily_decisions_distributed
+                    # Use ImportJobQueue to respect concurrency limits and queue management
+                    from core.services.import_job_queue import ImportJobQueue
                     
-                    logger.info(f"Starting distributed sync for {target_date} (force={force}), ImportJob #{import_job.id}")
+                    logger.info(f"Starting distributed sync for {target_date} (force={force})")
                     
-                    # Dispatch task with the job_id we just created
-                    async_result = fetch_daily_decisions_distributed.delay(
-                        target_date_str=target_date.isoformat(),
-                        chunk_size=10,
-                        force=force,
-                        job_id=import_job.id  # Pass our pre-created job
+                    # Delete the ImportJob we pre-created since ImportJobQueue will create it
+                    import_job.delete()
+                    
+                    # Use ImportJobQueue to create and dispatch the job properly
+                    queue = ImportJobQueue()
+                    search_params = {'force': force}
+                    
+                    import_job = queue.enqueue_job(
+                        target_date=target_date,
+                        search_params=search_params,
+                        created_by=None,  # Management command has no user
+                        auto_dispatch=True,  # Auto-dispatch if capacity available
                     )
                     
-                    orchestrator_task_id = async_result.id
-                    
-                    # Update ImportJob with orchestrator task ID
-                    import_job.celery_task_id = orchestrator_task_id
-                    import_job.save(update_fields=['celery_task_id'])
-                    
-                    logger.info(f"Dispatched orchestrator task: {orchestrator_task_id} for ImportJob #{import_job.id}")
-                    
-                    self.stdout.write(
-                        self.style.SUCCESS(
-                            f"✅ ImportJob #{import_job.id} created and dispatched for {target_date}\n"
-                            f"Orchestrator task ID: {orchestrator_task_id}"
-                        )
+                    logger.info(
+                        f"Queued ImportJob #{import_job.id} for {target_date} "
+                        f"(status: {import_job.status})"
                     )
+                    
+                    status_msg = (
+                        f"ImportJob #{import_job.id} queued for {target_date}\n"
+                        f"Status: {import_job.status}"
+                    )
+                    
+                    if import_job.status == ImportJobStatus.PENDING:
+                        status_msg += "\n Job queued - will start when capacity available"
+                    elif import_job.celery_task_id:
+                        status_msg += f"\n Job dispatched - Task ID: {import_job.celery_task_id}"
+                    
+                    self.stdout.write(self.style.SUCCESS(status_msg))
+                    
                     self.stdout.write(
                         f"\nThe system will:"
                     )
@@ -169,7 +178,7 @@ class Command(BaseCommand):
                         f"  3. Each storage task runs through full pipeline (orgs, entities, opensearch, etc.)"
                     )
                     self.stdout.write(
-                        f"\n📊 Monitor progress: Decision Management → 📥 Import Jobs Monitor"
+                        f"\nMonitor progress: Decision Management → Import Jobs Monitor"
                     )
                     self.stdout.write(
                         f"💡 Tip: ImportJob #{import_job.id} status: PENDING → FETCHING → SPLITTING → PROCESSING → COMPLETED"
@@ -177,10 +186,11 @@ class Command(BaseCommand):
                     
                     # Return early since we can't get result without backend
                     result = {
-                        'status': 'dispatched',
+                        'status': 'queued',
                         'processed_count': 'pending',
-                        'task_id': orchestrator_task_id,
-                        'job_id': import_job.id
+                        'task_id': import_job.celery_task_id,
+                        'job_id': import_job.id,
+                        'job_status': import_job.status
                     }
                 else:
                     # Use traditional single-process approach with batching

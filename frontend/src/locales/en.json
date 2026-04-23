@@ -562,6 +562,8 @@
     "custom": "Custom",
     "apply": "Apply",
     "cancel": "Cancel",
-    "clickToEdit": "Click to edit"
+    "clickToEdit": "Click to edit",
+    "endBeforeStart" : "End date must be after start date",
+    "startAfterEnd" : "Start date must be before end date"
   }
 }

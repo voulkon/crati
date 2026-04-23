@@ -18,7 +18,11 @@ export {
     Eye as EyeIcon,
     Download as DownloadIcon,
     ExternalLink as ExternalLinkIcon,
-    Loader2 as LoaderIcon
+    Loader2 as LoaderIcon,
+    Check as CheckIcon,
+    X as XIcon,
+    AlertCircle as AlertIcon,
+    Pencil as PencilIcon
 } from 'lucide-react';
 export { 
     LibraryBig as LibraryToggleIcon, 

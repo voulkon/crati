@@ -35,6 +35,7 @@ from api.redis_keys import (
     IMPORT_JOB_QUEUE_LOCK,
 )
 from core.models.import_jobs import ImportJob, ImportJobStatus
+from diavgeia_project.settings.constants import IMPORT_CHUNKS_REDIS_DB_NAME
 
 
 class ImportJobQueue:
@@ -59,7 +60,7 @@ class ImportJobQueue:
         """Initialize Redis connection for queue management"""
         # Reuse Django's connection pool for DB 2 (same as decision chunks)
         # This prevents connection exhaustion and resource leaks
-        self.redis_client = get_redis_connection("import_chunks")
+        self.redis_client = get_redis_connection(IMPORT_CHUNKS_REDIS_DB_NAME)
     
     def get_active_jobs_count(self) -> int:
         """

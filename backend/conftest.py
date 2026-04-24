@@ -229,6 +229,34 @@ class DecisionAmountFieldFactory(DjangoModelFactory):
     associated_relationship = None  # Can be set explicitly when needed
 
 
+class ImportJobFactory(DjangoModelFactory):
+    """Factory for ImportJob model"""
+    
+    class Meta:
+        model = 'core.ImportJob'
+    
+    start_date = factory.LazyFunction(lambda: (timezone.now() - timedelta(days=7)).date())
+    end_date = factory.LazyAttribute(lambda obj: obj.start_date)
+    status = 'PENDING'
+    created_by = factory.SubFactory(UserFactory)
+    created_at = factory.LazyFunction(timezone.now)
+    completed_at = None
+    
+    # Optional filters
+    organization = None
+    unit = None
+    signer = None
+    
+    # Job metadata
+    celery_task_id = None
+    total_decisions = 0
+    new_decisions = 0
+    updated_decisions = 0
+    failed_decisions = 0
+    search_params = factory.LazyFunction(dict)
+    error_details = None
+
+
 # ============================================================================
 # Notification Factories
 # ============================================================================

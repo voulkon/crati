@@ -29,6 +29,7 @@ from api.redis_keys import (
     get_import_job_metadata_key,
     IMPORT_CHUNKS_EXPIRE
 )
+from diavgeia_project.settings.constants import IMPORT_CHUNKS_REDIS_DB_NAME
 
 
 class DateTimeEncoder(json.JSONEncoder):
@@ -57,7 +58,7 @@ class RedisDecisionCache:
         """Initialize Redis connection using Django's connection pool"""
         # Reuse Django's connection pool for DB 2 (import_chunks)
         # This prevents connection exhaustion and resource leaks
-        self.redis_client = get_redis_connection("import_chunks")
+        self.redis_client = get_redis_connection(IMPORT_CHUNKS_REDIS_DB_NAME)
         
         logger.debug(
             f"Redis decision cache connected via connection pool "

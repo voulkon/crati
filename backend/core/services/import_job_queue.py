@@ -91,11 +91,36 @@ class ImportJobQueue:
         """
         Check if we can start a new import job immediately.
         
+        Also warns if stale jobs are detected (stuck for >6 hours).
+        
         Returns:
             True if under concurrency limit, False otherwise
         """
         active_count = self.get_active_jobs_count()
         can_start = active_count < self.MAX_CONCURRENT_JOBS
+        
+        # Check for potentially stale jobs (stuck for >6 hours)
+        if active_count > 0:
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            stale_cutoff = timezone.now() - timedelta(hours=6)
+            stale_count = ImportJob.objects.filter(
+                status__in=[
+                    ImportJobStatus.RUNNING,
+                    ImportJobStatus.FETCHING,
+                    ImportJobStatus.PROCESSING,
+                    ImportJobStatus.SPLITTING,
+                ],
+                created_at__lt=stale_cutoff,
+            ).count()
+            
+            if stale_count > 0:
+                logger.warning(
+                    f"ImportJobQueue: {stale_count} potentially stale jobs detected "
+                    f"(stuck for >6 hours). Run 'python manage.py import_queue clear-stale' "
+                    f"to clean them up."
+                )
         
         logger.debug(
             f"ImportJobQueue: Active jobs={active_count}, "
@@ -114,6 +139,7 @@ class ImportJobQueue:
         unit_id: Optional[int] = None,
         signer_id: Optional[int] = None,
         auto_dispatch: bool = True,
+        skip_duplicates: bool = True,
     ) -> ImportJob:
         """
         Create an ImportJob and optionally dispatch it if capacity available.
@@ -126,10 +152,35 @@ class ImportJobQueue:
             unit_id: Optional unit filter
             signer_id: Optional signer filter
             auto_dispatch: If True, dispatch immediately if capacity available
+            skip_duplicates: If True, return existing job instead of creating duplicate
             
         Returns:
-            Created ImportJob instance
+            Created or existing ImportJob instance
         """
+        # Check for duplicate jobs (same date + filters, not yet completed/failed)
+        if skip_duplicates:
+            existing_job = ImportJob.objects.filter(
+                start_date=target_date,
+                end_date=target_date,
+                organization_id=organization_id,
+                unit_id=unit_id,
+                signer_id=signer_id,
+                status__in=[
+                    ImportJobStatus.PENDING,
+                    ImportJobStatus.RUNNING,
+                    ImportJobStatus.FETCHING,
+                    ImportJobStatus.PROCESSING,
+                    ImportJobStatus.SPLITTING,
+                ]
+            ).first()
+            
+            if existing_job:
+                logger.info(
+                    f"ImportJobQueue: Skipping duplicate - Job #{existing_job.id} "
+                    f"already exists for {target_date} (status: {existing_job.status})"
+                )
+                return existing_job
+        
         # Create ImportJob in PENDING state
         job = ImportJob.objects.create(
             start_date=target_date,

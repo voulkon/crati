@@ -101,8 +101,14 @@ class DiavgeiaFetcher:
             or None if the request fails.
         """
         try:
+            # Filter out internal parameters that aren't part of the API
+            # These are used by our code but shouldn't be passed to DiavgeiaClient
+            # TODO: Ideally, these values should be centralized in a constant or config to avoid hardcoding here
+            internal_params = {'force', 'chunk_size', 'job_id'}
+            api_kwargs = {k: v for k, v in kwargs.items() if k not in internal_params}
+            
             # Assuming the client method handles potential errors or returns None/empty on failure
-            raw: SearchResponse | None = self._get_client().search_decisions(**kwargs)  # type: ignore[no-untyped-call]
+            raw: SearchResponse | None = self._get_client().search_decisions(**api_kwargs)  # type: ignore[no-untyped-call]
             if raw and raw.decisions:  # Check if response is valid and has decisions
                 logger.debug(
                     f"Fetched {raw.info.actualSize} decisions (page {raw.info.page}/{raw.info.total // raw.info.size + 1}) for query: {kwargs}"

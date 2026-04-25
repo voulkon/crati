@@ -40,12 +40,13 @@ class StealthModeMiddleware:
         
         # Only enforce in stealth mode and for API endpoints
         if stealth_mode and request.path.startswith('/api/'):
-            # Exempt health check and admin endpoints
-            exempt_prefixes = [
-                '/api/health',
-                '/api/v1/health',
-                '/api/admin',  # Django admin uses traditional auth, not Clerk
-            ]
+            default_exempt_prefixes = ['/api/health', '/api/v1/health', '/api/admin']
+            # Get exempt prefixes from feature flag (allows runtime configuration)
+            exempt_prefixes = feature_flags.get_value('STEALTH_EXEMPT_PREFIXES')
+            
+            # If not configured or empty, use sensible defaults
+            if not exempt_prefixes:
+                exempt_prefixes = default_exempt_prefixes
             
             # Check if path should be exempted (starts with any exempt prefix)
             is_exempt = any(

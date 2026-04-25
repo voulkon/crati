@@ -26,6 +26,8 @@ from django.views.decorators.cache import never_cache
 from admin_custom.sites import admin_site
 
 # Define schema_view FIRST before using it
+# Note: permission_classes defaults to [] which means it will use
+# DEFAULT_PERMISSION_CLASSES from settings, or rely on middleware
 schema_view = get_schema_view(
    openapi.Info(
       title="Crati API",
@@ -34,7 +36,7 @@ schema_view = get_schema_view(
       contact=openapi.Contact(email="contact@crati.app"),
    ),
    public=True,
-   permission_classes=[permissions.AllowAny],
+   # Removed permission_classes - let middleware handle authentication
 )
 
 # Then define your urlpatterns (just once, not twice!)

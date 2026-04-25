@@ -40,7 +40,8 @@ class StealthModeMiddleware:
         
         # Only enforce in stealth mode and for API endpoints
         if stealth_mode and request.path.startswith('/api/'):
-            default_exempt_prefixes = ['/api/health', '/api/v1/health', '/api/admin']
+            # All auth endpoints must be exempt (users can't authenticate if auth is blocked)
+            default_exempt_prefixes = ['/api/health', '/api/v1/health', '/api/admin', '/api/docs', '/api/auth/']
             # Get exempt prefixes from feature flag (allows runtime configuration)
             exempt_prefixes = feature_flags.get_value('STEALTH_EXEMPT_PREFIXES')
             

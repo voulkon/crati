@@ -1,10 +1,8 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .simple_views import public_endpoint, protected_endpoint, check_api_usage
 from .custom_views.document_processing import ProcessDocumentsView
 from .custom_views.import_decisions import calendar_bulk_import
 from .custom_views.task_status import TaskStatusView
-from .admin_views import redis_analytics, export_redis_analytics
 from .views.organization_views import organization_chart_api, organization_chart_api_dev
 from .views import search
 from .views import decisions as decisions_views
@@ -50,9 +48,6 @@ urlpatterns = [
     path("notifications-meta/metadata/popular-decision-types/", popular_decision_types, name="popular_decision_types"),
     
     path("", include(router.urls)),
-    path("public/", public_endpoint, name="public"),
-    path("protected/", protected_endpoint, name="protected"),
-    path("usage/", check_api_usage, name="check_api_usage"),
     
     # Django authentication endpoints (for when Clerk is not configured)
     path("auth/login/", django_login, name="django_login"),

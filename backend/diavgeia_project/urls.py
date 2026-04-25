@@ -26,17 +26,17 @@ from django.views.decorators.cache import never_cache
 from admin_custom.sites import admin_site
 
 # Define schema_view FIRST before using it
-# Note: permission_classes defaults to [] which means it will use
-# DEFAULT_PERMISSION_CLASSES from settings, or rely on middleware
+# Note: API docs should always be publicly accessible
+# If you need to restrict access, add /api/docs/ to stealth mode exempt list
 schema_view = get_schema_view(
-   openapi.Info(
-      title="Crati API",
-      default_version='v1',
-      description="API for searching and processing Greek government decisions",
-      contact=openapi.Contact(email="contact@crati.app"),
-   ),
-   public=True,
-   # Removed permission_classes - let middleware handle authentication
+    openapi.Info(
+        title="Crati API",
+        default_version='v1',
+        description="API for searching and processing Greek government decisions",
+        contact=openapi.Contact(email="contact@crati.app"),
+    ),
+    public=True,
+    permission_classes=[permissions.AllowAny],
 )
 
 # Then define your urlpatterns (just once, not twice!)

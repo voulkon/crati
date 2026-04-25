@@ -262,8 +262,6 @@ services:
       dockerfile: docker/Dockerfile.frontend.prod
       args:
         REACT_APP_CLERK_PUBLISHABLE_KEY: ${REACT_APP_CLERK_PUBLISHABLE_KEY}
-        REACT_APP_STEALTH_MODE: ${REACT_APP_STEALTH_MODE:-false}
-        REACT_APP_STEALTH_ALLOWLIST: ${REACT_APP_STEALTH_ALLOWLIST:-false}
         REACT_APP_API_URL: ${REACT_APP_API_URL}
     networks:
       - diavgeia-net

@@ -20,6 +20,7 @@ import LibrarySidebar from "./components/LibrarySidebar";
 import NotificationSidebar from "./components/NotificationSidebar";
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AuthProvider } from './contexts/AuthContext';
+import { AuthConfigProvider, useAuthConfig } from './contexts/AuthConfigContext';
 import { ConfigProvider } from './contexts/ConfigContext';
 import { TranslationProvider } from './contexts/TranslationContext';
 import { useAllowlistCheck } from './hooks/useAllowlistCheck';
@@ -43,7 +44,7 @@ function AuthenticatedApp({ controlsLayout }) {
   const { getToken, isClerkAuth } = useAuth();
   const { t } = useTranslation(); // OK here - this component is inside TranslationProvider
   const location = useLocation(); // Get current route
-  const stealthAllowlist = process.env.REACT_APP_STEALTH_ALLOWLIST === 'true';
+  const { stealthAllowlist } = useAuthConfig();
   const { isAllowed, isChecking } = useAllowlistCheck();
   
   // Check if we're on the homepage
@@ -226,22 +227,20 @@ function AuthenticatedApp({ controlsLayout }) {
 // Main App component
 function App({ controlsLayout = 'vertical-right' }) {
   // NOTE: Cannot use useTranslation here - this component creates the TranslationProvider
-  
-  // Stealth mode toggle - set REACT_APP_STEALTH_MODE=true to require authentication
-  const stealthMode = process.env.REACT_APP_STEALTH_MODE === 'true';
   const clerkAvailable = isClerkAvailable();
 
   return (
     <TranslationProvider>
       <ThemeProvider>
         <AuthProvider>
-          <ConfigProvider>
-            <AppContent 
-              controlsLayout={controlsLayout} 
-              stealthMode={stealthMode} 
-              clerkAvailable={clerkAvailable}
-            />
-          </ConfigProvider>
+          <AuthConfigProvider>
+            <ConfigProvider>
+              <AppContent 
+                controlsLayout={controlsLayout} 
+                clerkAvailable={clerkAvailable}
+              />
+            </ConfigProvider>
+          </AuthConfigProvider>
         </AuthProvider>
       </ThemeProvider>
     </TranslationProvider>
@@ -249,11 +248,12 @@ function App({ controlsLayout = 'vertical-right' }) {
 }
 
 // Separate component to access auth context
-function AppContent({ controlsLayout, stealthMode, clerkAvailable }) {
+function AppContent({ controlsLayout, clerkAvailable }) {
   const { isLoaded, isSignedIn, isClerkAuth } = useAuth();
+  const { stealthMode, loading: configLoading } = useAuthConfig();
 
-  // Show loading state while checking authentication
-  if (!isLoaded) {
+  // Show loading state while checking authentication or fetching config
+  if (!isLoaded || configLoading) {
     return (
       <div style={{
         display: 'flex',

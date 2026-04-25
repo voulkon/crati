@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from '../contexts/TranslationContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useAuthConfig } from '../contexts/AuthConfigContext';
 import { DateRangeProvider, useDateRange } from '../contexts/DateRangeContext';
 import apiClient from '../api/client';
 import SuperSearch from '../components/SuperSearch';
@@ -168,9 +169,21 @@ const DashboardData = () => {
 const HomePage = () => {
   const { t } = useTranslation();
   const { isSignedIn, isLoaded } = useAuth();
+  const { stealthMode, loading: configLoading } = useAuthConfig();
 
-  // Check if backend requires authentication (stealth mode)
-  const stealthMode = process.env.REACT_APP_STEALTH_MODE === 'true';
+  // Show loading state while checking config
+  if (configLoading) {
+    return (
+      <div className="homepage">
+        <div className="homepage-container">
+          <div className="homepage-loading">
+            <div className="loading-spinner"></div>
+            <p>{t('homepage.loading')}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Show sign-in prompt if stealth mode is enabled and user is not signed in
   if (isLoaded && stealthMode && !isSignedIn) {

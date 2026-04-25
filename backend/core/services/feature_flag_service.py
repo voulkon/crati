@@ -88,22 +88,6 @@ class FeatureFlagService:
             'category': 'data_extraction',
             'requires_restart': False,
         },
-        'REACT_APP_STEALTH_MODE': {
-            'name': 'Frontend Stealth Mode',
-            'description': 'Enable authentication requirements in the React frontend application',
-            'default': False,
-            'env_var': 'REACT_APP_STEALTH_MODE',
-            'category': 'frontend',
-            'requires_restart': True,
-        },
-        'REACT_APP_STEALTH_ALLOWLIST': {
-            'name': 'Frontend Stealth Allowlist',
-            'description': 'Enable allowlist checking in the React frontend',
-            'default': False,
-            'env_var': 'REACT_APP_STEALTH_ALLOWLIST',
-            'category': 'frontend',
-            'requires_restart': True,
-        },
         'TRANSMIT_TO_JAEGER': {
             'name': 'Jaeger Tracing',
             'description': 'Enable OpenTelemetry tracing to Jaeger for distributed tracing. '

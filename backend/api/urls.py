@@ -63,6 +63,7 @@ urlpatterns = [
     
     # System configuration
     path("system/config/", system_views.system_config, name="system_config"),
+    path("system/config/auth/", system_views.auth_config, name="auth_config"),
     
     path('tasks/process/', ProcessDocumentsView.as_view(), name='process-documents'),
     path('tasks/import-decisions/', calendar_bulk_import, name='admin_import_decisions'),

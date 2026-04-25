@@ -20,6 +20,9 @@ from django import forms
 from core.models.feature_flags import FeatureFlag, FeatureFlagAuditLog
 from core.services.feature_flag_service import feature_flags
 from core.models.types import ActType
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 
 class FeatureFlagForm(forms.ModelForm):
@@ -46,6 +49,26 @@ class FeatureFlagForm(forms.ModelForm):
         label="Exempt Path Prefixes"
     )
     
+    # Dynamic fields for STEALTH_ALLOWLIST
+    selected_users = forms.ModelMultipleChoiceField(
+        queryset=User.objects.filter(is_active=True).order_by('email'),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Select existing users to allow access when Stealth Mode is enabled.",
+        label="Select Users"
+    )
+    
+    additional_emails = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'rows': 6,
+            'placeholder': 'Enter one email address per line:\nuser1@example.com\nuser2@example.com',
+            'style': 'font-family: monospace;'
+        }),
+        help_text="Enter additional email addresses (one per line) to allow access. These don't need to be existing users.",
+        label="Additional Email Addresses"
+    )
+    
     class Meta:
         model = FeatureFlag
         fields = '__all__'
@@ -61,6 +84,9 @@ class FeatureFlagForm(forms.ModelForm):
         # Customize checkbox labels to show "UID - Label" format
         self.fields['selected_decision_types'].label_from_instance = lambda obj: f"{obj.uid} - {obj.label}"
         
+        # Customize checkbox labels for users to show email
+        self.fields['selected_users'].label_from_instance = lambda obj: obj.email
+        
         # If this is FILTER_DECISION_TYPES flag and we have list_value, pre-select types
         if self.instance and self.instance.pk and self.instance.key == 'FILTER_DECISION_TYPES':
             if self.instance.list_value:
@@ -74,6 +100,21 @@ class FeatureFlagForm(forms.ModelForm):
                 # Convert list to line-separated text
                 prefixes = self.instance.list_value if isinstance(self.instance.list_value, list) else []
                 self.fields['exempt_path_prefixes'].initial = '\n'.join(prefixes)
+        
+        # If this is STEALTH_ALLOWLIST flag and we have list_value, populate both fields
+        if self.instance and self.instance.pk and self.instance.key == 'STEALTH_ALLOWLIST':
+            if self.instance.list_value:
+                emails = self.instance.list_value if isinstance(self.instance.list_value, list) else []
+                # Separate into existing users and additional emails
+                existing_users = User.objects.filter(email__in=emails, is_active=True)
+                existing_emails = set(existing_users.values_list('email', flat=True))
+                additional = [email for email in emails if email not in existing_emails]
+                
+                # Pre-select existing users
+                self.fields['selected_users'].initial = existing_users
+                # Populate additional emails
+                if additional:
+                    self.fields['additional_emails'].initial = '\n'.join(additional)
         
         # Show/hide fields based on value_type
         if self.instance and self.instance.pk:
@@ -123,6 +164,33 @@ class FeatureFlagForm(forms.ModelForm):
                 if line.strip()
             ]
             cleaned_data['list_value'] = prefixes
+        
+        # For STEALTH_ALLOWLIST, merge selected users and additional emails
+        if cleaned_data.get('key') == 'STEALTH_ALLOWLIST' and value_type == 'list':
+            emails = []
+            
+            # Add emails from selected users
+            selected_users = cleaned_data.get('selected_users', [])
+            emails.extend([user.email for user in selected_users])
+            
+            # Add additional emails from textarea
+            additional_text = cleaned_data.get('additional_emails', '')
+            additional = [
+                line.strip()
+                for line in additional_text.split('\n')
+                if line.strip()
+            ]
+            emails.extend(additional)
+            
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_emails = []
+            for email in emails:
+                if email.lower() not in seen:
+                    seen.add(email.lower())
+                    unique_emails.append(email)
+            
+            cleaned_data['list_value'] = unique_emails
         
         return cleaned_data
 
@@ -186,7 +254,7 @@ class FeatureFlagAdmin(admin.ModelAdmin):
             'fields': ('key', 'name', 'category', 'value_type', 'is_active')
         }),
         ('Value Configuration', {
-            'fields': ('enabled', 'list_value', 'string_value', 'selected_decision_types', 'exempt_path_prefixes'),
+            'fields': ('enabled', 'list_value', 'string_value', 'selected_decision_types', 'exempt_path_prefixes', 'selected_users', 'additional_emails'),
             'description': 'Configure the value based on the value type selected above.'
         }),
         ('Description', {

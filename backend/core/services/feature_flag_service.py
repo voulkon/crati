@@ -43,11 +43,13 @@ class FeatureFlagService:
         },
         'STEALTH_ALLOWLIST': {
             'name': 'Stealth Allowlist',
-            'description': 'When enabled with STEALTH_MODE, only users in AllowedUser table can access the system',
-            'default': False,
-            'env_var': 'STEALTH_ALLOWLIST',
+            'description': 'When enabled with STEALTH_MODE, only users with emails in this list can access the system. '
+                          'Select existing users or add email addresses manually.',
+            'default': [],  # Empty list means no allowlist (all authenticated users allowed)
+            'env_var': '',  # No environment variable for this flag
             'category': 'authentication',
             'requires_restart': False,
+            'value_type': 'list',
         },
         'INDEX_THE_OPENSEARCH': {
             'name': 'Index to OpenSearch',

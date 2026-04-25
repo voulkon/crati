@@ -59,6 +59,10 @@ class NotificationSubscriptionViewSet(viewsets.ModelViewSet):
         Filter queryset to only show current user's subscriptions.
         Optimize with select_related for nested relationships.
         """
+        # Handle schema generation (drf-yasg) with AnonymousUser
+        if not self.request.user or not self.request.user.is_authenticated:
+            return NotificationSubscription.objects.none()
+        
         return NotificationSubscription.objects.filter(
             user=self.request.user
         ).select_related(
@@ -535,6 +539,10 @@ class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
         Apply query parameter filters.
         Optimize with select_related for nested relationships.
         """
+        # Handle schema generation (drf-yasg) with AnonymousUser
+        if not self.request.user or not self.request.user.is_authenticated:
+            return Notification.objects.none()
+        
         queryset = Notification.objects.filter(user=self.request.user)
         
         # Filter by read status
@@ -712,6 +720,10 @@ class NotificationBatchViewSet(viewsets.ReadOnlyModelViewSet):
         Apply query parameter filters.
         Optimize with select_related for nested relationships.
         """
+        # Handle schema generation (drf-yasg) with AnonymousUser
+        if not self.request.user or not self.request.user.is_authenticated:
+            return NotificationBatch.objects.none()
+        
         queryset = NotificationBatch.objects.filter(user=self.request.user)
         
         # Filter by read status

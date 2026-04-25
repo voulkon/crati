@@ -136,6 +136,17 @@ class FeatureFlagService:
             'requires_restart': False,
             'value_type': 'list',
         },
+        'STEALTH_EXEMPT_PREFIXES': {
+            'name': 'Stealth Mode Exempt Paths',
+            'description': 'URL path prefixes that are exempt from stealth mode authentication. '
+                        'Useful for keeping certain endpoints public (e.g., health checks, docs). '
+                        'Default exempts: /api/health, /api/v1/health, /api/admin',
+            'default': ['/api/health', '/api/v1/health', '/api/admin'],
+            'env_var': '',  # No environment variable for this flag
+            'category': 'authentication',
+            'requires_restart': False,
+            'value_type': 'list',
+        },
     }
     
     def __init__(self):

@@ -34,6 +34,18 @@ class FeatureFlagForm(forms.ModelForm):
         label="Decision Types"
     )
     
+    # Dynamic field for path prefixes (only shown for STEALTH_EXEMPT_PREFIXES)
+    exempt_path_prefixes = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'rows': 6,
+            'placeholder': 'Enter one path prefix per line:\n/api/health\n/api/v1/health\n/api/admin',
+            'style': 'font-family: monospace;'
+        }),
+        help_text="Enter one URL path prefix per line. Requests to these paths will be exempt from stealth mode authentication.",
+        label="Exempt Path Prefixes"
+    )
+    
     class Meta:
         model = FeatureFlag
         fields = '__all__'
@@ -56,12 +68,20 @@ class FeatureFlagForm(forms.ModelForm):
                 selected_uids = self.instance.list_value if isinstance(self.instance.list_value, list) else []
                 self.fields['selected_decision_types'].initial = ActType.objects.filter(uid__in=selected_uids)
         
+        # If this is STEALTH_EXEMPT_PREFIXES flag and we have list_value, populate the text field
+        if self.instance and self.instance.pk and self.instance.key == 'STEALTH_EXEMPT_PREFIXES':
+            if self.instance.list_value:
+                # Convert list to line-separated text
+                prefixes = self.instance.list_value if isinstance(self.instance.list_value, list) else []
+                self.fields['exempt_path_prefixes'].initial = '\n'.join(prefixes)
+        
         # Show/hide fields based on value_type
         if self.instance and self.instance.pk:
             if self.instance.value_type == 'boolean':
                 self.fields['list_value'].widget = forms.HiddenInput()
                 self.fields['string_value'].widget = forms.HiddenInput()
                 self.fields['selected_decision_types'].widget = forms.HiddenInput()
+                self.fields['exempt_path_prefixes'].widget = forms.HiddenInput()
             elif self.instance.value_type == 'list':
                 self.fields['enabled'].widget = forms.HiddenInput()
                 self.fields['default_value'].widget = forms.HiddenInput()
@@ -69,12 +89,20 @@ class FeatureFlagForm(forms.ModelForm):
                 if self.instance.key == 'FILTER_DECISION_TYPES':
                     # Hide the raw JSON field, show the checkbox UI instead
                     self.fields['list_value'].widget = forms.HiddenInput()
-                else:
+                    self.fields['exempt_path_prefixes'].widget = forms.HiddenInput()
+                # For STEALTH_EXEMPT_PREFIXES, show the path prefix text field
+                elif self.instance.key == 'STEALTH_EXEMPT_PREFIXES':
+                    self.fields['list_value'].widget = forms.HiddenInput()
                     self.fields['selected_decision_types'].widget = forms.HiddenInput()
+                else:
+                    # For other list-type flags, use the raw JSON field
+                    self.fields['selected_decision_types'].widget = forms.HiddenInput()
+                    self.fields['exempt_path_prefixes'].widget = forms.HiddenInput()
             elif self.instance.value_type == 'string':
                 self.fields['enabled'].widget = forms.HiddenInput()
                 self.fields['list_value'].widget = forms.HiddenInput()
                 self.fields['selected_decision_types'].widget = forms.HiddenInput()
+                self.fields['exempt_path_prefixes'].widget = forms.HiddenInput()
     
     def clean(self):
         cleaned_data = super().clean()
@@ -84,6 +112,17 @@ class FeatureFlagForm(forms.ModelForm):
         if cleaned_data.get('key') == 'FILTER_DECISION_TYPES' and value_type == 'list':
             selected_types = cleaned_data.get('selected_decision_types', [])
             cleaned_data['list_value'] = [act_type.uid for act_type in selected_types]
+        
+        # For STEALTH_EXEMPT_PREFIXES, sync exempt_path_prefixes to list_value
+        if cleaned_data.get('key') == 'STEALTH_EXEMPT_PREFIXES' and value_type == 'list':
+            path_text = cleaned_data.get('exempt_path_prefixes', '')
+            # Split by lines and filter out empty lines
+            prefixes = [
+                line.strip()
+                for line in path_text.split('\n')
+                if line.strip()
+            ]
+            cleaned_data['list_value'] = prefixes
         
         return cleaned_data
 
@@ -147,7 +186,7 @@ class FeatureFlagAdmin(admin.ModelAdmin):
             'fields': ('key', 'name', 'category', 'value_type', 'is_active')
         }),
         ('Value Configuration', {
-            'fields': ('enabled', 'list_value', 'string_value', 'selected_decision_types'),
+            'fields': ('enabled', 'list_value', 'string_value', 'selected_decision_types', 'exempt_path_prefixes'),
             'description': 'Configure the value based on the value type selected above.'
         }),
         ('Description', {

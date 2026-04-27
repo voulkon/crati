@@ -4,6 +4,10 @@ Main API URL Configuration
 This module organizes API URLs into logical groups for better maintainability.
 Each group is in its own file under the api/urls/ directory.
 
+Each URL module declares its own PREFIX constant, which is used by the stealth
+middleware to automatically determine which endpoints should be exempt from
+authentication requirements.
+
 URL Structure:
 - /api/auth/* - Authentication endpoints (exempt from stealth mode)
 - /api/search/* - Search endpoints
@@ -21,28 +25,28 @@ URL Structure:
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
-# Import views
-from api.custom_views.document_processing import ProcessDocumentsView
-from api.custom_views.import_decisions import calendar_bulk_import
-from api.custom_views.task_status import TaskStatusView
+# Import URL modules to get their PREFIX constants (single source of truth)
+from api.urls import (
+    auth,
+    notifications,
+    search,
+    entities,
+    explore,
+    decisions,
+    companies,
+    organizations,
+    direct_assignments,
+    system,
+    tasks,
+)
+
+# Import remaining views not extracted to modules
 from api.views.organization_views import organization_chart_api, organization_chart_api_dev
-from api.views import search, decisions as decisions_views, entities as entities_views, system as system_views
-from api.views.companies.details import company_detail, company_decisions, company_decision_stats
+from api.views import entities as entities_views
 from api.views.summary import amounts as summary_amounts_views
-from api.views.organy import details as details_between_companies_and_orgs
+from api.views.organization_entity_relationships import entity_top_organizations_api
+from api.views.direct_assignments import entity_direct_assignment_top_organizations
 from api.views.tracing_test_views import tracing_test_views
-from api.views.organization_entity_relationships import (
-    organization_top_counterparts_api, 
-    entity_top_organizations_api,
-)
-from api.views.direct_assignments import (
-    organization_direct_assignment_top_recipients,
-    entity_direct_assignment_top_organizations,
-    direct_assignment_top_pairs_global,
-    direct_assignment_top_entities_global,
-    direct_assignment_top_organizations_global,
-    direct_assignment_stats
-)
 from users.views import UserDataViewSet
 
 # Create router for user data
@@ -53,74 +57,34 @@ urlpatterns = [
     # Include router URLs
     path('', include(router.urls)),
     
-    # Authentication endpoints (all under /api/auth/ - exempt from stealth mode)
-    path('auth/', include('api.urls.auth')),
+    # Modular URL includes using PREFIX constants (single source of truth)
+    # The PREFIX from each module is used both here AND in the stealth middleware
+    path(auth.PREFIX, include('api.urls.auth')),
+    path(notifications.PREFIX, include('api.urls.notifications')),
+    path(search.PREFIX, include('api.urls.search')),
+    path(entities.PREFIX, include('api.urls.entities')),
+    path(explore.PREFIX, include('api.urls.explore')),
+    path(decisions.PREFIX, include('api.urls.decisions')),
+    path(companies.PREFIX, include('api.urls.companies')),
+    path(organizations.PREFIX, include('api.urls.organizations')),
+    path(direct_assignments.PREFIX, include('api.urls.direct_assignments')),
+    path(system.PREFIX, include('api.urls.system')),
+    path(tasks.PREFIX, include('api.urls.tasks')),
     
-    # Notification endpoints (all under /api/notifications/)
-    path('notifications/', include('api.urls.notifications')),
-    
-    # Search endpoints (all under /api/search/)
-    path('search/', include('api.urls.search')),
-    
-    # Entity analytics (all under /api/entity/)
-    path('entity/', include('api.urls.entities')),
-    
-    # Temporal exploration (all under /api/explore/)
-    path('explore/', include('api.urls.explore')),
-    
-    # System configuration
-    path('system/config/', system_views.system_config, name='system_config'),
-    path('system/config/auth/', system_views.auth_config, name='auth_config'),
-    
-    # Background tasks
-    path('tasks/process/', ProcessDocumentsView.as_view(), name='process-documents'),
-    path('tasks/import-decisions/', calendar_bulk_import, name='admin_import_decisions'),
-    path('tasks/status/<str:task_id>/', TaskStatusView.as_view(), name='task-status'),
-    
-    # Organization chart
+    # Legacy organization chart endpoints (TODO: consider moving to organizations module)
     path('org-chart-api/', organization_chart_api, name='org-chart-api'),
     path('org-chart-api-dev/', organization_chart_api_dev, name='org-chart-api-dev'),
     
-    # Document content
-    path('decision/<int:decision_id>/content/', search.get_document_content_api_dev, name='decision_content_dev'),
-    
-    # Decision detail endpoints
-    path('decisions/<int:decision_id>/', decisions_views.decision_detail, name='decision_detail'),
-    path('decisions/<int:decision_id>/entities/', decisions_views.decision_entities, name='decision_entities'),
-    path('decisions/<int:decision_id>/related/', decisions_views.decision_related, name='decision_related'),
-    path('decisions/<int:decision_id>/companies/', decisions_views.decision_companies, name='decision-companies'),
-    
-    # Entity endpoints
+    # Legacy entity endpoints (TODO: consider moving to entities module or using /api/entity/ prefix)
     path('entity/afm/<str:afm>/', entities_views.afm_entity_detail, name='afm_entity_detail'),
     path('entity/afm/<str:afm>/decisions/', entities_views.afm_entity_decisions, name='afm_entity_decisions'),
-    
-    # Company endpoints
-    path('companies/<int:company_id>/', company_detail, name='company-detail'),
-    path('companies/<int:company_id>/decisions/', company_decisions, name='company-decisions'),
-    path('companies/<int:company_id>/stats/', company_decision_stats, name='company-decision-stats'),
-    path('companies/<str:afm>/transactions/', summary_amounts_views.company_transactions_summary, name='company-transactions'),
-    
-    # Organization endpoints
-    path('organizations/<str:organization_uid>/expenditures/', summary_amounts_views.organization_expenditures_summary, name='organization-expenditures'),
-    path('organizations/<str:organization_uid>/transactions/', details_between_companies_and_orgs.organization_entity_transactions, name='organization-transactions'),
-    path('organizations/<str:organization_uid>/transactions/<str:afm>/', details_between_companies_and_orgs.organization_entity_transactions, name='organization-entity-transactions'),
-    path('organizations/<str:organization_uid>/top-counterparts/', organization_top_counterparts_api, name='organization_top_counterparts'),
-    path('organizations/<str:organization_uid>/direct-assignments/top-recipients/', organization_direct_assignment_top_recipients, name='org_direct_assignment_top_recipients'),
-    
-    # Entity relationship endpoints
     path('entities/<str:afm>/top-organizations/', entity_top_organizations_api, name='entity_top_organizations'),
     path('entities/<str:afm>/direct-assignments/top-organizations/', entity_direct_assignment_top_organizations, name='entity_direct_assignment_top_orgs'),
     
-    # Direct assignment analytics (global)
-    path('direct-assignments/stats/', direct_assignment_stats, name='direct_assignments_stats'),
-    path('direct-assignments/top-entities/', direct_assignment_top_entities_global, name='direct_assignment_top_entities_global'),
-    path('direct-assignments/top-organizations/', direct_assignment_top_organizations_global, name='direct_assignment_top_organizations_global'),
-    path('direct-assignments/top-pairs/', direct_assignment_top_pairs_global, name='direct_assignment_top_pairs_global'),
-    
-    # Transaction summaries
+    # Transaction summaries (TODO: consider creating a transactions module)
     path('transactions/top/', summary_amounts_views.top_transactions, name='top-transactions'),
     
-    # Debug/tracing endpoints (consider removing in production)
+    # Debug/tracing endpoints (TODO: move to debug module or remove in production)
     path('debug-tracing/test-tracing/', tracing_test_views.test_tracing, name='test-tracing'),
     path('debug-tracing/test-tracing-verbose/', tracing_test_views.test_tracing_verbose, name='test-tracing-verbose'),
     path('debug-tracing/force-export/', tracing_test_views.force_trace_export, name='force-export'),

@@ -3,6 +3,9 @@ Temporal exploration-related URL patterns.
 """
 
 from django.urls import path
+
+# URL prefix for this module
+PREFIX = 'explore/'
 from api.views import search
 from api.views.organization_entity_relationships import temporal_top_relationship_pairs_api
 

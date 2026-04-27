@@ -3,6 +3,9 @@ Search-related URL patterns.
 """
 
 from django.urls import path
+
+# URL prefix for this module
+PREFIX = 'search/'
 from api.views import search
 
 urlpatterns = [

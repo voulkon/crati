@@ -3,6 +3,9 @@ Notifications-related URL patterns.
 """
 
 from django.urls import path, include
+
+# URL prefix for this module
+PREFIX = 'notifications/'
 from rest_framework.routers import DefaultRouter
 from notifications.views import NotificationSubscriptionViewSet, NotificationBatchViewSet
 from notifications.views_metadata import (

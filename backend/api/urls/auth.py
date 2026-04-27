@@ -6,6 +6,9 @@ because they're under the /api/auth/ prefix.
 """
 
 from django.urls import path
+
+# URL prefix for this module - used by stealth middleware for automatic exemption
+PREFIX = 'auth/'
 from api.views.django_auth import (
     register,
     login as django_login,

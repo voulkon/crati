@@ -1,6 +1,5 @@
 import React, { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { SignedIn, SignedOut, RedirectToSignIn } from "@clerk/clerk-react";
 import HomePage from "./pages/HomePage";
 import DevPage from "./pages/OrganizationsPage";
 import EntityDetailPage from "./pages/EntityDetailPage";
@@ -38,6 +37,30 @@ import PasswordResetPage from './pages/PasswordResetPage';
 const isClerkAvailable = () => {
   return !!process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
 };
+
+// Conditional Clerk components - only loaded when available
+let ClerkSignedIn, ClerkSignedOut, ClerkRedirectToSignIn;
+
+if (isClerkAvailable()) {
+  const clerkReact = require("@clerk/clerk-react");
+  ClerkSignedIn = clerkReact.SignedIn;
+  ClerkSignedOut = clerkReact.SignedOut;
+  ClerkRedirectToSignIn = clerkReact.RedirectToSignIn;
+}
+
+// Wrapper component for Clerk authentication
+function ClerkAuthWrapper({ children }) {
+  if (!isClerkAvailable() || !ClerkSignedIn) {
+    return null;
+  }
+  
+  return (
+    <>
+      <ClerkSignedIn>{children}</ClerkSignedIn>
+      <ClerkSignedOut><ClerkRedirectToSignIn /></ClerkSignedOut>
+    </>
+  );
+}
 
 // Separate component to access auth context
 function AuthenticatedApp({ controlsLayout }) {
@@ -283,14 +306,9 @@ function AppContent({ controlsLayout, clerkAvailable }) {
           <>
             {clerkAvailable && isClerkAuth ? (
               // Using Clerk authentication
-              <>
-                <SignedIn>
-                  <AuthenticatedApp controlsLayout={controlsLayout} />
-                </SignedIn>
-                <SignedOut>
-                  <RedirectToSignIn />
-                </SignedOut>
-              </>
+              <ClerkAuthWrapper>
+                <AuthenticatedApp controlsLayout={controlsLayout} />
+              </ClerkAuthWrapper>
             ) : (
               // Using Django authentication - show login page if not signed in
               <>

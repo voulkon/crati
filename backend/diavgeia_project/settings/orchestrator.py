@@ -61,7 +61,7 @@ if USE_CLERK_AUTH:
         logger.warning("Some Clerk features may not work without the secret key.")
         try:
             CLERK_JWT_PUBLIC_KEY = validate_and_format_public_key(raw_clerk_key)
-            logger.info("✓ Clerk authentication configured (public key only)")
+            logger.debug("✓ Clerk authentication configured (public key only)")
         except ValueError as e:
             logger.error(f"Failed to load CLERK_JWT_PUBLIC_KEY: {e}")
             logger.error(
@@ -74,7 +74,7 @@ if USE_CLERK_AUTH:
         # Both env vars present
         try:
             CLERK_JWT_PUBLIC_KEY = validate_and_format_public_key(raw_clerk_key)
-            logger.info("✓ Clerk authentication fully configured")
+            logger.debug("✓ Clerk authentication fully configured")
         except ValueError as e:
             logger.error(f"Failed to load CLERK_JWT_PUBLIC_KEY: {e}")
             logger.error(
@@ -86,7 +86,7 @@ if USE_CLERK_AUTH:
 else:
     # Feature flag disabled - use Django default authentication
     CLERK_JWT_PUBLIC_KEY = None
-    logger.info("ℹ️  Clerk authentication disabled (USE_CLERK_AUTH feature flag is off). Using Django default authentication.")
+    logger.debug("ℹ️  Clerk authentication disabled (USE_CLERK_AUTH feature flag is off). Using Django default authentication.")
 
 # Use the first frontend hostname, or localhost:3000 in debug
 # Auto-derive from frontend domains

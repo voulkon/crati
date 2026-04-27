@@ -8,9 +8,15 @@ from loguru import logger
 
 class ClerkAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
+        # Skip Clerk authentication if feature flag is disabled
+        use_clerk = getattr(settings, 'USE_CLERK_AUTH', False)
+        if not use_clerk:
+            logger.debug("Clerk authentication disabled by feature flag, skipping")
+            return None
+            
         # Skip Clerk authentication if not configured
         if not getattr(settings, 'CLERK_JWT_PUBLIC_KEY', None):
-            logger.debug("Clerk authentication not configured, skipping")
+            logger.warning("Clerk authentication enabled but not configured (missing public key), skipping")
             return None
             
         logger.debug(f"ClerkAuthentication.authenticate called for {request.path}")

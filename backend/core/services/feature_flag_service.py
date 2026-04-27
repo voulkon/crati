@@ -133,6 +133,17 @@ class FeatureFlagService:
             'requires_restart': False,
             'value_type': 'list',
         },
+        'USE_CLERK_AUTH': {
+            'name': 'Use Clerk Authentication',
+            'description': 'Enable Clerk JWT authentication for API endpoints. '
+                          'When enabled, requires CLERK_JWT_PUBLIC_KEY and CLERK_SECRET_KEY environment variables. '
+                          'When disabled, falls back to Django default authentication. '
+                          'Requires service restart to take effect.',
+            'default': False,
+            'env_var': 'USE_CLERK_AUTH',
+            'category': 'authentication',
+            'requires_restart': True,
+        },
     }
     
     def __init__(self):

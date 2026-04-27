@@ -39,26 +39,58 @@ if USE_ORCHESTRATOR_MODE:
 # Clerk Authentication Settings
 # ============================================================================
 
+# Import feature flag service for USE_CLERK_AUTH check
+# Note: This import happens after Django setup, so it's safe to use
+try:
+    from core.services.feature_flag_service import feature_flags
+    USE_CLERK_AUTH = feature_flags.is_enabled('USE_CLERK_AUTH', default=False)
+except Exception as e:
+    # Fallback if feature flags not available yet (e.g., during migrations)
+    logger.warning(f"Could not load USE_CLERK_AUTH feature flag: {e}. Falling back to env var check.")
+    USE_CLERK_AUTH = os.getenv("USE_CLERK_AUTH", "False").lower() == "true"
+
 CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY")
 
-# Only validate Clerk public key if it's provided
-raw_clerk_key = os.getenv("CLERK_JWT_PUBLIC_KEY")
-if raw_clerk_key:
-    try:
-        CLERK_JWT_PUBLIC_KEY = validate_and_format_public_key(raw_clerk_key)
-        logger.info("Clerk authentication configured")
-    except ValueError as e:
-        logger.error(f"Failed to load CLERK_JWT_PUBLIC_KEY: {e}")
-        logger.error(
-            "Please check your environment variable configuration. "
-            "The key should be pasted as-is with actual newlines, not escaped \\n. "
-            "Alternatively, you can paste it as a single line (without the newlines in the middle)."
-        )
-        # Set to None to prevent authentication from silently failing
+# Only configure Clerk if the feature flag is enabled
+if USE_CLERK_AUTH:
+    # Check for required environment variables
+    raw_clerk_key = os.getenv("CLERK_JWT_PUBLIC_KEY")
+    
+    if not raw_clerk_key:
+        logger.error("⚠️  USE_CLERK_AUTH is enabled but CLERK_JWT_PUBLIC_KEY environment variable is missing!")
+        logger.error("Please set CLERK_JWT_PUBLIC_KEY or disable the USE_CLERK_AUTH feature flag.")
         CLERK_JWT_PUBLIC_KEY = None
+    elif not CLERK_SECRET_KEY:
+        logger.warning("⚠️  USE_CLERK_AUTH is enabled but CLERK_SECRET_KEY environment variable is missing!")
+        logger.warning("Some Clerk features may not work without the secret key.")
+        try:
+            CLERK_JWT_PUBLIC_KEY = validate_and_format_public_key(raw_clerk_key)
+            logger.info("✓ Clerk authentication configured (public key only)")
+        except ValueError as e:
+            logger.error(f"Failed to load CLERK_JWT_PUBLIC_KEY: {e}")
+            logger.error(
+                "Please check your environment variable configuration. "
+                "The key should be pasted as-is with actual newlines, not escaped \\n. "
+                "Alternatively, you can paste it as a single line (without the newlines in the middle)."
+            )
+            CLERK_JWT_PUBLIC_KEY = None
+    else:
+        # Both env vars present
+        try:
+            CLERK_JWT_PUBLIC_KEY = validate_and_format_public_key(raw_clerk_key)
+            logger.info("✓ Clerk authentication fully configured")
+        except ValueError as e:
+            logger.error(f"Failed to load CLERK_JWT_PUBLIC_KEY: {e}")
+            logger.error(
+                "Please check your environment variable configuration. "
+                "The key should be pasted as-is with actual newlines, not escaped \\n. "
+                "Alternatively, you can paste it as a single line (without the newlines in the middle)."
+            )
+            CLERK_JWT_PUBLIC_KEY = None
 else:
+    # Feature flag disabled - use Django default authentication
     CLERK_JWT_PUBLIC_KEY = None
-    logger.info("ℹ️  Clerk authentication not configured (missing CLERK_JWT_PUBLIC_KEY). Using Django default authentication.")
+    logger.info("ℹ️  Clerk authentication disabled (USE_CLERK_AUTH feature flag is off). Using Django default authentication.")
 
 # Use the first frontend hostname, or localhost:3000 in debug
 # Auto-derive from frontend domains

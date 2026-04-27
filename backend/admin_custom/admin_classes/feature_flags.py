@@ -276,13 +276,12 @@ class FeatureFlagAdmin(admin.ModelAdmin):
         'status_icon',
         'key',
         'name',
-        'category',
         'enabled_badge',
-        'source_info',
+        'toggle_action',
         'requires_restart_badge',
+        'source_info',
         'last_changed_by',
         'last_checked_display',
-        'toggle_action',
     ]
     
     list_filter = [
@@ -400,7 +399,7 @@ class FeatureFlagAdmin(admin.ModelAdmin):
         return queryset.prefetch_related('audit_logs')
     
     def changelist_view(self, request, extra_context=None):
-        """Override to add initialization prompt when no flags exist."""
+        """Override to add initialization prompt and group flags by category."""
         extra_context = extra_context or {}
         
         # Check if flags need initialization
@@ -411,6 +410,20 @@ class FeatureFlagAdmin(admin.ModelAdmin):
         extra_context['flag_count'] = flag_count
         extra_context['known_flags_count'] = known_flags_count
         extra_context['needs_sync'] = flag_count < known_flags_count
+        
+        # Group flags by category for collapsible sections
+        if flag_count > 0:
+            from collections import OrderedDict
+            flags_by_category = OrderedDict()
+            all_flags = FeatureFlag.objects.filter(is_active=True).order_by('category', 'key')
+            
+            for flag in all_flags:
+                category = flag.get_category_display()
+                if category not in flags_by_category:
+                    flags_by_category[category] = []
+                flags_by_category[category].append(flag)
+            
+            extra_context['flags_by_category'] = flags_by_category
         
         return super().changelist_view(request, extra_context)
     

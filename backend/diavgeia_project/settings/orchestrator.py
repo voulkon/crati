@@ -39,15 +39,11 @@ if USE_ORCHESTRATOR_MODE:
 # Clerk Authentication Settings
 # ============================================================================
 
-# Import feature flag service for USE_CLERK_AUTH check
-# Note: This import happens after Django setup, so it's safe to use
-try:
-    from core.services.feature_flag_service import feature_flags
-    USE_CLERK_AUTH = feature_flags.is_enabled('USE_CLERK_AUTH', default=False)
-except Exception as e:
-    # Fallback if feature flags not available yet (e.g., during migrations)
-    logger.warning(f"Could not load USE_CLERK_AUTH feature flag: {e}. Falling back to env var check.")
-    USE_CLERK_AUTH = os.getenv("USE_CLERK_AUTH", "False").lower() == "true"
+# Note: Settings files load before Django apps are ready, so we cannot use
+# the feature flag service here (it would try to access the database).
+# Instead, we use environment variables directly. The feature flag service
+# can still be used elsewhere in the application once Django is initialized.
+USE_CLERK_AUTH = os.getenv("USE_CLERK_AUTH", "False").lower() == "true"
 
 CLERK_SECRET_KEY = os.getenv("CLERK_SECRET_KEY")
 

@@ -21,6 +21,7 @@ from core.models.feature_flags import FeatureFlag, FeatureFlagAuditLog
 from core.services.feature_flag_service import feature_flags
 from core.models.types import ActType
 from django.contrib.auth import get_user_model
+from api.utils.url_prefixes import get_all_url_module_prefixes, get_default_exempt_prefixes
 
 User = get_user_model()
 
@@ -37,16 +38,27 @@ class FeatureFlagForm(forms.ModelForm):
         label="Decision Types"
     )
     
-    # Dynamic field for path prefixes (only shown for STEALTH_EXEMPT_PREFIXES)
-    exempt_path_prefixes = forms.CharField(
+    # Dynamic field for additional exempt prefixes (only shown for STEALTH_EXEMPT_PREFIXES)
+    selected_exempt_prefixes = forms.MultipleChoiceField(
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text=(
+            "Select additional prefixes to exempt from stealth mode authentication. "
+            "Grayed-out items below are ALWAYS exempt and cannot be changed."
+        ),
+        label="Optional Exempt Prefixes"
+    )
+    
+    # Read-only display of always-exempt prefixes
+    always_exempt_prefixes_display = forms.CharField(
         required=False,
         widget=forms.Textarea(attrs={
             'rows': 6,
-            'placeholder': 'Enter one path prefix per line:\n/api/health\n/api/v1/health\n/api/admin',
-            'style': 'font-family: monospace;'
+            'readonly': 'readonly',
+            'style': 'background-color: #f5f5f5; cursor: not-allowed; font-family: monospace;'
         }),
-        help_text="Enter one URL path prefix per line. Requests to these paths will be exempt from stealth mode authentication.",
-        label="Exempt Path Prefixes"
+        help_text="These endpoints are ALWAYS exempt from stealth mode (cannot be changed to prevent lockout).",
+        label="Always Exempt (Read-Only)"
     )
     
     # Dynamic fields for STEALTH_ALLOWLIST
@@ -87,6 +99,37 @@ class FeatureFlagForm(forms.ModelForm):
         # Customize checkbox labels for users to show email
         self.fields['selected_users'].label_from_instance = lambda obj: obj.email
         
+        # Dynamically populate exempt prefix choices
+        all_prefixes = get_all_url_module_prefixes()
+        default_exempt = get_default_exempt_prefixes()
+        
+        # Build choices: only show prefixes that are NOT always exempt
+        # Format: [(module_name, "module_name - /api/prefix/")]
+        optional_prefixes = [
+            (name, f"{name} - /api/{prefix}")
+            for name, prefix in all_prefixes
+            if prefix not in default_exempt  # Exclude always-exempt prefixes
+        ]
+        self.fields['selected_exempt_prefixes'].choices = optional_prefixes
+        
+        # Populate always-exempt prefixes display
+        always_exempt_display_lines = []
+        for prefix in default_exempt:
+            if prefix == 'health':
+                always_exempt_display_lines.append('/api/health - Monitoring & health checks')
+            elif prefix == 'v1/health':
+                always_exempt_display_lines.append('/api/v1/health - Versioned health check')
+            elif prefix == 'admin':
+                always_exempt_display_lines.append('/api/admin - Admin interface')
+            elif prefix == 'docs':
+                always_exempt_display_lines.append('/api/docs - API documentation')
+            elif prefix.rstrip('/') == 'auth':
+                always_exempt_display_lines.append('/api/auth/ - Authentication (CRITICAL - prevents lockout!)')
+            else:
+                always_exempt_display_lines.append(f'/api/{prefix}')
+        
+        self.fields['always_exempt_prefixes_display'].initial = '\n'.join(always_exempt_display_lines)
+        
         # If this is FILTER_DECISION_TYPES flag and we have list_value, pre-select types
         if self.instance and self.instance.pk and self.instance.key == 'FILTER_DECISION_TYPES':
             if self.instance.list_value:
@@ -94,12 +137,12 @@ class FeatureFlagForm(forms.ModelForm):
                 selected_uids = self.instance.list_value if isinstance(self.instance.list_value, list) else []
                 self.fields['selected_decision_types'].initial = ActType.objects.filter(uid__in=selected_uids)
         
-        # If this is STEALTH_EXEMPT_PREFIXES flag and we have list_value, populate the text field
+        # If this is STEALTH_EXEMPT_PREFIXES flag, pre-select additional exempt prefixes
         if self.instance and self.instance.pk and self.instance.key == 'STEALTH_EXEMPT_PREFIXES':
             if self.instance.list_value:
-                # Convert list to line-separated text
-                prefixes = self.instance.list_value if isinstance(self.instance.list_value, list) else []
-                self.fields['exempt_path_prefixes'].initial = '\n'.join(prefixes)
+                # Pre-select the module names from list_value
+                selected_modules = self.instance.list_value if isinstance(self.instance.list_value, list) else []
+                self.fields['selected_exempt_prefixes'].initial = selected_modules
         
         # If this is STEALTH_ALLOWLIST flag and we have list_value, populate both fields
         if self.instance and self.instance.pk and self.instance.key == 'STEALTH_ALLOWLIST':
@@ -122,7 +165,10 @@ class FeatureFlagForm(forms.ModelForm):
                 self.fields['list_value'].widget = forms.HiddenInput()
                 self.fields['string_value'].widget = forms.HiddenInput()
                 self.fields['selected_decision_types'].widget = forms.HiddenInput()
-                self.fields['exempt_path_prefixes'].widget = forms.HiddenInput()
+                self.fields['selected_exempt_prefixes'].widget = forms.HiddenInput()
+                self.fields['always_exempt_prefixes_display'].widget = forms.HiddenInput()
+                self.fields['selected_users'].widget = forms.HiddenInput()
+                self.fields['additional_emails'].widget = forms.HiddenInput()
             elif self.instance.value_type == 'list':
                 self.fields['enabled'].widget = forms.HiddenInput()
                 self.fields['default_value'].widget = forms.HiddenInput()
@@ -130,20 +176,38 @@ class FeatureFlagForm(forms.ModelForm):
                 if self.instance.key == 'FILTER_DECISION_TYPES':
                     # Hide the raw JSON field, show the checkbox UI instead
                     self.fields['list_value'].widget = forms.HiddenInput()
-                    self.fields['exempt_path_prefixes'].widget = forms.HiddenInput()
-                # For STEALTH_EXEMPT_PREFIXES, show the path prefix text field
+                    self.fields['selected_exempt_prefixes'].widget = forms.HiddenInput()
+                    self.fields['always_exempt_prefixes_display'].widget = forms.HiddenInput()
+                    self.fields['selected_users'].widget = forms.HiddenInput()
+                    self.fields['additional_emails'].widget = forms.HiddenInput()
+                # For STEALTH_EXEMPT_PREFIXES, show the prefix checkboxes
                 elif self.instance.key == 'STEALTH_EXEMPT_PREFIXES':
                     self.fields['list_value'].widget = forms.HiddenInput()
                     self.fields['selected_decision_types'].widget = forms.HiddenInput()
+                    self.fields['selected_users'].widget = forms.HiddenInput()
+                    self.fields['additional_emails'].widget = forms.HiddenInput()
+                    # Show both optional and always-exempt prefixes
+                # For STEALTH_ALLOWLIST, show user selection fields
+                elif self.instance.key == 'STEALTH_ALLOWLIST':
+                    self.fields['list_value'].widget = forms.HiddenInput()
+                    self.fields['selected_decision_types'].widget = forms.HiddenInput()
+                    self.fields['selected_exempt_prefixes'].widget = forms.HiddenInput()
+                    self.fields['always_exempt_prefixes_display'].widget = forms.HiddenInput()
                 else:
                     # For other list-type flags, use the raw JSON field
                     self.fields['selected_decision_types'].widget = forms.HiddenInput()
-                    self.fields['exempt_path_prefixes'].widget = forms.HiddenInput()
+                    self.fields['selected_exempt_prefixes'].widget = forms.HiddenInput()
+                    self.fields['always_exempt_prefixes_display'].widget = forms.HiddenInput()
+                    self.fields['selected_users'].widget = forms.HiddenInput()
+                    self.fields['additional_emails'].widget = forms.HiddenInput()
             elif self.instance.value_type == 'string':
                 self.fields['enabled'].widget = forms.HiddenInput()
                 self.fields['list_value'].widget = forms.HiddenInput()
                 self.fields['selected_decision_types'].widget = forms.HiddenInput()
-                self.fields['exempt_path_prefixes'].widget = forms.HiddenInput()
+                self.fields['selected_exempt_prefixes'].widget = forms.HiddenInput()
+                self.fields['always_exempt_prefixes_display'].widget = forms.HiddenInput()
+                self.fields['selected_users'].widget = forms.HiddenInput()
+                self.fields['additional_emails'].widget = forms.HiddenInput()
     
     def clean(self):
         cleaned_data = super().clean()
@@ -154,16 +218,12 @@ class FeatureFlagForm(forms.ModelForm):
             selected_types = cleaned_data.get('selected_decision_types', [])
             cleaned_data['list_value'] = [act_type.uid for act_type in selected_types]
         
-        # For STEALTH_EXEMPT_PREFIXES, sync exempt_path_prefixes to list_value
+        # For STEALTH_EXEMPT_PREFIXES, sync selected_exempt_prefixes to list_value
         if cleaned_data.get('key') == 'STEALTH_EXEMPT_PREFIXES' and value_type == 'list':
-            path_text = cleaned_data.get('exempt_path_prefixes', '')
-            # Split by lines and filter out empty lines
-            prefixes = [
-                line.strip()
-                for line in path_text.split('\n')
-                if line.strip()
-            ]
-            cleaned_data['list_value'] = prefixes
+            # Store the selected module names (e.g., ['system', 'tasks'])
+            # The middleware will convert these to actual prefixes at runtime
+            selected_modules = cleaned_data.get('selected_exempt_prefixes', [])
+            cleaned_data['list_value'] = list(selected_modules)
         
         # For STEALTH_ALLOWLIST, merge selected users and additional emails
         if cleaned_data.get('key') == 'STEALTH_ALLOWLIST' and value_type == 'list':
@@ -254,7 +314,7 @@ class FeatureFlagAdmin(admin.ModelAdmin):
             'fields': ('key', 'name', 'category', 'value_type', 'is_active')
         }),
         ('Value Configuration', {
-            'fields': ('enabled', 'list_value', 'string_value', 'selected_decision_types', 'exempt_path_prefixes', 'selected_users', 'additional_emails'),
+            'fields': ('enabled', 'list_value', 'string_value', 'selected_decision_types', 'selected_exempt_prefixes', 'always_exempt_prefixes_display', 'selected_users', 'additional_emails'),
             'description': 'Configure the value based on the value type selected above.'
         }),
         ('Description', {

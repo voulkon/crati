@@ -4,8 +4,8 @@ Stealth Mode Middleware
 Enforces authentication on all API endpoints when STEALTH_MODE is enabled.
 Can optionally enforce an allowlist when STEALTH_ALLOWLIST is also enabled.
 
-The middleware automatically imports PREFIX constants from api.urls modules
-to determine which endpoints should be exempt from authentication (e.g., auth endpoints).
+Always exempts critical endpoints (health, admin, docs, auth) from authentication.
+Additional exemptions can be configured via the STEALTH_EXEMPT_PREFIXES feature flag.
 """
 
 from django.conf import settings
@@ -15,34 +15,7 @@ from rest_framework import status
 from rest_framework.request import Request
 from rest_framework.authentication import get_authorization_header
 
-
-def get_url_module_prefixes():
-    """
-    Dynamically import PREFIX constants from api.urls modules.
-    
-    This ensures exempt prefixes stay in sync with the URL structure.
-    If a module doesn't have a PREFIX constant, it's skipped.
-    
-    Returns:
-        list: List of URL prefixes to exempt (e.g., ['auth/', 'system/'])
-    """
-    url_modules_with_exempt_prefixes = [
-        'api.urls.auth',  # Authentication must always be exempt
-        # Add other modules here if they should be exempt
-        # 'api.urls.system',  # Example: system config might be public
-    ]
-    
-    prefixes = []
-    for module_path in url_modules_with_exempt_prefixes:
-        try:
-            module = __import__(module_path, fromlist=['PREFIX'])
-            if hasattr(module, 'PREFIX'):
-                prefixes.append(module.PREFIX)
-        except (ImportError, AttributeError):
-            # Module doesn't exist or doesn't have PREFIX - skip it
-            continue
-    
-    return prefixes
+from api.utils.url_prefixes import get_all_exempt_prefixes
 
 
 class StealthModeMiddleware:
@@ -72,22 +45,9 @@ class StealthModeMiddleware:
         
         # Only enforce in stealth mode and for API endpoints
         if stealth_mode and request.path.startswith('/api/'):
-            # Base exempt prefixes (health, admin, docs)
-            base_exempt_prefixes = ['/api/health', '/api/v1/health', '/api/admin', '/api/docs']
-            
-            # Get module-defined exempt prefixes (e.g., auth/ from api.urls.auth.PREFIX)
-            module_prefixes = get_url_module_prefixes()
-            module_exempt_prefixes = [f'/api/{prefix}' for prefix in module_prefixes]
-            
-            # Combine base and module prefixes
-            default_exempt_prefixes = base_exempt_prefixes + module_exempt_prefixes
-            
-            # Get custom exempt prefixes from feature flag (allows runtime configuration)
-            exempt_prefixes = feature_flags.get_value('STEALTH_EXEMPT_PREFIXES')
-            
-            # If not configured or empty, use sensible defaults
-            if not exempt_prefixes:
-                exempt_prefixes = default_exempt_prefixes
+            # Get all exempt prefixes (defaults + feature flag configured)
+            # This automatically includes: health, admin, docs, auth, and any additional configured
+            exempt_prefixes = get_all_exempt_prefixes()
             
             # Check if path should be exempted (starts with any exempt prefix)
             is_exempt = any(

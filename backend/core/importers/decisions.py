@@ -736,7 +736,7 @@ class DecisionImporter(BaseImporter):
                 skipped_count += 1
                 continue
 
-        logger.info(
+        logger.debug(
             f"Import finished. Processed: {processed_count}. Created: {created_count}. "
             f"Skipped: {skipped_count}."
         )

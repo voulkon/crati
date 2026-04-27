@@ -5,6 +5,7 @@ import math
 from django.conf import settings
 from typing import Dict, Any, List, Optional
 from loguru import logger
+from core.services.feature_flag_service import feature_flags
 
 class OpenSearchService:
     # Class-level connection cache to avoid repeated testing
@@ -19,19 +20,26 @@ class OpenSearchService:
         Args:
             test_connection: If True, force connection test. Otherwise uses cached result.
         """
+        # Check if OpenSearch is enabled via feature flag
+        self.is_enabled = feature_flags.is_enabled('INDEX_THE_OPENSEARCH')
+        
         self.opensearch_url = getattr(settings, 'OPENSEARCH_URL', 'http://opensearch:9200')
+        self.index_name = 'diavgeia-documents'
+        self.max_content_length = 10000
+        self.preview_length = 500
+        
+        # Skip validation and connection testing if OpenSearch is disabled
+        if not self.is_enabled:
+            logger.debug("OpenSearch is disabled via feature flag - skipping initialization")
+            return
         
         # Validate URL has a scheme
         if not self.opensearch_url or not self.opensearch_url.startswith(('http://', 'https://')):
             error_msg = f"Invalid OPENSEARCH_URL: '{self.opensearch_url}'. Must start with http:// or https://"
-            logger.error(f"❌ {error_msg}")
-            logger.error("💡 Check that OPENSEARCH_URL environment variable is set correctly")
+            logger.error(f"{error_msg}")
+            logger.error("Check that OPENSEARCH_URL environment variable is set correctly")
             # Set a safe default to prevent crashes, but service won't work
             self.opensearch_url = 'http://opensearch:9200'
-        
-        self.index_name = 'diavgeia-documents'
-        self.max_content_length = 10000
-        self.preview_length = 500
         
         # Only test connection if explicitly requested or cache expired
         current_time = time.time()
@@ -47,27 +55,27 @@ class OpenSearchService:
             response = requests.get(f"{self.opensearch_url}/_cluster/health", timeout=5)
             if response.status_code == 200:
                 health = response.json()
-                logger.debug(f"✅ OpenSearch connection OK - Status: {health.get('status')}")
+                logger.debug(f"OpenSearch connection OK - Status: {health.get('status')}")
                 
                 # Test if our index exists
                 index_response = requests.get(f"{self.opensearch_url}/{self.index_name}", timeout=5)
                 if index_response.status_code == 200:
-                    logger.debug(f"✅ Index '{self.index_name}' exists")
+                    logger.debug(f"Index '{self.index_name}' exists")
                     
                     # Get document count
                     count_response = requests.get(f"{self.opensearch_url}/{self.index_name}/_count", timeout=5)
                     if count_response.status_code == 200:
                         count_data = count_response.json()
                         doc_count = count_data.get('count', 0)
-                        logger.debug(f"📊 Index contains {doc_count} documents")
+                        logger.debug(f"Index contains {doc_count} documents")
                     else:
-                        logger.warning(f"❌ Could not get document count: {count_response.status_code}")
+                        logger.warning(f"Could not get document count: {count_response.status_code}")
                 else:
-                    logger.warning(f"⚠️ Index '{self.index_name}' does not exist: {index_response.status_code}")
+                    logger.warning(f"Index '{self.index_name}' does not exist: {index_response.status_code}")
             else:
-                logger.error(f"❌ OpenSearch health check failed: {response.status_code}")
+                logger.error(f"OpenSearch health check failed: {response.status_code}")
         except Exception as e:
-            logger.error(f"❌ OpenSearch connection test failed: {e}")
+            logger.error(f"OpenSearch connection test failed: {e}")
     
     def _prepare_content(self, raw_text: str) -> Dict[str, str]:
         """Prepare content with smart truncation"""
@@ -118,6 +126,10 @@ class OpenSearchService:
     
     def index_document(self, document_data: Dict[str, Any]) -> bool:
         """Index a single document with smart content handling"""
+        if not self.is_enabled:
+            logger.debug("OpenSearch is disabled - skipping document indexing")
+            return False
+            
         decision_id = document_data.get('decision_id', 'unknown')
         ada = document_data.get('ada', 'unknown')
         
@@ -136,7 +148,7 @@ class OpenSearchService:
             
             # Log the indexing attempt
             url = f"{self.opensearch_url}/{self.index_name}/_doc/{decision_id}"
-            logger.debug(f"🔍 Attempting to index document {ada} (ID: {decision_id}) to {url}")
+            logger.debug(f"Attempting to index document {ada} (ID: {decision_id}) to {url}")
             
             response = requests.post(
                 url,
@@ -146,11 +158,11 @@ class OpenSearchService:
             )
             
             # Log the raw response for debugging
-            logger.debug(f"📡 OpenSearch response status: {response.status_code}")
-            logger.debug(f"📡 OpenSearch response body: {response.text[:500]}")
+            logger.debug(f"OpenSearch response status: {response.status_code}")
+            logger.debug(f"OpenSearch response body: {response.text[:500]}")
             
             if response.status_code in [200, 201]:
-                logger.info(f"✅ Indexed document {ada} (ID: {decision_id}, {len(content_data['content'])} chars)")
+                logger.info(f"Indexed document {ada} (ID: {decision_id}, {len(content_data['content'])} chars)")
                 
                 # Force index refresh to make document immediately searchable
                 try:
@@ -158,32 +170,35 @@ class OpenSearchService:
                         f"{self.opensearch_url}/{self.index_name}/_refresh",
                         timeout=10
                     )
-                    logger.debug(f"🔄 Index refresh status: {refresh_response.status_code}")
+                    logger.debug(f"Index refresh status: {refresh_response.status_code}")
                 except Exception as refresh_error:
-                    logger.warning(f"⚠️ Index refresh failed (non-critical): {refresh_error}")
+                    logger.warning(f"Index refresh failed (non-critical): {refresh_error}")
                 
                 return True
             else:
                 logger.error(
-                    f"❌ Failed to index document {ada} (ID: {decision_id}): "
+                    f"Failed to index document {ada} (ID: {decision_id}): "
                     f"HTTP {response.status_code} - {response.text[:200]}"
                 )
                 return False
                 
         except requests.exceptions.Timeout as e:
-            logger.error(f"⏱️ Timeout indexing document {ada} (ID: {decision_id}): {e}")
+            logger.error(f"Timeout indexing document {ada} (ID: {decision_id}): {e}")
             return False
         except requests.exceptions.ConnectionError as e:
-            logger.error(f"🔌 Connection error indexing document {ada} (ID: {decision_id}): {e}")
+            logger.error(f"Connection error indexing document {ada} (ID: {decision_id}): {e}")
             return False
         except Exception as e:
-            logger.error(f"💥 Error indexing document {ada} (ID: {decision_id}): {e}", exc_info=True)
+            logger.error(f"Error indexing document {ada} (ID: {decision_id}): {e}", exc_info=True)
             return False
     
     def search_documents(self, query: str, filters: Dict = None, size: int = 10) -> Dict[str, Any]:
         """Enhanced search with filtering"""
+        if not self.is_enabled:
+            logger.debug("OpenSearch is disabled - returning empty search results")
+            return {'hits': {'hits': [], 'total': {'value': 0}}}
         
-        logger.info(f"🔍 OpenSearch search_documents called with query: '{query}', filters: {filters}, size: {size}")
+        logger.info(f"OpenSearch search_documents called with query: '{query}', filters: {filters}, size: {size}")
         
         # Build the search query
         search_body = {
@@ -236,40 +251,40 @@ class OpenSearchService:
             if filter_clauses:
                 search_body["query"]["bool"]["filter"] = filter_clauses
         
-        # logger.debug(f"🔍 Search body: {json.dumps(search_body, indent=2, ensure_ascii=False)}")
+        # logger.debug(f"Search body: {json.dumps(search_body, indent=2, ensure_ascii=False)}")
         
         try:
             url = f"{self.opensearch_url}/{self.index_name}/_search"
-            logger.debug(f"🌐 Making request to: {url}")
+            logger.debug(f"Making request to: {url}")
             
             response = requests.post(url, json=search_body, timeout=10)
             
-            logger.debug(f"📡 Response status: {response.status_code}")
-            logger.debug(f"📡 Response headers: {dict(response.headers)}")
+            logger.debug(f"Response status: {response.status_code}")
+            logger.debug(f"Response headers: {dict(response.headers)}")
             
             if response.status_code == 200:
                 result = response.json()
                 hits = result.get('hits', {}).get('hits', [])
                 total = result.get('hits', {}).get('total', {})
                 
-                logger.info(f"✅ Search successful - Total: {total}, Hits returned: {len(hits)}")
+                logger.info(f"Search successful - Total: {total}, Hits returned: {len(hits)}")
                 
                 if hits:
-                    logger.debug(f"🎯 First hit preview: {hits[0].get('_source', {}).get('title', 'No title')}")
-                    logger.debug(f"🎯 First hit highlights: {hits[0].get('highlight', {})}")
+                    logger.debug(f"First hit preview: {hits[0].get('_source', {}).get('title', 'No title')}")
+                    logger.debug(f"First hit highlights: {hits[0].get('highlight', {})}")
                 else:
-                    logger.warning("⚠️ No hits returned from OpenSearch")
+                    logger.warning("No hits returned from OpenSearch")
                 
                 return result
             else:
                 error_text = response.text
-                logger.error(f"❌ Search failed: {response.status_code} - {error_text}")
+                logger.error(f"Search failed: {response.status_code} - {error_text}")
                 return {"hits": {"hits": []}}
                 
         except Exception as e:
-            logger.error(f"❌ Search error: {e}")
+            logger.error(f"Search error: {e}")
             import traceback
-            logger.error(f"❌ Search error traceback: {traceback.format_exc()}")
+            logger.error(f"Search error traceback: {traceback.format_exc()}")
             return {"hits": {"hits": []}}
     
     def _analyze_text(self, text: str) -> List[str]:
@@ -298,7 +313,7 @@ class OpenSearchService:
     
     def test_simple_search(self, query: str = "test") -> Dict[str, Any]:
         """Simple test search to debug connection"""
-        logger.info(f"🧪 Testing simple search with query: '{query}'")
+        logger.info(f"Testing simple search with query: '{query}'")
         
         # Simple match_all query first
         simple_body = {
@@ -308,16 +323,16 @@ class OpenSearchService:
         
         try:
             url = f"{self.opensearch_url}/{self.index_name}/_search"
-            logger.info(f"🌐 Testing with match_all at: {url}")
+            logger.info(f"Testing with match_all at: {url}")
             
             response = requests.post(url, json=simple_body, timeout=10)
-            logger.info(f"📡 Match_all response status: {response.status_code}")
+            logger.info(f"Match_all response status: {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
                 total = result.get('hits', {}).get('total', {})
                 hits = result.get('hits', {}).get('hits', [])
-                logger.info(f"✅ Match_all successful - Total docs: {total}, Sample: {len(hits)}")
+                logger.info(f"Match_all successful - Total docs: {total}, Sample: {len(hits)}")
                 
                 # Now try the actual search
                 search_body = {
@@ -331,25 +346,25 @@ class OpenSearchService:
                 }
                 
                 search_response = requests.post(url, json=search_body, timeout=10)
-                logger.info(f"📡 Search response status: {search_response.status_code}")
+                logger.info(f"Search response status: {search_response.status_code}")
                 
                 if search_response.status_code == 200:
                     search_result = search_response.json()
                     search_hits = search_result.get('hits', {}).get('hits', [])
-                    logger.info(f"✅ Search successful - Hits: {len(search_hits)}")
+                    logger.info(f"Search successful - Hits: {len(search_hits)}")
                     return search_result
                 else:
-                    logger.error(f"❌ Search failed: {search_response.status_code} - {search_response.text}")
+                    logger.error(f"Search failed: {search_response.status_code} - {search_response.text}")
                     return result  # Return match_all results
                     
             else:
-                logger.error(f"❌ Match_all failed: {response.status_code} - {response.text}")
+                logger.error(f"Match_all failed: {response.status_code} - {response.text}")
                 return {"hits": {"hits": []}}
                 
         except Exception as e:
-            logger.error(f"❌ Test search error: {e}")
+            logger.error(f"Test search error: {e}")
             import traceback
-            logger.error(f"❌ Test search traceback: {traceback.format_exc()}")
+            logger.error(f"Test search traceback: {traceback.format_exc()}")
             return {"hits": {"hits": []}}
     
     def _force_refresh(self):
@@ -357,13 +372,13 @@ class OpenSearchService:
         try:
             response = requests.post(f"{self.opensearch_url}/{self.index_name}/_refresh", timeout=10)
             if response.status_code == 200:
-                logger.info("✅ OpenSearch index refreshed successfully")
+                logger.info("OpenSearch index refreshed successfully")
                 return True
             else:
-                logger.error(f"❌ Failed to refresh index: {response.status_code}")
+                logger.error(f"Failed to refresh index: {response.status_code}")
                 return False
         except Exception as e:
-            logger.error(f"❌ Error refreshing index: {e}")
+            logger.error(f"Error refreshing index: {e}")
             return False
     
     def _test_match_all(self, size=10000):
@@ -436,15 +451,15 @@ class OpenSearchService:
                 timeout=10
             )
             if response.status_code == 200:
-                logger.info(f"✅ S3 repository '{repository_name}' registered successfully")
+                logger.info(f"S3 repository '{repository_name}' registered successfully")
                 return True
             else:
                 error_msg = f"Failed to register S3 repository: {response.text}"
-                logger.error(f"❌ {error_msg}")
+                logger.error(f"{error_msg}")
                 raise Exception(error_msg)
         except requests.exceptions.RequestException as e:
             error_msg = f"Request failed to register S3 repository: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            logger.error(f"{error_msg}")
             raise Exception(error_msg)
 
     def create_snapshot(self, repository_name="s3-backup-repo", snapshot_name=None):
@@ -468,15 +483,15 @@ class OpenSearchService:
                 params={"wait_for_completion": "true"}
             )
             if response.status_code == 200:
-                logger.info(f"✅ Snapshot '{snapshot_name}' created successfully")
+                logger.info(f"Snapshot '{snapshot_name}' created successfully")
                 return {"success": True, "snapshot": snapshot_name}
             else:
                 error_msg = f"Failed to create snapshot: {response.text}"
-                logger.error(f"❌ {error_msg}")
+                logger.error(f"{error_msg}")
                 raise Exception(error_msg)
         except requests.exceptions.RequestException as e:
             error_msg = f"Request failed to create snapshot: {str(e)}"
-            logger.error(f"❌ {error_msg}")
+            logger.error(f"{error_msg}")
             raise Exception(error_msg)
 
     def list_snapshots(self, repository_name="s3-backup-repo"):
@@ -489,10 +504,10 @@ class OpenSearchService:
             if response.status_code == 200:
                 return response.json().get("snapshots", [])
             else:
-                logger.error(f"❌ Failed to list snapshots: {response.text}")
+                logger.error(f"Failed to list snapshots: {response.text}")
                 return []
         except Exception as e:
-            logger.error(f"❌ Failed to list snapshots: {e}")
+            logger.error(f"Failed to list snapshots: {e}")
             return []
 
     def restore_snapshot(self, repository_name="s3-backup-repo", snapshot_name=None):
@@ -516,13 +531,13 @@ class OpenSearchService:
             )
             
             if response.status_code == 200:
-                logger.info(f"✅ Restore from '{snapshot_name}' initiated")
+                logger.info(f"Restore from '{snapshot_name}' initiated")
                 return True
             else:
-                logger.error(f"❌ Failed to restore snapshot: {response.text}")
+                logger.error(f"Failed to restore snapshot: {response.text}")
                 return False
         except Exception as e:
-            logger.error(f"❌ Failed to restore snapshot: {e}")
+            logger.error(f"Failed to restore snapshot: {e}")
             return False
     
     # Health Check and Verification Methods for Decision Pipeline
@@ -532,6 +547,10 @@ class OpenSearchService:
         Comprehensive health check for OpenSearch connectivity and index status.
         Used by the decision health service.
         """
+        if not self.is_enabled:
+            logger.debug("OpenSearch is disabled - health check returning False")
+            return False
+            
         try:
             # Test basic connectivity
             response = requests.get(f"{self.opensearch_url}/_cluster/health", timeout=10)
@@ -572,6 +591,10 @@ class OpenSearchService:
         Check if a document with the given ADA exists in OpenSearch.
         Used by decision health checks to verify indexing.
         """
+        if not self.is_enabled:
+            logger.debug("OpenSearch is disabled - document_exists returning False")
+            return False
+            
         try:
             # Use simple term search for ADA (matching the working dev tools query)
             search_body = {
@@ -622,6 +645,17 @@ class OpenSearchService:
         Returns:
             Dictionary with verification results
         """
+        if not self.is_enabled:
+            logger.debug("OpenSearch is disabled - verify_document_searchability returning negative result")
+            return {
+                'ada': ada,
+                'exists': False,
+                'ada_searchable': False,
+                'content_searchable': False,
+                'test_results': [],
+                'issues': ['OpenSearch is disabled via feature flag']
+            }
+            
         verification_result = {
             'ada': ada,
             'exists': False,

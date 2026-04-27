@@ -130,7 +130,7 @@ class TextExtractionProcessor(BaseDocumentProcessor):
         self.text_preprocessor = TextPreprocessor()
         TextExtractionProcessor._instance_count += 1
         logger.debug(
-            f"📊 TextExtractionProcessor instance #{TextExtractionProcessor._instance_count} created "
+            f"TextExtractionProcessor instance #{TextExtractionProcessor._instance_count} created "
             f"(PID: {os.getpid()})"
         )
         
@@ -140,32 +140,32 @@ class TextExtractionProcessor(BaseDocumentProcessor):
         if feature_flags.is_enabled('LIGHT_WORKER'):
             # Light mode: force PyMuPDF
             self.default_extractor = ProcessingProvider.PYMUPDF
-            logger.info("🪶 LIGHT_WORKER mode: Using PyMuPDF extractor (Docling disabled)")
+            logger.debug("LIGHT_WORKER mode: Using PyMuPDF extractor (Docling disabled)")
         else:
             # Full mode: check DOCUMENT_EXTRACTOR env var for override
             env_extractor = os.getenv('DOCUMENT_EXTRACTOR', '').upper()
             if env_extractor == 'DOCLING':
                 self.default_extractor = ProcessingProvider.DOCLING
-                logger.info("🚀 FULL_WORKER mode: Using DOCLING extractor (from DOCUMENT_EXTRACTOR env var)")
+                logger.debug("FULL_WORKER mode: Using DOCLING extractor (from DOCUMENT_EXTRACTOR env var)")
             elif env_extractor == 'PYMUPDF':
                 self.default_extractor = ProcessingProvider.PYMUPDF
-                logger.info("🚀 FULL_WORKER mode: Using PyMuPDF extractor (from DOCUMENT_EXTRACTOR env var)")
+                logger.debug("FULL_WORKER mode: Using PyMuPDF extractor (from DOCUMENT_EXTRACTOR env var)")
             elif env_extractor:
                 logger.warning(f"⚠️  Unknown DOCUMENT_EXTRACTOR value: {env_extractor}, using default (PyMuPDF)")
             else:
                 # Default in full mode is still PyMuPDF unless explicitly set
-                logger.info("🚀 FULL_WORKER mode: Using PyMuPDF extractor (default)")
+                logger.debug("FULL_WORKER mode: Using PyMuPDF extractor (default)")
     
     def _get_docling_extractor(self):
         """Lazy-load Docling extractor only when needed to avoid heavy initialization"""
         if ProcessingProvider.DOCLING not in self.extractors:
             try:
-                logger.info("⚙️ Lazy-loading Docling extractor (first use)...")
+                logger.info("Lazy-loading Docling extractor (first use)...")
                 self.extractors[ProcessingProvider.DOCLING] = DoclingExtractor()
-                logger.success("✅ Docling extractor loaded successfully")
+                logger.success("Docling extractor loaded successfully")
             except ImportError as e:
-                logger.error(f"❌ Docling not available: {e}")
-                logger.error("💡 Install worker dependencies: poetry install --with worker")
+                logger.error(f"Docling not available: {e}")
+                logger.error("Install worker dependencies: poetry install --with worker")
                 raise RuntimeError("Docling not installed. Use PyMuPDF or install worker group.") from e
         return self.extractors[ProcessingProvider.DOCLING]
 
@@ -186,8 +186,8 @@ class TextExtractionProcessor(BaseDocumentProcessor):
             return False
 
         # Log which file we're starting to process
-        logger.debug(f"🔄 Starting processing for decision {decision.ada}")
-        logger.debug(f"📄 Document URL: {decision.document_url}")
+        logger.debug(f"Starting processing for decision {decision.ada}")
+        logger.debug(f"Document URL: {decision.document_url}")
 
         # Use the specified provider or default
         provider = provider or self.default_extractor
@@ -198,14 +198,14 @@ class TextExtractionProcessor(BaseDocumentProcessor):
             else str(provider)
         )
         
-        logger.debug(f"🔧 Using extraction provider: {provider_name}")
+        logger.debug(f"Using extraction provider: {provider_name}")
         
         # Lazy-load Docling if needed
         if provider == ProcessingProvider.DOCLING:
             try:
                 extractor = self._get_docling_extractor()
             except RuntimeError:
-                logger.warning("⚠️  Falling back to PyMuPDF extractor")
+                logger.warning("Falling back to PyMuPDF extractor")
                 provider = ProcessingProvider.PYMUPDF
                 extractor = self.extractors[ProcessingProvider.PYMUPDF]
         elif provider not in self.extractors:
@@ -222,13 +222,13 @@ class TextExtractionProcessor(BaseDocumentProcessor):
         # If not pending, we've already processed or are processing it
         if not created and extraction.extraction_status != ProcessingStatus.PENDING:
             if extraction.extraction_status == ProcessingStatus.COMPLETED:
-                logger.info(f"✅ Document {decision.ada} already extracted")
+                logger.info(f"Document {decision.ada} already extracted")
                 return True
             elif extraction.extraction_status == ProcessingStatus.CORRUPTED_CONTENT:
-                logger.info(f"⚠️ Document {decision.ada} already marked as corrupted.")
+                logger.info(f"Document {decision.ada} already marked as corrupted.")
                 return True
             elif extraction.extraction_status == ProcessingStatus.PROCESSING:
-                logger.info(f"⏳ Document {decision.ada} is currently being processed")
+                logger.info(f"Document {decision.ada} is currently being processed")
                 return False
 
         # Update status to processing
@@ -239,19 +239,19 @@ class TextExtractionProcessor(BaseDocumentProcessor):
         importer = DocumentExtractionImporter()
 
         # Download the PDF
-        logger.debug(f"⬇️ Downloading PDF for {decision.ada}")
+        logger.debug(f"Downloading PDF for {decision.ada}")
         temp_path, success = self.download_pdf(decision.document_url)
         if not success:
-            logger.error(f"❌ Failed to download PDF for {decision.ada}")
+            logger.error(f"Failed to download PDF for {decision.ada}")
             importer.mark_extraction_failed(extraction, "Failed to download PDF")
             return False
 
-        logger.debug(f"✅ Downloaded PDF to {temp_path}")
+        logger.debug(f"Downloaded PDF to {temp_path}")
 
         try:
             # Start timing the extraction
             start_time = time.time()
-            logger.debug(f"🔍 Starting text extraction for {decision.ada}")
+            logger.debug(f"Starting text extraction for {decision.ada}")
 
             # Extract text using the selected provider (extractor already fetched above)
             result: ExtractionResult = extractor.extract_text(temp_path)
@@ -262,7 +262,7 @@ class TextExtractionProcessor(BaseDocumentProcessor):
             preprocessing_result = None
             
             if raw_extracted_text and not raw_extracted_text.isspace():
-                logger.info(f"🔬 Starting text preprocessing for {decision.ada} (Original length: {len(raw_extracted_text)})")
+                logger.info(f"Starting text preprocessing for {decision.ada} (Original length: {len(raw_extracted_text)})")
                 
                 # Get the Pydantic model from preprocessor
                 preprocessing_result = self.text_preprocessor.preprocess(raw_extracted_text)
@@ -272,25 +272,25 @@ class TextExtractionProcessor(BaseDocumentProcessor):
                 is_corrupted = preprocessing_result.is_corrupted
                 
                 if is_corrupted:
-                    logger.warning(f"⚠️ Content for {decision.ada} detected as potentially corrupted.")
+                    logger.warning(f"Content for {decision.ada} detected as potentially corrupted.")
                     # Log additional corruption details for debugging
                     if preprocessing_result.corruption_indicators:
-                        logger.debug(f"🔍 Corruption indicators: {preprocessing_result.corruption_indicators}")
+                        logger.debug(f"Corruption indicators: {preprocessing_result.corruption_indicators}")
                     if preprocessing_result.confidence_score is not None:
-                        logger.debug(f"🎯 Corruption detection confidence: {preprocessing_result.confidence_score:.3f}")
+                        logger.debug(f"Corruption detection confidence: {preprocessing_result.confidence_score:.3f}")
                 
                 if processed_text != raw_extracted_text:
-                    logger.info(f"🔄 Text preprocessed for {decision.ada}. New length: {len(processed_text)}")
+                    logger.info(f"Text preprocessed for {decision.ada}. New length: {len(processed_text)}")
                 else:
-                    logger.info(f"ℹ️ No significant changes made by text preprocessor for {decision.ada}.")
+                    logger.info(f"No significant changes made by text preprocessor for {decision.ada}.")
                 
                 # Log performance stats if available
                 if preprocessing_result.performance_stats:
                     total_time = preprocessing_result.performance_stats.get('total', 0)
-                    logger.debug(f"⏱️ Preprocessing took {total_time*1000:.1f}ms for {decision.ada}")
+                    logger.debug(f"Preprocessing took {total_time*1000:.1f}ms for {decision.ada}")
                     
             else:
-                logger.warning(f"⚠️ No text extracted or only whitespace from {decision.ada}, skipping preprocessing.")
+                logger.warning(f"No text extracted or only whitespace from {decision.ada}, skipping preprocessing.")
 
             
             # Calculate processing time
@@ -305,17 +305,17 @@ class TextExtractionProcessor(BaseDocumentProcessor):
                 preview_start = final_text_to_log_and_save[:100].strip()
                 preview_end = final_text_to_log_and_save[-100:].strip() if text_length > 100 else ""
                 
-                logger.info(f"✅ Extracted {text_length} characters from {decision.ada} in {processing_time_ms}ms")
-                logger.info(f"📝 Content start: '{preview_start}...'")
+                logger.info(f"Extracted {text_length} characters from {decision.ada} in {processing_time_ms}ms")
+                logger.info(f"Content start: '{preview_start}...'")
                 if preview_end and preview_end != preview_start:
-                    logger.info(f"📝 Content end: '...{preview_end}'")
+                    logger.info(f"Content end: '...{preview_end}'")
                 
                 if result.page_count:
-                    logger.info(f"📄 Document has {result.page_count} pages")
+                    logger.info(f"Document has {result.page_count} pages")
             elif raw_extracted_text:
-                logger.warning(f"⚠️ Text became empty after preprocessing for {decision.ada}. Original text was present.")
+                logger.warning(f"Text became empty after preprocessing for {decision.ada}. Original text was present.")
             else:
-                logger.warning(f"⚠️ No text extracted from {decision.ada}")
+                logger.warning(f"No text extracted from {decision.ada}")
 
             # Create a new ExtractionResult with the processed text for the importer
             final_extraction_result = ExtractionResult(
@@ -335,18 +335,18 @@ class TextExtractionProcessor(BaseDocumentProcessor):
                 preprocessing_result=preprocessing_result if 'preprocessing_result' in locals() else None
             )
 
-            logger.info(f"🎉 Successfully processed {decision.ada}")
+            logger.info(f"Successfully processed {decision.ada}")
             return True
 
         except Exception as e:
-            logger.error(f"❌ Error extracting text from {decision.ada}: {str(e)}")
+            logger.error(f"Error extracting text from {decision.ada}: {str(e)}")
             importer.mark_extraction_failed(extraction, str(e))
             return False
 
         finally:
             # Clean up temp file
             self.cleanup_temp_file(temp_path)
-            logger.debug(f"🧹 Cleaned up temp file for {decision.ada}")
+            logger.debug(f"Cleaned up temp file for {decision.ada}")
 
 
 class DocumentAnalysisService:

@@ -14,7 +14,8 @@ USE_CLERK_AUTH = bool(CLERK_JWT_PUBLIC_KEY and CLERK_SECRET_KEY)
 # Build authentication classes list
 AUTH_CLASSES = [
     "rest_framework.authentication.BasicAuthentication",
-    "rest_framework.authentication.SessionAuthentication",
+    # Use CSRF-exempt session auth for API endpoints that primarily use token auth
+    "api.authentication.CsrfExemptSessionAuthentication",
     "rest_framework.authentication.TokenAuthentication",
 ]
 

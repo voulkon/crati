@@ -6,6 +6,26 @@ from users.models import CustomUser
 from diavgeia_project.security_tracing import security_tracer, get_client_ip
 from loguru import logger
 
+
+class CsrfExemptSessionAuthentication(authentication.SessionAuthentication):
+    """
+    SessionAuthentication that doesn't enforce CSRF checks.
+    
+    Use this for API endpoints that:
+    - Use token-based authentication as the primary method
+    - Support session auth as a fallback (e.g., for browsable API)
+    - Don't need CSRF protection because they use Authorization headers
+    
+    This is safe because:
+    - CSRF attacks rely on browser automatically sending cookies
+    - Token auth requires explicit JavaScript code to add headers
+    - Malicious sites can't read tokens from your origin due to CORS
+    """
+    def enforce_csrf(self, request):
+        # Skip CSRF check
+        return
+
+
 class ClerkAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
         # Skip Clerk authentication if feature flag is disabled

@@ -20,11 +20,13 @@ from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, get_user_model
 from django.conf import settings
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from loguru import logger
 
 User = get_user_model()
 
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register(request):
@@ -117,6 +119,7 @@ def register(request):
         )
 
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def login(request):
@@ -188,6 +191,7 @@ def login(request):
     })
 
 
+@csrf_exempt
 @api_view(['POST'])
 def logout(request):
     """
@@ -211,6 +215,7 @@ def logout(request):
     return Response({'message': 'Logged out successfully'})
 
 
+@csrf_exempt
 @api_view(['POST', 'GET'])
 @permission_classes([AllowAny])
 def verify_email(request):
@@ -305,6 +310,7 @@ def verify_email(request):
         )
 
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def request_password_reset(request):
@@ -390,6 +396,7 @@ def request_password_reset(request):
         )
 
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def reset_password(request):
@@ -483,6 +490,7 @@ def reset_password(request):
         )
 
 
+@csrf_exempt
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def verify_reset_token(request):

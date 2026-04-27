@@ -1,14 +1,19 @@
 from django.contrib import admin, messages
 from django.db.models import Count, Q
-from django.http import HttpResponse
-from django.urls import reverse
+from django.http import HttpResponse, JsonResponse
+from django.urls import reverse, path
 from django.utils.html import format_html
 from django.utils.http import urlencode
 from django.utils.safestring import mark_safe
+from django.shortcuts import render
+from django.utils import timezone
+from datetime import timedelta
 import json
 
 from core.models.decision_health import HealthStatus
+from core.models.import_jobs import ImportJob, ImportJobStatus
 from core.services.pipeline_orchestrator import DecisionPipelineOrchestrator
+from core.services.import_job_queue import ImportJobQueue
 from core.tasks import backfill_health_checks_for_import_job, retry_failed_decisions_for_import_job
 from api.models import APIAnalytics, DailyTraffic, EndpointStats
 
@@ -320,3 +325,201 @@ class ImportJobAdmin(admin.ModelAdmin):
         )
 
     enqueue_retry_failed_decisions.short_description = "Retry ERROR decisions (async)"
+
+    # ========================================================================
+    # Queue Monitoring Features
+    # ========================================================================
+    
+    def get_urls(self):
+        """Add custom URLs for queue monitoring"""
+        urls = super().get_urls()
+        custom_urls = [
+            path('monitor/', self.admin_site.admin_view(self.monitor_view), name='import_job_monitor'),
+            path('queue-status-json/', self.admin_site.admin_view(self.queue_status_json), name='import_job_queue_status_json'),
+            path('clear-stale/', self.admin_site.admin_view(self.clear_stale_action), name='import_job_clear_stale'),
+            path('clear-duplicates/', self.admin_site.admin_view(self.clear_duplicates_action), name='import_job_clear_duplicates'),
+            path('dispatch-next/', self.admin_site.admin_view(self.dispatch_next_action), name='import_job_dispatch_next'),
+        ]
+        return custom_urls + urls
+    
+    def monitor_view(self, request):
+        """Main queue monitoring dashboard view"""
+        queue = ImportJobQueue()
+        status = self._get_enhanced_queue_status(queue)
+        
+        context = {
+            **self.admin_site.each_context(request),
+            'title': 'Import Queue Monitor',
+            'queue_status': status,
+            'opts': self.model._meta,
+        }
+        
+        return render(request, 'admin/import_queue_monitor.html', context)
+    
+    def queue_status_json(self, request):
+        """JSON endpoint for queue status (for AJAX polling)"""
+        queue = ImportJobQueue()
+        status = self._get_enhanced_queue_status(queue)
+        
+        # Convert datetime objects to strings for JSON serialization
+        for job in status['active_jobs']:
+            if not isinstance(job['created_at'], str):
+                job['created_at'] = job['created_at'].isoformat()
+        
+        for job in status['pending_jobs']:
+            if not isinstance(job['created_at'], str):
+                job['created_at'] = job['created_at'].isoformat()
+        
+        for job in status['recent_completed']:
+            if job.get('completed_at') and not isinstance(job['completed_at'], str):
+                job['completed_at'] = job['completed_at'].isoformat()
+            if job.get('created_at') and not isinstance(job['created_at'], str):
+                job['created_at'] = job['created_at'].isoformat()
+        
+        return JsonResponse(status, safe=False)
+    
+    def clear_stale_action(self, request):
+        """Clear stale jobs endpoint"""
+        if request.method == 'POST':
+            max_age_hours = int(request.POST.get('max_age_hours', 1))
+            queue = ImportJobQueue()
+            count = queue.clear_stale_jobs(max_age_hours)
+            
+            if count > 0:
+                # Try to dispatch next job
+                dispatched = queue.dispatch_next_job()
+                msg = f"✓ Marked {count} stale job(s) as failed."
+                if dispatched:
+                    msg += f" Auto-dispatched job #{dispatched.id}."
+                messages.success(request, msg)
+            else:
+                messages.info(request, "No stale jobs found.")
+        
+        return JsonResponse({'success': True, 'count': count if 'count' in locals() else 0})
+    
+    def clear_duplicates_action(self, request):
+        """Clear duplicate jobs endpoint"""
+        if request.method == 'POST':
+            deleted_count = self._clear_duplicate_jobs()
+            
+            if deleted_count > 0:
+                messages.success(request, f"✓ Deleted {deleted_count} duplicate job(s).")
+            else:
+                messages.info(request, "No duplicate jobs found.")
+        
+        return JsonResponse({'success': True, 'count': deleted_count if 'deleted_count' in locals() else 0})
+    
+    def dispatch_next_action(self, request):
+        """Manually dispatch next job endpoint"""
+        if request.method == 'POST':
+            queue = ImportJobQueue()
+            job = queue.dispatch_next_job()
+            
+            if job:
+                messages.success(request, f"✓ Dispatched job #{job.id} for {job.start_date}")
+                return JsonResponse({'success': True, 'job_id': job.id})
+            else:
+                messages.warning(request, "⚠ No job dispatched (at capacity or no pending jobs)")
+                return JsonResponse({'success': False, 'message': 'No job to dispatch'})
+        
+        return JsonResponse({'success': False})
+    
+    def _get_enhanced_queue_status(self, queue):
+        """Get enhanced queue status with additional metrics"""
+        status = queue.get_queue_status()
+        
+        # Add age information to active jobs
+        for job in status['active_jobs']:
+            age = timezone.now() - job['created_at']
+            job['age_hours'] = age.total_seconds() / 3600
+            job['age_display'] = self._format_age(age)
+            job['is_stale'] = job['age_hours'] > 6
+        
+        # Check for stale jobs
+        stale_count = sum(1 for job in status['active_jobs'] if job['is_stale'])
+        status['stale_count'] = stale_count
+        status['has_stale_jobs'] = stale_count > 0
+        
+        # Get recent completed jobs
+        recent_completed = ImportJob.objects.filter(
+            status__in=[ImportJobStatus.COMPLETED, ImportJobStatus.PARTIALLY_COMPLETED, ImportJobStatus.FAILED]
+        ).order_by('-completed_at')[:5]
+        
+        status['recent_completed'] = [
+            {
+                'id': job.id,
+                'start_date': job.start_date,
+                'status': job.status,
+                'total_decisions': job.total_decisions,
+                'completed_at': job.completed_at,
+                'duration': self._format_duration(job.created_at, job.completed_at) if job.completed_at else 'N/A'
+            }
+            for job in recent_completed
+        ]
+        
+        # Add health status
+        status['health_status'] = 'healthy'
+        if status['has_stale_jobs']:
+            status['health_status'] = 'error'
+        elif status['active_count'] == 0 and status['pending_count'] > 0:
+            status['health_status'] = 'warning'
+        
+        return status
+    
+    def _format_age(self, age):
+        """Format timedelta as human-readable string"""
+        hours = age.total_seconds() / 3600
+        if hours < 1:
+            minutes = age.total_seconds() / 60
+            return f"{int(minutes)}m"
+        elif hours < 24:
+            return f"{hours:.1f}h"
+        else:
+            days = hours / 24
+            return f"{days:.1f}d"
+    
+    def _format_duration(self, start, end):
+        """Format duration between two datetimes"""
+        if not end or not start:
+            return 'N/A'
+        duration = end - start
+        return self._format_age(duration)
+    
+    def _clear_duplicate_jobs(self):
+        """Remove duplicate pending/active jobs, keeping the oldest"""
+        pending_and_active = ImportJob.objects.filter(
+            status__in=[
+                ImportJobStatus.PENDING,
+                ImportJobStatus.RUNNING,
+                ImportJobStatus.FETCHING,
+                ImportJobStatus.PROCESSING,
+                ImportJobStatus.SPLITTING,
+            ]
+        ).order_by('start_date', 'organization', 'unit', 'signer', 'created_at')
+        
+        seen = {}
+        deleted_count = 0
+        
+        for job in pending_and_active:
+            key = (
+                job.start_date,
+                job.end_date,
+                job.organization_id,
+                job.unit_id,
+                job.signer_id,
+            )
+            
+            if key not in seen:
+                seen[key] = job
+            else:
+                job.delete()
+                deleted_count += 1
+        
+        return deleted_count
+    
+    def changelist_view(self, request, extra_context=None):
+        """Add queue status to changelist view"""
+        queue = ImportJobQueue()
+        extra_context = extra_context or {}
+        extra_context['queue_status'] = queue.get_queue_status()
+        return super().changelist_view(request, extra_context=extra_context)

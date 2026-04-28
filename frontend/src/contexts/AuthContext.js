@@ -7,6 +7,14 @@ const isClerkAvailable = () => {
   return !!process.env.REACT_APP_CLERK_PUBLISHABLE_KEY;
 };
 
+// Conditionally import Clerk at module level (not inside component)
+let useClerkUser, useClerkAuth;
+if (isClerkAvailable()) {
+  const clerkReact = require('@clerk/clerk-react');
+  useClerkUser = clerkReact.useUser;
+  useClerkAuth = clerkReact.useAuth;
+}
+
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -17,9 +25,8 @@ export const useAuth = () => {
 
 // Clerk-based AuthProvider (when Clerk is configured)
 const ClerkAuthProvider = ({ children }) => {
-  // Dynamically import Clerk hooks only when needed
-  const { useUser, useAuth: useClerkAuth } = require('@clerk/clerk-react');
-  const { user, isSignedIn, isLoaded } = useUser();
+  // Use the hooks imported at module level
+  const { user, isSignedIn, isLoaded } = useClerkUser();
   const { getToken, signOut } = useClerkAuth();
 
   const getAuthToken = async () => {

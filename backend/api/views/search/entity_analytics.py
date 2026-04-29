@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from core.models.organizations import Organization, Signer, Unit
 from core.services.search_analytics_service import SearchAnalyticsService
 from core.services.financial_calculation_service import financial_service
+from core.services.feature_flag_service import feature_flags
 from core.utils.performance_monitoring import monitor_query_performance
 from django.conf import settings
 from django.core.paginator import Paginator
@@ -400,14 +401,19 @@ def entity_decisions_api_dev(request, entity_type, entity_id):
 
         # Apply search filter
         if search_query:
-            from django.contrib.postgres.search import SearchQuery
-
-            search_query_obj = SearchQuery(search_query)
-            decisions_qs = decisions_qs.filter(
+            # Always search by subject and ADA (decision metadata)
+            q_filter = (
                 models.Q(subject__icontains=search_query)
                 | models.Q(ada__icontains=search_query)
-                | models.Q(text_extraction__search_vector=search_query_obj)
-            ).distinct()
+            )
+            
+            # Only search content if PostgreSQL indexing is enabled
+            if feature_flags.is_enabled('INDEX_THE_POSTGRES'):
+                from django.contrib.postgres.search import SearchQuery
+                search_query_obj = SearchQuery(search_query)
+                q_filter |= models.Q(text_extraction__search_vector=search_query_obj)
+            
+            decisions_qs = decisions_qs.filter(q_filter).distinct()
 
         # Apply status filter
         if status_filter:

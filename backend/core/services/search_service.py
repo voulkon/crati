@@ -73,11 +73,22 @@ class SearchService:
         Returns dict with results and metadata
         """
         if not query:
-            return {'results': [], 'count': 0, 'source': 'none'}
+            return {'results': [], 'count': 0, 'source': 'none', 'highlights': {}}
+        
+        # Check if PostgreSQL search is enabled
+        use_postgres_search = feature_flags.is_enabled('INDEX_THE_POSTGRES')
         
         # Skip OpenSearch if disabled, use PostgreSQL directly
         if not feature_flags.is_enabled('INDEX_THE_OPENSEARCH'):
-            logger.info("OpenSearch disabled (INDEX_THE_OPENSEARCH=False), using PostgreSQL fallback")
+            if not use_postgres_search:
+                # Both search methods disabled - return empty result
+                logger.warning(
+                    "Both OpenSearch and PostgreSQL search are disabled. "
+                    "Document content search unavailable. Only entity search is available."
+                )
+                return {'results': [], 'count': 0, 'source': 'none', 'highlights': {}}
+            
+            logger.info("OpenSearch disabled, falling back to PostgreSQL search")
             return self._search_documents_postgresql(
                 query, provider, status, is_scanned, limit
             )
@@ -120,12 +131,20 @@ class SearchService:
                 }
             
         except Exception as e:
-            logger.warning(f"OpenSearch failed, falling back to PostgreSQL: {e}")
+            logger.error(f"OpenSearch search failed: {e}")
         
-        # Fallback to PostgreSQL search
-        return self._search_documents_postgresql(
-            query, provider, status, is_scanned, limit
-        )
+        # Fallback to PostgreSQL search only if enabled
+        if use_postgres_search:
+            logger.info("Falling back to PostgreSQL search")
+            return self._search_documents_postgresql(
+                query, provider, status, is_scanned, limit
+            )
+        else:
+            logger.warning(
+                "PostgreSQL search is disabled - no fallback available from OpenSearch failure. "
+                "Document content search unavailable."
+            )
+            return {'results': [], 'count': 0, 'source': 'none', 'highlights': {}}
     
     def _convert_opensearch_results(
         self, 
@@ -253,7 +272,16 @@ class SearchService:
     ) -> Dict[str, Any]:
         """
         Fallback PostgreSQL search (original implementation)
+        Only called when INDEX_THE_POSTGRES is enabled
         """
+        # Safety check: ensure PostgreSQL search is enabled
+        if not feature_flags.is_enabled('INDEX_THE_POSTGRES'):
+            logger.error(
+                "_search_documents_postgresql called but INDEX_THE_POSTGRES is disabled. "
+                "This should not happen - check search_documents() logic."
+            )
+            return {'results': [], 'count': 0, 'source': 'none', 'highlights': {}}
+        
         # Build the base queryset with filters
         qs = DocumentExtraction.objects.filter(extraction_status=ProcessingStatus.COMPLETED)
         

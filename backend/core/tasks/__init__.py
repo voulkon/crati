@@ -85,6 +85,11 @@ from .tasks_periodic_validation import (
     periodic_validation_task,
 )
 
+from .tasks_db_vacuum import (
+    vacuum_table_task,
+    vacuum_multiple_tables_task,
+)
+
 # This ensures all tasks are available when importing from core.tasks
 __all__ = [
     # Documents
@@ -138,4 +143,6 @@ __all__ = [
     "validate_single_day",
     "update_thresholds_from_analysis",
     "periodic_validation_task",
+    "vacuum_table_task",
+    "vacuum_multiple_tables_task",
 ]

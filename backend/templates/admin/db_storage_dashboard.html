@@ -285,6 +285,228 @@
     .refresh-button:hover {
         background: var(--primary-hover);
     }
+    
+    /* VACUUM Action Buttons */
+    .vacuum-btn {
+        padding: 6px 12px;
+        border: none;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 0.85em;
+        margin-right: 5px;
+        transition: all 0.2s;
+    }
+    
+    .vacuum-btn-quick {
+        background: #4CAF50;
+        color: white;
+    }
+    
+    .vacuum-btn-quick:hover {
+        background: #45a049;
+    }
+    
+    .vacuum-btn-full {
+        background: #ff9800;
+        color: white;
+    }
+    
+    .vacuum-btn-full:hover {
+        background: #e68900;
+    }
+    
+    .vacuum-btn-bulk {
+        padding: 12px 24px;
+        background: #2196F3;
+        color: white;
+        font-size: 1em;
+        margin: 10px 5px;
+    }
+    
+    .vacuum-btn-bulk:hover {
+        background: #0b7dda;
+    }
+    
+    .vacuum-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    
+    /* Modal Styles */
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 10000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0,0,0,0.5);
+    }
+    
+    .modal.active {
+        display: block;
+    }
+    
+    .modal-content {
+        background-color: var(--body-bg);
+        margin: 10% auto;
+        padding: 30px;
+        border: 1px solid var(--hairline-color);
+        border-radius: 8px;
+        width: 90%;
+        max-width: 600px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid var(--hairline-color);
+    }
+    
+    .modal-header h2 {
+        margin: 0;
+        color: var(--body-fg);
+    }
+    
+    .modal-close {
+        font-size: 2em;
+        font-weight: bold;
+        cursor: pointer;
+        color: var(--body-quiet-color);
+        background: none;
+        border: none;
+        padding: 0;
+        line-height: 1;
+    }
+    
+    .modal-close:hover {
+        color: var(--body-fg);
+    }
+    
+    .modal-body {
+        margin-bottom: 25px;
+        color: var(--body-fg);
+    }
+    
+    .modal-body p {
+        line-height: 1.6;
+        margin: 10px 0;
+    }
+    
+    .modal-warning {
+        background: #fff3e0;
+        border-left: 4px solid #ff9800;
+        padding: 15px;
+        margin: 15px 0;
+        border-radius: 4px;
+    }
+    
+    .modal-warning.danger {
+        background: #ffebee;
+        border-left-color: #f44336;
+    }
+    
+    .modal-info {
+        background: #e3f2fd;
+        border-left: 4px solid #2196F3;
+        padding: 15px;
+        margin: 15px 0;
+        border-radius: 4px;
+    }
+    
+    .modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+    
+    .modal-btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1em;
+        transition: all 0.2s;
+    }
+    
+    .modal-btn-cancel {
+        background: var(--close-button-bg);
+        color: var(--body-fg);
+    }
+    
+    .modal-btn-cancel:hover {
+        background: var(--close-button-hover-bg);
+    }
+    
+    .modal-btn-confirm {
+        background: #4CAF50;
+        color: white;
+    }
+    
+    .modal-btn-confirm:hover {
+        background: #45a049;
+    }
+    
+    .modal-btn-confirm.danger {
+        background: #f44336;
+    }
+    
+    .modal-btn-confirm.danger:hover {
+        background: #da190b;
+    }
+    
+    /* Progress/Status Messages */
+    .vacuum-status {
+        padding: 12px 20px;
+        border-radius: 4px;
+        margin: 15px 0;
+        display: none;
+    }
+    
+    .vacuum-status.active {
+        display: block;
+    }
+    
+    .vacuum-status.running {
+        background: #e3f2fd;
+        border-left: 4px solid #2196F3;
+        color: #1565c0;
+    }
+    
+    .vacuum-status.success {
+        background: #e8f5e9;
+        border-left: 4px solid #4CAF50;
+        color: #2e7d32;
+    }
+    
+    .vacuum-status.error {
+        background: #ffebee;
+        border-left: 4px solid #f44336;
+        color: #c62828;
+    }
+    
+    .vacuum-spinner {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 3px solid rgba(0,0,0,0.1);
+        border-top: 3px solid #2196F3;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-right: 8px;
+        vertical-align: middle;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
 </style>
 {% endblock %}
 
@@ -330,6 +552,23 @@
             Showing top 50 tables by size. "Total Size" includes table data, TOAST storage, and all indexes.
         </p>
         
+        <!-- Bulk VACUUM Actions -->
+        <div style="background: var(--darkened-bg); padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+            <h3 style="margin: 0 0 10px 0; color: var(--body-fg);">🔧 Bulk Maintenance</h3>
+            <p style="color: var(--body-quiet-color); margin-bottom: 10px; font-size: 0.9em;">
+                Run VACUUM on all tables with high bloat to reclaim space and improve performance.
+            </p>
+            <button class="vacuum-btn vacuum-btn-bulk" onclick="showBulkVacuumModal('standard')">
+                ⚡ Quick VACUUM All Bloated Tables (>10%)
+            </button>
+            <button class="vacuum-btn vacuum-btn-bulk" style="background: #ff9800;" onclick="showBulkVacuumModal('full')">
+                🔥 VACUUM FULL All Bloated Tables (LOCKS TABLES)
+            </button>
+        </div>
+        
+        <!-- Status message area -->
+        <div id="vacuum-status" class="vacuum-status"></div>
+        
         <table class="data-table">
             <thead>
                 <tr>
@@ -340,6 +579,7 @@
                     <th class="numeric">Row Count</th>
                     <th class="numeric">Dead Rows</th>
                     <th class="numeric">Bloat %</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -373,6 +613,18 @@
                         {% else %}
                             -
                         {% endif %}
+                    </td>
+                    <td>
+                        <button class="vacuum-btn vacuum-btn-quick" 
+                                onclick="showVacuumModal('{{ table.name }}', '{{ table.total_size }}', 'standard')"
+                                {% if table.dead_ratio < 1 %}disabled{% endif %}>
+                            ⚡ Quick
+                        </button>
+                        <button class="vacuum-btn vacuum-btn-full" 
+                                onclick="showVacuumModal('{{ table.name }}', '{{ table.total_size }}', 'full')"
+                                {% if table.dead_ratio < 5 %}disabled{% endif %}>
+                            🔥 Full
+                        </button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -549,7 +801,319 @@
     </div>
 </div>
 
+<!-- VACUUM Confirmation Modal -->
+<div id="vacuumModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Run VACUUM on Table</h2>
+            <button class="modal-close" onclick="closeVacuumModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p><strong>Table:</strong> <span id="modal-table-name"></span></p>
+            <p><strong>Size:</strong> <span id="modal-table-size"></span></p>
+            <p><strong>Operation:</strong> <span id="modal-vacuum-type"></span></p>
+            <p><strong>Estimated Time:</strong> <span id="modal-estimated-time"></span></p>
+            
+            <div id="modal-warning-standard" class="modal-info" style="display: none;">
+                <strong>ℹ️ Quick VACUUM (Recommended)</strong>
+                <p>
+                    • Runs concurrently with normal operations<br>
+                    • Does NOT lock the table<br>
+                    • Marks dead space for reuse (doesn't shrink file)<br>
+                    • Updates query planner statistics<br>
+                    • Safe to run anytime
+                </p>
+            </div>
+            
+            <div id="modal-warning-full" class="modal-warning danger" style="display: none;">
+                <strong>⚠️ VACUUM FULL (Use with caution!)</strong>
+                <p>
+                    • <strong>LOCKS THE ENTIRE TABLE</strong> during operation<br>
+                    • Blocks ALL reads and writes<br>
+                    • Actually shrinks the physical file size<br>
+                    • Can take 10-30+ minutes on large tables<br>
+                    • <strong>Only use during maintenance windows!</strong>
+                </p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="modal-btn modal-btn-cancel" onclick="closeVacuumModal()">Cancel</button>
+            <button id="modal-confirm-btn" class="modal-btn modal-btn-confirm" onclick="confirmVacuum()">
+                Run VACUUM
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk VACUUM Confirmation Modal -->
+<div id="bulkVacuumModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Bulk VACUUM Operation</h2>
+            <button class="modal-close" onclick="closeBulkVacuumModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p><strong>Operation:</strong> <span id="bulk-modal-vacuum-type"></span></p>
+            <p><strong>Target:</strong> All tables with bloat > 10%</p>
+            
+            <div id="bulk-modal-warning-standard" class="modal-info" style="display: none;">
+                <strong>ℹ️ Quick VACUUM (Safe)</strong>
+                <p>
+                    • Runs on each table sequentially<br>
+                    • Does NOT lock tables<br>
+                    • Safe for production use<br>
+                    • May take several minutes depending on number of tables
+                </p>
+            </div>
+            
+            <div id="bulk-modal-warning-full" class="modal-warning danger" style="display: none;">
+                <strong>🚨 VACUUM FULL (DANGEROUS!)</strong>
+                <p>
+                    • <strong>LOCKS EACH TABLE</strong> during processing<br>
+                    • Will block application access to tables being processed<br>
+                    • May take 30+ minutes or hours<br>
+                    • <strong>ONLY use during scheduled maintenance!</strong><br>
+                    • Consider running Quick VACUUM instead
+                </p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="modal-btn modal-btn-cancel" onclick="closeBulkVacuumModal()">Cancel</button>
+            <button id="bulk-modal-confirm-btn" class="modal-btn modal-btn-confirm" onclick="confirmBulkVacuum()">
+                Proceed
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
+// Global state
+let currentVacuumData = {
+    table: '',
+    size: '',
+    type: ''
+};
+
+let currentBulkVacuumType = '';
+
+// CSRF token helper
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+const csrftoken = getCookie('csrftoken');
+
+// Status message helpers
+function showStatus(message, type) {
+    const statusDiv = document.getElementById('vacuum-status');
+    statusDiv.className = 'vacuum-status active ' + type;
+    statusDiv.innerHTML = message;
+    
+    // Auto-hide success messages after 10 seconds
+    if (type === 'success') {
+        setTimeout(() => {
+            statusDiv.className = 'vacuum-status';
+        }, 10000);
+    }
+}
+
+function hideStatus() {
+    const statusDiv = document.getElementById('vacuum-status');
+    statusDiv.className = 'vacuum-status';
+}
+
+// Single table VACUUM modal
+function showVacuumModal(tableName, tableSize, vacuumType) {
+    currentVacuumData = {
+        table: tableName,
+        size: tableSize,
+        type: vacuumType
+    };
+    
+    document.getElementById('modal-table-name').textContent = tableName;
+    document.getElementById('modal-table-size').textContent = tableSize;
+    
+    const isStandard = vacuumType === 'standard';
+    document.getElementById('modal-vacuum-type').textContent = isStandard ? 'Quick VACUUM (non-blocking)' : 'VACUUM FULL (locks table)';
+    
+    // Show appropriate warning
+    document.getElementById('modal-warning-standard').style.display = isStandard ? 'block' : 'none';
+    document.getElementById('modal-warning-full').style.display = isStandard ? 'none' : 'block';
+    
+    // Estimate time (this would ideally come from backend)
+    document.getElementById('modal-estimated-time').textContent = 'Calculating...';
+    
+    // Style confirm button
+    const confirmBtn = document.getElementById('modal-confirm-btn');
+    confirmBtn.className = 'modal-btn modal-btn-confirm' + (isStandard ? '' : ' danger');
+    confirmBtn.textContent = isStandard ? 'Run Quick VACUUM' : 'Run VACUUM FULL';
+    
+    // Show modal
+    document.getElementById('vacuumModal').classList.add('active');
+}
+
+function closeVacuumModal() {
+    document.getElementById('vacuumModal').classList.remove('active');
+}
+
+function confirmVacuum() {
+    closeVacuumModal();
+    
+    showStatus(
+        '<span class="vacuum-spinner"></span> Starting VACUUM on ' + currentVacuumData.table + '...',
+        'running'
+    );
+    
+    // Make AJAX request
+    fetch('/api/admin/db-storage/vacuum/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({
+            table: currentVacuumData.table,
+            vacuum_type: currentVacuumData.type,
+            analyze: true
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'started') {
+            showStatus(
+                '<span class="vacuum-spinner"></span> VACUUM ' + currentVacuumData.type.toUpperCase() + 
+                ' running on ' + data.table + '... (estimated: ' + data.estimated_time + ')',
+                'running'
+            );
+            
+            // Poll for status
+            pollVacuumStatus(data.task_id, data.table);
+        } else {
+            showStatus('❌ Error: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showStatus('❌ Error starting VACUUM: ' + error, 'error');
+    });
+}
+
+// Bulk VACUUM modal
+function showBulkVacuumModal(vacuumType) {
+    currentBulkVacuumType = vacuumType;
+    
+    const isStandard = vacuumType === 'standard';
+    document.getElementById('bulk-modal-vacuum-type').textContent = 
+        isStandard ? 'Quick VACUUM (non-blocking)' : 'VACUUM FULL (locks tables)';
+    
+    // Show appropriate warning
+    document.getElementById('bulk-modal-warning-standard').style.display = isStandard ? 'block' : 'none';
+    document.getElementById('bulk-modal-warning-full').style.display = isStandard ? 'none' : 'block';
+    
+    // Style confirm button
+    const confirmBtn = document.getElementById('bulk-modal-confirm-btn');
+    confirmBtn.className = 'modal-btn modal-btn-confirm' + (isStandard ? '' : ' danger');
+    confirmBtn.textContent = isStandard ? 'Run Quick VACUUM' : 'Run VACUUM FULL';
+    
+    // Show modal
+    document.getElementById('bulkVacuumModal').classList.add('active');
+}
+
+function closeBulkVacuumModal() {
+    document.getElementById('bulkVacuumModal').classList.remove('active');
+}
+
+function confirmBulkVacuum() {
+    closeBulkVacuumModal();
+    
+    showStatus(
+        '<span class="vacuum-spinner"></span> Starting bulk VACUUM operation...',
+        'running'
+    );
+    
+    // Make AJAX request
+    fetch('/api/admin/db-storage/vacuum/bloated/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken
+        },
+        body: JSON.stringify({
+            threshold: 10,
+            vacuum_type: currentBulkVacuumType
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'started') {
+            showStatus(
+                '<span class="vacuum-spinner"></span> Bulk VACUUM running on ' + 
+                data.table_count + ' tables...',
+                'running'
+            );
+            
+            // Poll for status
+            pollVacuumStatus(data.task_id, 'bulk operation (' + data.table_count + ' tables)');
+        } else if (data.status === 'success') {
+            showStatus('ℹ️ ' + data.message, 'success');
+        } else {
+            showStatus('❌ Error: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showStatus('❌ Error starting bulk VACUUM: ' + error, 'error');
+    });
+}
+
+// Poll for task completion
+function pollVacuumStatus(taskId, description) {
+    const pollInterval = setInterval(() => {
+        fetch('/api/admin/db-storage/vacuum/status/' + taskId + '/')
+            .then(response => response.json())
+            .then(data => {
+                if (data.state === 'SUCCESS') {
+                    clearInterval(pollInterval);
+                    const result = data.result;
+                    
+                    if (result.status === 'success') {
+                        showStatus(
+                            '✅ VACUUM completed on ' + description + ' in ' + 
+                            result.duration_seconds + ' seconds',
+                            'success'
+                        );
+                        
+                        // Reload page after 3 seconds to show updated stats
+                        setTimeout(() => window.location.reload(), 3000);
+                    } else {
+                        showStatus('❌ VACUUM failed: ' + result.error, 'error');
+                    }
+                } else if (data.state === 'FAILURE') {
+                    clearInterval(pollInterval);
+                    showStatus('❌ VACUUM task failed: ' + data.error, 'error');
+                } else if (data.state === 'PROGRESS') {
+                    showStatus(
+                        '<span class="vacuum-spinner"></span> ' + data.status,
+                        'running'
+                    );
+                }
+            })
+            .catch(error => {
+                clearInterval(pollInterval);
+                showStatus('❌ Error checking status: ' + error, 'error');
+            });
+    }, 2000); // Poll every 2 seconds
+}
+
 function toggleExpand(element) {
     element.classList.toggle('expanded');
     const content = element.nextElementSibling;

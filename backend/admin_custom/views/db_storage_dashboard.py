@@ -13,7 +13,10 @@ Comprehensive view of PostgreSQL database storage usage:
 from django.shortcuts import render
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db import connection
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 from loguru import logger
+import json
 
 
 @staff_member_required
@@ -309,3 +312,270 @@ def _get_bloat_estimates():
         return {
             'tables': bloat_tables,
         }
+
+
+@staff_member_required
+@require_POST
+def run_vacuum(request):
+    """
+    Handle VACUUM operations via AJAX.
+    
+    POST data:
+        - table: Table name to vacuum
+        - vacuum_type: 'standard' or 'full'
+        - analyze: boolean, whether to include ANALYZE
+    """
+    try:
+        data = json.loads(request.body)
+        table_name = data.get('table')
+        vacuum_type = data.get('vacuum_type', 'standard')
+        analyze = data.get('analyze', True)
+        
+        if not table_name:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Table name is required'
+            }, status=400)
+        
+        # Validate table exists
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT COUNT(*) 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name = %s
+            """, [table_name])
+            
+            if cursor.fetchone()[0] == 0:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Table {table_name} not found'
+                }, status=404)
+        
+        # Import task
+        from backend.core.tasks.tasks_db_vacuum import vacuum_table_task
+        
+        # Get table size for time estimate
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT pg_size_pretty(pg_total_relation_size(%s))
+            """, [f'public.{table_name}'])
+            size = cursor.fetchone()[0]
+        
+        # Launch async task
+        full = (vacuum_type == 'full')
+        task = vacuum_table_task.delay(
+            table_name=f'public.{table_name}',
+            full=full,
+            analyze=analyze
+        )
+        
+        # Estimate time based on size and type
+        estimate = _estimate_vacuum_time(size, full)
+        
+        return JsonResponse({
+            'status': 'started',
+            'task_id': task.id,
+            'table': table_name,
+            'vacuum_type': vacuum_type,
+            'estimated_time': estimate,
+            'message': f'VACUUM {"FULL " if full else ""}started on {table_name}'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Invalid JSON data'
+        }, status=400)
+    except Exception as e:
+        logger.error(f"Error starting VACUUM: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@staff_member_required
+@require_POST
+def run_vacuum_bloated(request):
+    """
+    Run VACUUM on all tables with bloat > threshold.
+    
+    POST data:
+        - threshold: Bloat percentage threshold (default: 10)
+        - vacuum_type: 'standard' or 'full'
+    """
+    try:
+        data = json.loads(request.body)
+        threshold = float(data.get('threshold', 10))
+        vacuum_type = data.get('vacuum_type', 'standard')
+        
+        # Get bloated tables
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    relname as tablename,
+                    round(100.0 * n_dead_tup / GREATEST(n_live_tup, 1), 2) as bloat_pct
+                FROM pg_stat_user_tables
+                WHERE n_live_tup > 0
+                AND n_dead_tup::float / GREATEST(n_live_tup, 1) > %s / 100.0
+                ORDER BY n_dead_tup DESC
+            """, [threshold])
+            
+            bloated_tables = [f'public.{row[0]}' for row in cursor.fetchall()]
+        
+        if not bloated_tables:
+            return JsonResponse({
+                'status': 'success',
+                'message': f'No tables found with bloat > {threshold}%',
+                'count': 0
+            })
+        
+        # Import task
+        from backend.core.tasks.tasks_db_vacuum import vacuum_multiple_tables_task
+        
+        # Launch async task
+        full = (vacuum_type == 'full')
+        task = vacuum_multiple_tables_task.delay(
+            tables=bloated_tables,
+            full=full,
+            analyze=True
+        )
+        
+        return JsonResponse({
+            'status': 'started',
+            'task_id': task.id,
+            'table_count': len(bloated_tables),
+            'tables': bloated_tables,
+            'vacuum_type': vacuum_type,
+            'threshold': threshold,
+            'message': f'Started VACUUM {"FULL " if full else ""}on {len(bloated_tables)} bloated tables'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Invalid JSON data'
+        }, status=400)
+    except Exception as e:
+        logger.error(f"Error starting batch VACUUM: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@staff_member_required
+def vacuum_task_status(request, task_id):
+    """
+    Check the status of a VACUUM task.
+    
+    GET /admin/db-storage/vacuum/status/<task_id>/
+    """
+    from celery.result import AsyncResult
+    
+    try:
+        task = AsyncResult(task_id)
+        
+        if task.state == 'PENDING':
+            response = {
+                'state': task.state,
+                'status': 'Task is pending...'
+            }
+        elif task.state == 'STARTED':
+            response = {
+                'state': task.state,
+                'status': 'Task has started...',
+                **task.info
+            }
+        elif task.state == 'PROGRESS':
+            response = {
+                'state': task.state,
+                **task.info
+            }
+        elif task.state == 'SUCCESS':
+            response = {
+                'state': task.state,
+                'result': task.result
+            }
+        elif task.state == 'FAILURE':
+            response = {
+                'state': task.state,
+                'status': str(task.info),
+                'error': str(task.info)
+            }
+        else:
+            response = {
+                'state': task.state,
+                'status': str(task.info)
+            }
+        
+        return JsonResponse(response)
+        
+    except Exception as e:
+        logger.error(f"Error checking task status: {e}")
+        return JsonResponse({
+            'state': 'ERROR',
+            'error': str(e)
+        }, status=500)
+
+
+def _estimate_vacuum_time(size_str: str, full: bool = False) -> str:
+    """
+    Estimate VACUUM duration based on table size.
+    
+    Args:
+        size_str: Size string like "1234 MB" or "5 GB"
+        full: If True, estimate for VACUUM FULL
+    
+    Returns:
+        Human-readable time estimate
+    """
+    try:
+        # Parse size
+        parts = size_str.split()
+        if len(parts) != 2:
+            return "Unknown"
+        
+        value = float(parts[0])
+        unit = parts[1].upper()
+        
+        # Convert to MB
+        if unit == 'KB':
+            mb = value / 1024
+        elif unit == 'MB':
+            mb = value
+        elif unit == 'GB':
+            mb = value * 1024
+        elif unit == 'TB':
+            mb = value * 1024 * 1024
+        else:
+            return "Unknown"
+        
+        # Estimate based on size
+        if full:
+            # VACUUM FULL is much slower
+            if mb < 100:
+                return "< 1 minute"
+            elif mb < 1000:
+                return "1-5 minutes"
+            elif mb < 5000:
+                return "5-15 minutes"
+            elif mb < 10000:
+                return "15-30 minutes"
+            else:
+                return "30+ minutes (may lock table)"
+        else:
+            # Regular VACUUM is faster
+            if mb < 500:
+                return "< 30 seconds"
+            elif mb < 2000:
+                return "30 seconds - 2 minutes"
+            elif mb < 10000:
+                return "2-10 minutes"
+            else:
+                return "10+ minutes"
+    
+    except Exception:
+        return "Unknown"
+

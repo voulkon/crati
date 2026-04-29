@@ -59,8 +59,11 @@ class CustomAdminSite(admin.AdminSite):
             path("search-management/postgres/", self._wrap_view('search_management', 'postgres_search_dashboard'), name="postgres_search_dashboard"),
             path("search-management/postgres/execute/", self._wrap_view('search_management', 'execute_search_command'), name="execute_search_command"),
             
-            # Database Storage Dashboard URL
+            # Database Storage Dashboard URLs
             path("db-storage/", self._wrap_view('db_storage_dashboard', 'db_storage_dashboard'), name="db_storage_dashboard"),
+            path("db-storage/vacuum/", self._wrap_view('db_storage_dashboard', 'run_vacuum'), name="run_vacuum"),
+            path("db-storage/vacuum/bloated/", self._wrap_view('db_storage_dashboard', 'run_vacuum_bloated'), name="run_vacuum_bloated"),
+            path("db-storage/vacuum/status/<str:task_id>/", self._wrap_view('db_storage_dashboard', 'vacuum_task_status'), name="vacuum_task_status"),
         ]
         return custom_urls + urls
     

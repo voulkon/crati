@@ -22,7 +22,9 @@ export {
     Check as CheckIcon,
     X as XIcon,
     AlertCircle as AlertIcon,
-    Pencil as PencilIcon
+    Pencil as PencilIcon,
+    Boxes as UnitIcon,
+    Store as CompanyIcon
 } from 'lucide-react';
 export { 
     LibraryBig as LibraryToggleIcon, 

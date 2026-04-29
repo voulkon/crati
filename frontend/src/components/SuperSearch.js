@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { streamSearch, getAutocompleteSuggestions, getDefaultSuggestions } from '../api/searchApi';
+import { streamSearch, getDefaultSuggestions } from '../api/searchApi';
+import { OrganizationIcon, UserIcon, UnitIcon, CompanyIcon, FileIcon, SearchIcon, PenIcon } from './Icons.js';
 import './SuperSearch.css';
 
 const SuperSearch = ({ 
@@ -15,7 +16,6 @@ const SuperSearch = ({
   const [isLoading, setIsLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
-  const [autocompleteResults, setAutocompleteResults] = useState([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   
   const navigate = useNavigate();
@@ -23,6 +23,7 @@ const SuperSearch = ({
   const resultsRef = useRef(null);
   const searchTimeoutRef = useRef(null);
   const sseCleanupRef = useRef(null);
+  const currentResultsRef = useRef(null);
   
   // Auto focus if requested
   useEffect(() => {
@@ -40,28 +41,16 @@ const SuperSearch = ({
     };
   }, []);
 
-  // Fetch autocomplete suggestions for Greek administrative terms
-  const fetchAutocompleteSuggestions = useCallback(async (searchQuery) => {
-    if (!searchQuery.trim() || searchQuery.length < 2) {
-      setAutocompleteResults([]);
-      return;
-    }
-
-    try {
-      const suggestions = await getAutocompleteSuggestions(searchQuery);
-      setAutocompleteResults(suggestions.suggestions || []);
-    } catch (error) {
-      console.error('Failed to fetch autocomplete suggestions:', error);
-      setAutocompleteResults([]);
-    }
-  }, []);
+  // Keep ref in sync with results state
+  useEffect(() => {
+    currentResultsRef.current = results;
+  }, [results]);
 
   // Debounced search function using SSE
   const performSearch = useCallback(async (searchQuery) => {
     if (!searchQuery.trim()) {
       setResults(null);
       setShowResults(false);
-      setAutocompleteResults([]);
       return;
     }
 
@@ -73,9 +62,6 @@ const SuperSearch = ({
 
     setIsLoading(true);
     setDocumentsLoading(false);
-    
-    // Fetch autocomplete suggestions in parallel
-    fetchAutocompleteSuggestions(searchQuery);
 
     try {
       // Start SSE streaming search
@@ -141,7 +127,7 @@ const SuperSearch = ({
           sseCleanupRef.current = null;
           
           // Show error state but don't hide existing results
-          if (!results) {
+          if (!currentResultsRef.current) {
             setResults({
               query: searchQuery,
               results: {},
@@ -162,7 +148,7 @@ const SuperSearch = ({
       setResults(null);
       setShowResults(false);
     }
-  }, [showFullResults, fetchAutocompleteSuggestions]);
+  }, [showFullResults]);
 
   // Handle input changes with debouncing
   const handleInputChange = (e) => {
@@ -241,6 +227,10 @@ const SuperSearch = ({
         setSelectedIndex(-1);
         inputRef.current?.blur();
         break;
+        
+      default:
+        // Let other keys behave normally
+        break;
     }
   };
 
@@ -314,15 +304,16 @@ const SuperSearch = ({
 
   // Get icon for item type
   const getItemIcon = (type) => {
+    const iconProps = { size: 16 };
     const icons = {
-      organization: '🏢',
-      signer: '👤',
-      unit: '🏛️',
-      company: '🏪',
-      company_person: '👨‍💼',
-      document: '📄'
+      organization: <OrganizationIcon {...iconProps} />,
+      signer: <PenIcon {...iconProps} />,
+      unit: <UnitIcon {...iconProps} />,
+      company: <CompanyIcon {...iconProps} />,
+      company_person: <UserIcon {...iconProps} />,
+      document: <FileIcon {...iconProps} />
     };
-    return icons[type] || '📋';
+    return icons[type] || <FileIcon {...iconProps} />;
   };
 
   // Get category display name
@@ -415,7 +406,7 @@ const SuperSearch = ({
   return (
     <div className={`super-search-container ${className}`}>
       <div className="super-search-input-wrapper">
-        <span className="super-search-icon">🔍</span>
+        <SearchIcon size={18} className="super-search-icon" />
         <input
           ref={inputRef}
           type="text"

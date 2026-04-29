@@ -54,6 +54,13 @@ class CustomAdminSite(admin.AdminSite):
             path("search-suggestions/<int:pk>/toggle/", self._wrap_view('search_suggestions', 'toggle_search_suggestion'), name="toggle_search_suggestion"),
             path("search-suggestions/<int:pk>/move-up/", self._wrap_view('search_suggestions', 'move_suggestion_up'), name="move_suggestion_up"),
             path("search-suggestions/<int:pk>/move-down/", self._wrap_view('search_suggestions', 'move_suggestion_down'), name="move_suggestion_down"),
+            
+            # PostgreSQL Search Management URLs
+            path("search-management/postgres/", self._wrap_view('search_management', 'postgres_search_dashboard'), name="postgres_search_dashboard"),
+            path("search-management/postgres/execute/", self._wrap_view('search_management', 'execute_search_command'), name="execute_search_command"),
+            
+            # Database Storage Dashboard URL
+            path("db-storage/", self._wrap_view('db_storage_dashboard', 'db_storage_dashboard'), name="db_storage_dashboard"),
         ]
         return custom_urls + urls
     
@@ -101,6 +108,26 @@ class CustomAdminSite(admin.AdminSite):
             ],
         }
         app_list.append(search_ux_app)
+        
+        # Add Search Infrastructure Management section
+        search_infra_app = {
+            "name": "Search Infrastructure",
+            "app_label": "search_infrastructure",
+            "models": [
+                {"name": "PostgreSQL Search Management", "object_name": "PostgresSearchDashboard", "admin_url": "/api/admin/search-management/postgres/", "view_only": True},
+            ],
+        }
+        app_list.append(search_infra_app)
+        
+        # Add Database Management section
+        db_management_app = {
+            "name": "Database Management",
+            "app_label": "database_management",
+            "models": [
+                {"name": "Storage Dashboard", "object_name": "DatabaseStorageDashboard", "admin_url": "/api/admin/db-storage/", "view_only": True},
+            ],
+        }
+        app_list.append(db_management_app)
 
         # Add custom Organization Tools section
         org_tools_app = {

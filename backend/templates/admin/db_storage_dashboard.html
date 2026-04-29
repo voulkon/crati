@@ -1,0 +1,559 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .storage-dashboard {
+        padding: 20px;
+        max-width: 1600px;
+    }
+    
+    /* Header Section */
+    .dashboard-header {
+        margin-bottom: 30px;
+    }
+    
+    .dashboard-header h1 {
+        margin: 0 0 10px 0;
+        color: var(--body-fg);
+    }
+    
+    .dashboard-header p {
+        color: var(--body-quiet-color);
+        margin: 0;
+    }
+    
+    /* Overview Stats */
+    .overview-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+    
+    .overview-card {
+        background: var(--body-bg);
+        padding: 20px;
+        border-radius: 4px;
+        border: 1px solid var(--hairline-color);
+        border-left: 4px solid var(--primary);
+    }
+    
+    .overview-card.warning {
+        border-left-color: #ff9800;
+    }
+    
+    .overview-label {
+        font-size: 0.9em;
+        color: var(--body-quiet-color);
+        margin-bottom: 8px;
+        display: block;
+    }
+    
+    .overview-value {
+        font-size: 2em;
+        font-weight: bold;
+        color: var(--body-fg);
+        display: block;
+    }
+    
+    .overview-subtext {
+        font-size: 0.85em;
+        color: var(--body-quiet-color);
+        margin-top: 5px;
+    }
+    
+    /* Section Styles */
+    .storage-section {
+        background: var(--body-bg);
+        padding: 25px;
+        border-radius: 4px;
+        border: 1px solid var(--hairline-color);
+        margin-bottom: 30px;
+    }
+    
+    .storage-section h2 {
+        margin: 0 0 20px 0;
+        color: var(--body-fg);
+        font-size: 1.5em;
+        border-bottom: 1px solid var(--hairline-color);
+        padding-bottom: 10px;
+    }
+    
+    /* Data Table Styles */
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+        background: var(--body-bg);
+    }
+    
+    .data-table thead {
+        background: var(--darkened-bg);
+        border-bottom: 2px solid var(--hairline-color);
+    }
+    
+    .data-table th {
+        padding: 12px 15px;
+        text-align: left;
+        font-weight: 600;
+        color: var(--body-fg);
+        font-size: 0.9em;
+        text-transform: uppercase;
+    }
+    
+    .data-table td {
+        padding: 12px 15px;
+        border-bottom: 1px solid var(--hairline-color);
+        color: var(--body-fg);
+    }
+    
+    .data-table tr:hover {
+        background: var(--darkened-bg);
+    }
+    
+    .data-table .numeric {
+        text-align: right;
+        font-family: 'Monaco', 'Courier New', monospace;
+    }
+    
+    .data-table .table-name {
+        font-weight: 600;
+        color: var(--link-fg);
+    }
+    
+    /* Badges */
+    .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 3px;
+        font-size: 0.85em;
+        font-weight: bold;
+    }
+    
+    .badge.success {
+        background: #e8f5e9;
+        color: #2e7d32;
+    }
+    
+    .badge.warning {
+        background: #fff3e0;
+        color: #e65100;
+    }
+    
+    .badge.danger {
+        background: #ffebee;
+        color: #c62828;
+    }
+    
+    .badge.info {
+        background: #e3f2fd;
+        color: #1565c0;
+    }
+    
+    /* Progress Bars */
+    .progress-bar-mini {
+        width: 60px;
+        height: 8px;
+        background: var(--darkened-bg);
+        border-radius: 4px;
+        overflow: hidden;
+        display: inline-block;
+        vertical-align: middle;
+        margin-left: 5px;
+    }
+    
+    .progress-bar-mini-fill {
+        height: 100%;
+        background: #4CAF50;
+    }
+    
+    .progress-bar-mini-fill.warning {
+        background: #ff9800;
+    }
+    
+    .progress-bar-mini-fill.danger {
+        background: #f44336;
+    }
+    
+    /* Expandable Details */
+    .expandable-section {
+        margin-top: 15px;
+    }
+    
+    .expand-toggle {
+        cursor: pointer;
+        padding: 10px 15px;
+        background: var(--darkened-bg);
+        border-radius: 4px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+        border: 1px solid var(--hairline-color);
+    }
+    
+    .expand-toggle:hover {
+        background: var(--close-button-hover-bg);
+    }
+    
+    .expand-toggle-icon {
+        transition: transform 0.3s;
+    }
+    
+    .expand-toggle.expanded .expand-toggle-icon {
+        transform: rotate(180deg);
+    }
+    
+    .expand-content {
+        display: none;
+        padding: 15px;
+        background: var(--darkened-bg);
+        border-radius: 4px;
+        margin-bottom: 10px;
+    }
+    
+    .expand-content.shown {
+        display: block;
+    }
+    
+    /* Column Stats Grid */
+    .column-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 15px;
+        margin-top: 10px;
+    }
+    
+    .column-card {
+        padding: 15px;
+        background: var(--body-bg);
+        border-radius: 4px;
+        border: 1px solid var(--hairline-color);
+    }
+    
+    .column-card-header {
+        font-weight: bold;
+        color: var(--body-fg);
+        margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .column-card-type {
+        font-size: 0.85em;
+        color: var(--body-quiet-color);
+        font-family: monospace;
+    }
+    
+    .column-card-stats {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--hairline-color);
+    }
+    
+    .column-stat-row {
+        display: flex;
+        justify-content: space-between;
+        margin: 5px 0;
+        font-size: 0.9em;
+    }
+    
+    .column-stat-label {
+        color: var(--body-quiet-color);
+    }
+    
+    .column-stat-value {
+        font-weight: 500;
+        font-family: monospace;
+    }
+    
+    /* Refresh Button */
+    .refresh-button {
+        padding: 10px 20px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 1em;
+        float: right;
+    }
+    
+    .refresh-button:hover {
+        background: var(--primary-hover);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="storage-dashboard">
+    <div class="dashboard-header">
+        <h1>Database Storage Dashboard</h1>
+        <p>Comprehensive view of PostgreSQL database storage usage, table sizes, and statistics</p>
+        <button class="refresh-button" onclick="window.location.reload()">🔄 Refresh</button>
+    </div>
+    
+    <!-- Database Overview -->
+    <div class="overview-grid">
+        <div class="overview-card">
+            <span class="overview-label">Database Size</span>
+            <span class="overview-value">{{ db_stats.total_size }}</span>
+            <span class="overview-subtext">{{ db_stats.database_name }}</span>
+        </div>
+        
+        <div class="overview-card">
+            <span class="overview-label">Total Tables</span>
+            <span class="overview-value">{{ db_stats.table_count }}</span>
+            <span class="overview-subtext">in public schema</span>
+        </div>
+        
+        <div class="overview-card">
+            <span class="overview-label">Total Indexes</span>
+            <span class="overview-value">{{ db_stats.index_count }}</span>
+            <span class="overview-subtext">{{ db_stats.total_index_size }}</span>
+        </div>
+        
+        <div class="overview-card {% if db_stats.dead_rows > 10000 %}warning{% endif %}">
+            <span class="overview-label">Total Rows</span>
+            <span class="overview-value">{{ db_stats.total_rows|floatformat:0 }}</span>
+            <span class="overview-subtext">{{ db_stats.dead_rows|floatformat:0 }} dead rows</span>
+        </div>
+    </div>
+    
+    <!-- Table Statistics -->
+    <div class="storage-section">
+        <h2>Table Storage Statistics</h2>
+        <p style="color: var(--body-quiet-color); margin-bottom: 15px;">
+            Showing top 50 tables by size. "Total Size" includes table data, TOAST storage, and all indexes.
+        </p>
+        
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Table</th>
+                    <th class="numeric">Total Size</th>
+                    <th class="numeric">Table Data</th>
+                    <th class="numeric">External (TOAST + Indexes)</th>
+                    <th class="numeric">Row Count</th>
+                    <th class="numeric">Dead Rows</th>
+                    <th class="numeric">Bloat %</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for table in table_stats %}
+                <tr>
+                    <td class="table-name">{{ table.name }}</td>
+                    <td class="numeric">
+                        <strong>{{ table.total_size }}</strong>
+                        <div class="progress-bar-mini">
+                            {% widthratio table.total_bytes db_stats.total_size_bytes 100 as pct %}
+                            <div class="progress-bar-mini-fill" style="width: {{ pct }}%"></div>
+                        </div>
+                    </td>
+                    <td class="numeric">{{ table.table_size }}</td>
+                    <td class="numeric">{{ table.external_size }}</td>
+                    <td class="numeric">{{ table.row_count|floatformat:0 }}</td>
+                    <td class="numeric">
+                        {% if table.dead_rows > 0 %}
+                            <span class="{% if table.dead_ratio > 10 %}badge danger{% elif table.dead_ratio > 5 %}badge warning{% endif %}">
+                                {{ table.dead_rows|floatformat:0 }}
+                            </span>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td class="numeric">
+                        {% if table.dead_ratio > 0 %}
+                            <span class="{% if table.dead_ratio > 10 %}badge danger{% elif table.dead_ratio > 5 %}badge warning{% else %}badge info{% endif %}">
+                                {{ table.dead_ratio }}%
+                            </span>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Index Statistics -->
+    <div class="storage-section">
+        <h2>Index Statistics</h2>
+        <p style="color: var(--body-quiet-color); margin-bottom: 15px;">
+            Showing top 50 indexes by size. "Scans" indicates how often the index is used.
+        </p>
+        
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Index Name</th>
+                    <th>Table</th>
+                    <th class="numeric">Size</th>
+                    <th class="numeric">Scans</th>
+                    <th class="numeric">Tuples Read</th>
+                    <th class="numeric">Tuples Fetched</th>
+                    <th>Usage</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for index in index_stats %}
+                <tr>
+                    <td class="table-name">{{ index.name }}</td>
+                    <td>{{ index.table }}</td>
+                    <td class="numeric"><strong>{{ index.size }}</strong></td>
+                    <td class="numeric">{{ index.scans|floatformat:0 }}</td>
+                    <td class="numeric">{{ index.tuples_read|floatformat:0 }}</td>
+                    <td class="numeric">{{ index.tuples_fetched|floatformat:0 }}</td>
+                    <td>
+                        {% if index.scans == 0 %}
+                            <span class="badge danger">Never Used</span>
+                        {% elif index.scans < 10 %}
+                            <span class="badge warning">Rarely Used</span>
+                        {% else %}
+                            <span class="badge success">Active</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Column Statistics (Expandable) -->
+    <div class="storage-section">
+        <h2>Column Storage Analysis</h2>
+        <p style="color: var(--body-quiet-color); margin-bottom: 15px;">
+            Detailed storage analysis for large text/binary columns in key tables.
+        </p>
+        
+        {% for table_name, columns in column_stats.items %}
+        <div class="expandable-section">
+            <div class="expand-toggle" onclick="toggleExpand(this)">
+                <span><strong>{{ table_name }}</strong> ({{ columns|length }} columns)</span>
+                <span class="expand-toggle-icon">▼</span>
+            </div>
+            <div class="expand-content">
+                <div class="column-grid">
+                    {% for col in columns %}
+                    {% if col.size_estimate %}
+                    <div class="column-card">
+                        <div class="column-card-header">
+                            <span>{{ col.name }}</span>
+                            <span class="badge info">{{ col.category }}</span>
+                        </div>
+                        <div class="column-card-type">{{ col.type }}</div>
+                        <div class="column-card-stats">
+                            <div class="column-stat-row">
+                                <span class="column-stat-label">Non-null records:</span>
+                                <span class="column-stat-value">{{ col.size_estimate.non_null_count|floatformat:0 }}</span>
+                            </div>
+                            <div class="column-stat-row">
+                                <span class="column-stat-label">Avg length:</span>
+                                <span class="column-stat-value">{{ col.size_estimate.avg_length }} bytes</span>
+                            </div>
+                            <div class="column-stat-row">
+                                <span class="column-stat-label">Max length:</span>
+                                <span class="column-stat-value">{{ col.size_estimate.max_length|floatformat:0 }} bytes</span>
+                            </div>
+                            <div class="column-stat-row">
+                                <span class="column-stat-label">Est. total size:</span>
+                                <span class="column-stat-value">
+                                    <strong>{{ col.size_estimate.estimated_mb }} MB</strong>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Bloat Estimates -->
+    <div class="storage-section">
+        <h2>Table Bloat Estimates</h2>
+        <p style="color: var(--body-quiet-color); margin-bottom: 15px;">
+            Tables with dead rows that may benefit from VACUUM. High bloat percentage indicates wasted space.
+        </p>
+        
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Table</th>
+                    <th class="numeric">Total Size</th>
+                    <th class="numeric">Estimated Bloat</th>
+                    <th class="numeric">Bloat %</th>
+                    <th>Last Vacuum</th>
+                    <th>Last Autovacuum</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for table in bloat_stats.tables %}
+                <tr>
+                    <td class="table-name">{{ table.table }}</td>
+                    <td class="numeric">{{ table.total_size }}</td>
+                    <td class="numeric">{{ table.estimated_bloat }}</td>
+                    <td class="numeric">
+                        <span class="badge {% if table.bloat_pct > 20 %}danger{% elif table.bloat_pct > 10 %}warning{% else %}info{% endif %}">
+                            {{ table.bloat_pct }}%
+                        </span>
+                    </td>
+                    <td>
+                        {% if table.last_vacuum %}
+                            {{ table.last_vacuum|date:"Y-m-d H:i" }}
+                        {% else %}
+                            <span class="badge warning">Never</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if table.last_autovacuum %}
+                            {{ table.last_autovacuum|date:"Y-m-d H:i" }}
+                        {% else %}
+                            <span class="badge warning">Never</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if table.bloat_pct > 20 %}
+                            <span class="badge danger">VACUUM FULL recommended</span>
+                        {% elif table.bloat_pct > 10 %}
+                            <span class="badge warning">VACUUM recommended</span>
+                        {% else %}
+                            <span class="badge success">OK</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Info Box -->
+    <div class="storage-section" style="background: var(--darkened-bg);">
+        <h2>💡 Understanding Storage Metrics</h2>
+        <ul style="line-height: 1.8; color: var(--body-fg);">
+            <li><strong>Total Size:</strong> Includes table data + TOAST storage + all indexes</li>
+            <li><strong>Table Data:</strong> Just the main table data (heap)</li>
+            <li><strong>External Size:</strong> TOAST storage (large text/binary) + indexes</li>
+            <li><strong>Dead Rows:</strong> Deleted/updated rows waiting for VACUUM cleanup</li>
+            <li><strong>Bloat %:</strong> Percentage of dead rows relative to live rows</li>
+            <li><strong>TOAST:</strong> PostgreSQL's system for storing large column values (text, bytea, etc.) separately from the main table</li>
+            <li><strong>Index Scans:</strong> Number of times an index has been used in queries (0 = unused index)</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+function toggleExpand(element) {
+    element.classList.toggle('expanded');
+    const content = element.nextElementSibling;
+    content.classList.toggle('shown');
+}
+</script>
+{% endblock %}

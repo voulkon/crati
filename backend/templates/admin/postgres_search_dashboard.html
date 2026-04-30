@@ -558,21 +558,25 @@
             <h3>Actions</h3>
             <div class="actions-grid">
                 <button class="action-button primary" 
+                        title="Regenerate search_vector for all DocumentExtraction records. Updates existing vectors and creates new ones for records with NULL values."
                         onclick="confirmCommand('backfill_search_vectors', 'extraction', 'Backfill Extraction Vectors')">
                     Backfill Vectors
                 </button>
                 
                 <button class="action-button {% if extraction_status.trigger_status == 'enabled' %}warning{% else %}primary{% endif %}" 
+                        title="{% if extraction_status.trigger_status == 'enabled' %}Stop automatic search_vector updates on INSERT/UPDATE. New/modified documents won't be searchable until manually backfilled.{% else %}Enable automatic search_vector generation on INSERT/UPDATE. New and modified documents will be immediately searchable.{% endif %}"
                         onclick="confirmCommand('{% if extraction_status.trigger_status == 'enabled' %}disable_trigger{% else %}enable_trigger{% endif %}', 'extraction', '{% if extraction_status.trigger_status == 'enabled' %}Disable{% else %}Enable{% endif %} Trigger')">
                     {% if extraction_status.trigger_status == 'enabled' %}Disable Trigger{% else %}Enable Trigger{% endif %}
                 </button>
                 
                 <button class="action-button {% if extraction_status.index_status == 'exists' %}danger{% else %}primary{% endif %}" 
+                        title="{% if extraction_status.index_status == 'exists' %}Remove the GIN index on search_vector. Saves ~9GB disk space but search queries will be much slower.{% else %}Create GIN index on search_vector column. Enables fast full-text search queries. Uses ~9GB disk space.{% endif %}"
                         onclick="confirmCommand('{% if extraction_status.index_status == 'exists' %}drop_index{% else %}create_index{% endif %}', 'extraction', '{% if extraction_status.index_status == 'exists' %}Drop{% else %}Create{% endif %} Index')">
                     {% if extraction_status.index_status == 'exists' %}Drop Index{% else %}Create Index{% endif %}
                 </button>
                 
                 <button class="action-button warning" 
+                        title="Set all search_vector values to NULL and run VACUUM to reclaim disk space (~7GB). Use when temporarily disabling search functionality."
                         onclick="confirmCommand('cleanup_search_vectors', 'extraction', 'Cleanup Vectors')">
                     Cleanup Vectors
                 </button>
@@ -639,21 +643,25 @@
             <h3>Actions</h3>
             <div class="actions-grid">
                 <button class="action-button primary" 
+                        title="Regenerate search_vector for all DocumentPage records. Updates existing vectors and creates new ones for records with NULL values."
                         onclick="confirmCommand('backfill_search_vectors', 'page', 'Backfill Page Vectors')">
                     Backfill Vectors
                 </button>
                 
                 <button class="action-button {% if page_status.trigger_status == 'enabled' %}warning{% else %}primary{% endif %}" 
+                        title="{% if page_status.trigger_status == 'enabled' %}Stop automatic search_vector updates on INSERT/UPDATE. New/modified pages won't be searchable until manually backfilled.{% else %}Enable automatic search_vector generation on INSERT/UPDATE. New and modified pages will be immediately searchable.{% endif %}"
                         onclick="confirmCommand('{% if page_status.trigger_status == 'enabled' %}disable_trigger{% else %}enable_trigger{% endif %}', 'page', '{% if page_status.trigger_status == 'enabled' %}Disable{% else %}Enable{% endif %} Trigger')">
                     {% if page_status.trigger_status == 'enabled' %}Disable Trigger{% else %}Enable Trigger{% endif %}
                 </button>
                 
                 <button class="action-button {% if page_status.index_status == 'exists' %}danger{% else %}primary{% endif %}" 
+                        title="{% if page_status.index_status == 'exists' %}Remove the GIN index on search_vector. Saves ~9GB disk space but search queries will be much slower.{% else %}Create GIN index on search_vector column. Enables fast full-text search queries. Uses ~9GB disk space.{% endif %}"
                         onclick="confirmCommand('{% if page_status.index_status == 'exists' %}drop_index{% else %}create_index{% endif %}', 'page', '{% if page_status.index_status == 'exists' %}Drop{% else %}Create{% endif %} Index')">
                     {% if page_status.index_status == 'exists' %}Drop Index{% else %}Create Index{% endif %}
                 </button>
                 
                 <button class="action-button warning" 
+                        title="Set all search_vector values to NULL and run VACUUM to reclaim disk space (~7GB). Use when temporarily disabling search functionality."
                         onclick="confirmCommand('cleanup_search_vectors', 'page', 'Cleanup Vectors')">
                     Cleanup Vectors
                 </button>
@@ -667,26 +675,31 @@
         
         <div class="actions-grid">
             <button class="action-button primary" 
+                    title="Create GIN indexes and enable triggers for both DocumentExtraction and DocumentPage. Prepares both models for full-text search."
                     onclick="confirmCommand('enable_all', 'both', 'Enable All (Indexes + Triggers)')">
                 Enable All
             </button>
             
             <button class="action-button danger" 
+                    title="Disable triggers and drop indexes for both models. Saves ~16GB disk space but completely disables PostgreSQL full-text search."
                     onclick="confirmCommand('disable_all', 'both', 'Disable All (Triggers + Indexes)')">
                 Disable All
             </button>
             
             <button class="action-button primary" 
+                    title="Regenerate search_vector for all records in both DocumentExtraction and DocumentPage tables. Long-running operation."
                     onclick="confirmCommand('backfill_search_vectors', 'both', 'Backfill All Vectors')">
                 Backfill All
             </button>
             
             <button class="action-button warning" 
+                    title="Set all search_vector values to NULL for both models and run VACUUM. Reclaims ~14GB disk space. Disables search until backfilled."
                     onclick="confirmCommand('cleanup_search_vectors', 'both', 'Cleanup All Vectors')">
                 Cleanup All
             </button>
             
             <button class="action-button secondary" 
+                    title="Refresh all statistics and status information displayed on this page."
                     onclick="refreshStatus()">
                 Refresh Status
             </button>
@@ -745,11 +758,11 @@ function confirmCommand(command, model, label) {
     const messages = {
         'backfill_search_vectors': {
             message: `This will regenerate search_vector data for ${model} records. This may take several minutes.`,
-            warning: null
+            warning: 'This is a long-running operation that will be executed asynchronously.'
         },
         'cleanup_search_vectors': {
             message: `This will NULL all search_vector data for ${model} and run VACUUM to reclaim disk space.`,
-            warning: 'This operation will reclaim ~7GB of disk space but will remove full-text search capability until you backfill again.'
+            warning: 'This operation will reclaim ~7GB of disk space but may take 10-30 minutes. It will be executed asynchronously.'
         },
         'disable_trigger': {
             message: `This will stop automatically indexing new/updated ${model} records.`,
@@ -765,15 +778,15 @@ function confirmCommand(command, model, label) {
         },
         'create_index': {
             message: `This will create the GIN index for ${model}. This may take 5-10 minutes.`,
-            warning: 'This will use ~9GB of additional disk space.'
+            warning: 'This will use ~9GB of additional disk space and be executed asynchronously.'
         },
         'disable_all': {
             message: `This will disable triggers and drop indexes for ${model}.`,
             warning: 'This will save ~16GB of disk space but disable PostgreSQL full-text search entirely.'
         },
         'enable_all': {
-            message: `This will create indexes and enable triggers for ${model}. This may take 5-10 minutes.`,
-            warning: 'This will use ~16GB of disk space. Remember to backfill existing data afterward.'
+            message: `This will create indexes and enable triggers for ${model}.`,
+            warning: 'This will use ~16GB of disk space and may take 5-10 minutes. Remember to backfill existing data afterward.'
         }
     };
     
@@ -803,8 +816,12 @@ function closeModal() {
 function executeCommand() {
     if (!currentCommand || !currentModel) return;
     
+    // Save values before closing modal (which clears them)
+    const command = currentCommand;
+    const model = currentModel;
+    
     closeModal();
-    showExecutionModal(currentCommand);
+    showExecutionModal(command);
     
     const csrftoken = getCookie('csrftoken');
     
@@ -815,24 +832,46 @@ function executeCommand() {
             'X-CSRFToken': csrftoken
         },
         body: JSON.stringify({
-            command: currentCommand,
-            model: currentModel,
+            command: command,
+            model: model,
             options: {}
         })
     })
-    .then(response => response.json())
-    .then(data => {
+    .then(response => {
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        return response.json().then(data => {
+            console.log('Response data:', data);
+            return { status: response.status, data: data };
+        });
+    })
+    .then(result => {
+        const data = result.data;
+        if (result.status >= 400) {
+            showError(data.error || `Server error (${result.status}): ${JSON.stringify(data)}`);
+            return;
+        }
+        
         if (data.success) {
-            showSuccess(data.message, data.output);
-            // Refresh page after 2 seconds
-            setTimeout(() => {
-                window.location.reload();
-            }, 2000);
+            if (data.async && data.task_id) {
+                // Async task started - show success message
+                showSuccess(
+                    data.message + '\n\nThe operation is running in the background. Please refresh the page in a few moments to see the results.',
+                    `Task ID: ${data.task_id}`
+                );
+            } else {
+                // Sync operation completed
+                showSuccess(data.message, data.output);
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            }
         } else {
             showError(data.error || 'Command failed');
         }
     })
     .catch(error => {
+        console.error('Fetch error:', error);
         showError('Network error: ' + error.message);
     });
 }

@@ -58,6 +58,7 @@ class CustomAdminSite(admin.AdminSite):
             # PostgreSQL Search Management URLs
             path("search-management/postgres/", self._wrap_view('search_management', 'postgres_search_dashboard'), name="postgres_search_dashboard"),
             path("search-management/postgres/execute/", self._wrap_view('search_management', 'execute_search_command'), name="execute_search_command"),
+            path("search-management/postgres/task/<str:task_id>/", self._wrap_view('search_management', 'search_task_status'), name="search_task_status"),
             
             # Database Storage Dashboard URLs
             path("db-storage/", self._wrap_view('db_storage_dashboard', 'db_storage_dashboard'), name="db_storage_dashboard"),

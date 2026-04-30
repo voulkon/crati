@@ -3,7 +3,7 @@ PostgreSQL Search Management Dashboard
 
 Admin interface for managing PostgreSQL full-text search infrastructure:
 - View status of feature flags, triggers, and indexes
-- Execute management commands (backfill, cleanup, enable/disable)
+- Execute management commands (backfill, cleanup, enable/disable) as async Celery tasks
 - Monitor disk usage and record counts
 - Safe execution with confirmation dialogs
 """
@@ -13,13 +13,17 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.db import connection
-from django.core.management import call_command
-from io import StringIO
+from celery.result import AsyncResult
 from loguru import logger
 import json
 
 from core.services.feature_flag_service import feature_flags
 from core.models.document_analysis import DocumentExtraction, DocumentPage
+from core.tasks.tasks_search_management import (
+    backfill_search_vectors_task,
+    cleanup_search_vectors_task,
+    manage_postgres_search_task,
+)
 
 
 @staff_member_required
@@ -72,16 +76,23 @@ def postgres_search_dashboard(request):
 
 @staff_member_required
 def execute_search_command(request):
-    """Execute a PostgreSQL search management command via AJAX"""
+    """Execute a PostgreSQL search management command via AJAX as async Celery task"""
+    
+    logger.info(f"execute_search_command called - Method: {request.method}, Body: {request.body[:200] if request.body else 'empty'}")
     
     if request.method != 'POST':
+        logger.warning(f"Invalid method: {request.method}")
         return JsonResponse({'success': False, 'error': 'POST required'}, status=405)
     
     try:
         data = json.loads(request.body)
+        logger.info(f"Parsed data: {data}")
+        
         command_type = data.get('command')
         model = data.get('model', 'both')
         options = data.get('options', {})
+        
+        logger.info(f"Command: {command_type}, Model: {model}, Options: {options}")
         
         # Validate command type
         valid_commands = [
@@ -97,24 +108,63 @@ def execute_search_command(request):
         ]
         
         if command_type not in valid_commands:
+            logger.error(f"Invalid command: {command_type}")
             return JsonResponse({
                 'success': False,
                 'error': f'Invalid command: {command_type}'
             }, status=400)
         
-        # Execute the command
+        # Execute the command as async task (or synchronously for quick operations)
         result = _execute_command(command_type, model, options)
+        logger.info(f"Command result: {result}")
         
         return JsonResponse(result)
         
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {e}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': 'Invalid JSON'
+            'error': f'Invalid JSON: {str(e)}'
         }, status=400)
     except Exception as e:
         logger.error(f"Error executing search command: {e}", exc_info=True)
         return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@staff_member_required
+def search_task_status(request, task_id):
+    """Check the status of an async search management task"""
+    
+    try:
+        task_result = AsyncResult(task_id)
+        
+        if task_result.ready():
+            # Task completed
+            result = task_result.get()
+            return JsonResponse({
+                'ready': True,
+                'success': result.get('status') == 'success',
+                'result': result
+            })
+        else:
+            # Task still running
+            state = task_result.state
+            info = task_result.info or {}
+            
+            return JsonResponse({
+                'ready': False,
+                'state': state,
+                'status': info.get('status', 'Running...'),
+                'meta': info
+            })
+            
+    except Exception as e:
+        logger.error(f"Error checking task status: {e}", exc_info=True)
+        return JsonResponse({
+            'ready': True,
             'success': False,
             'error': str(e)
         }, status=500)
@@ -299,14 +349,11 @@ def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extracti
 
 
 def _execute_command(command_type, model, options):
-    """Execute a management command and capture output"""
+    """Execute a management command (async for long-running ops, sync for quick ones)"""
     
     try:
-        # Capture command output
-        output = StringIO()
-        
         if command_type == 'check_status':
-            # Just return current status
+            # Quick status check - synchronous
             extraction_status = _get_model_status('extraction')
             page_status = _get_model_status('page')
             return {
@@ -319,72 +366,71 @@ def _execute_command(command_type, model, options):
             }
         
         elif command_type == 'backfill_search_vectors':
-            # Backfill search vectors
-            call_command(
-                'backfill_search_vectors',
+            # Long-running operation - launch async task
+            task = backfill_search_vectors_task.delay(
                 model=model,
                 batch_size=options.get('batch_size', 1000),
-                only_null=options.get('only_null', True),
-                force=True,
-                stdout=output
+                only_null=options.get('only_null', True)
             )
             
+            return {
+                'success': True,
+                'async': True,
+                'task_id': task.id,
+                'message': f'Backfill task started (ID: {task.id})'
+            }
+            
         elif command_type == 'cleanup_search_vectors':
-            # Cleanup search vectors
-            call_command(
-                'cleanup_search_vectors',
+            # Long-running operation - launch async task
+            task = cleanup_search_vectors_task.delay(
                 model=model,
                 batch_size=options.get('batch_size', 5000),
                 no_vacuum=options.get('no_vacuum', False),
-                vacuum_full=options.get('vacuum_full', False),
-                force=True,
-                stdout=output
+                vacuum_full=options.get('vacuum_full', False)
             )
             
-        elif command_type in ['disable_trigger', 'enable_trigger', 'drop_index', 'create_index']:
-            # Individual trigger/index operations
-            action_map = {
-                'disable_trigger': '--disable-trigger',
-                'enable_trigger': '--enable-trigger',
-                'drop_index': '--drop-index',
-                'create_index': '--create-index',
+            return {
+                'success': True,
+                'async': True,
+                'task_id': task.id,
+                'message': f'Cleanup task started (ID: {task.id})'
             }
             
-            call_command(
-                'manage_postgres_search',
-                action_map[command_type],
-                model=model,
-                force=True,
-                stdout=output
+        elif command_type in ['disable_trigger', 'enable_trigger', 'drop_index', 'create_index']:
+            # Individual trigger/index operations - can be async
+            action = command_type.replace('_', '-')
+            
+            task = manage_postgres_search_task.delay(
+                action=action,
+                model=model
             )
             
-        elif command_type == 'disable_all':
-            # Complete disable workflow
-            call_command(
-                'manage_postgres_search',
-                '--disable-all',
-                model=model,
-                force=True,
-                stdout=output
+            return {
+                'success': True,
+                'async': True,
+                'task_id': task.id,
+                'message': f'{command_type} task started (ID: {task.id})'
+            }
+            
+        elif command_type in ['disable_all', 'enable_all']:
+            # Complete workflows - async
+            action = command_type.replace('_', '-')
+            
+            task = manage_postgres_search_task.delay(
+                action=action,
+                model=model
             )
             
-        elif command_type == 'enable_all':
-            # Complete enable workflow
-            call_command(
-                'manage_postgres_search',
-                '--enable-all',
-                model=model,
-                force=True,
-                stdout=output
-            )
-        
-        output_text = output.getvalue()
-        logger.info(f"Executed search command {command_type} on {model}: {output_text}")
+            return {
+                'success': True,
+                'async': True,
+                'task_id': task.id,
+                'message': f'{command_type} task started (ID: {task.id})'
+            }
         
         return {
-            'success': True,
-            'message': f'Command {command_type} completed successfully',
-            'output': output_text
+            'success': False,
+            'error': f'Unknown command: {command_type}'
         }
         
     except Exception as e:
@@ -393,5 +439,3 @@ def _execute_command(command_type, model, options):
             'success': False,
             'error': str(e)
         }
-    finally:
-        output.close()

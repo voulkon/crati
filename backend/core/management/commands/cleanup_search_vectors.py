@@ -298,26 +298,24 @@ class Command(BaseCommand):
         
         try:
             # VACUUM cannot run inside a transaction block
+            # Close any existing transaction and use autocommit mode
+            connection.close()
+            connection.ensure_connection()
+            
+            # Ensure we're in autocommit mode (Django's default outside of atomic blocks)
+            connection.set_autocommit(True)
+            
             with connection.cursor() as cursor:
-                # Set autocommit mode for VACUUM
-                old_isolation_level = connection.isolation_level
-                connection.set_isolation_level(0)
+                if full:
+                    cursor.execute(f'VACUUM FULL ANALYZE {table}')
+                else:
+                    cursor.execute(f'VACUUM ANALYZE {table}')
                 
-                try:
-                    if full:
-                        cursor.execute(f'VACUUM FULL ANALYZE {table}')
-                    else:
-                        cursor.execute(f'VACUUM ANALYZE {table}')
-                    
-                    elapsed = time.time() - start_time
-                    self.stdout.write(self.style.SUCCESS(
-                        f'✓ {vacuum_type} completed in {elapsed:.1f} seconds'
-                    ))
-                    logger.info(f"Completed {vacuum_type} on {table} in {elapsed:.1f}s")
-                    
-                finally:
-                    # Restore isolation level
-                    connection.set_isolation_level(old_isolation_level)
+                elapsed = time.time() - start_time
+                self.stdout.write(self.style.SUCCESS(
+                    f'✓ {vacuum_type} completed in {elapsed:.1f} seconds'
+                ))
+                logger.info(f"Completed {vacuum_type} on {table} in {elapsed:.1f}s")
         
         except Exception as e:
             self.stdout.write(self.style.ERROR(f'✗ VACUUM failed: {e}'))

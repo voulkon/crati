@@ -1,18 +1,18 @@
 from typing import Dict, Any, List, Optional, Union
-from django.db.models import Q, QuerySet
+from django.db.models import Q, QuerySet, F
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.core.cache import cache
 from django.conf import settings
+from core.constants.search_service import SearchMethod
 from core.models.organizations import Organization, Unit, Signer
 from core.models.document_analysis import DocumentExtraction, ProcessingStatus
 from core.models.companies import Company, CompanyPerson
 from core.services.opensearch_service import OpenSearchService
 from core.services.feature_flag_service import feature_flags
+from core.services.transliteration import TransliterationService
 from core.utils.performance import query_debugger
 from loguru import logger
 import json
-import json
-
 class SearchService:
     """Centralized service for all search functionality"""
     
@@ -20,31 +20,240 @@ class SearchService:
         self.cache_timeout = 300  # 5 minutes
         self.opensearch_service = OpenSearchService()
     
+    # ==================== PREREQUISITE CHECKING ====================
+    
+    def _get_validated_search_method(self, requested_method: str) -> str:
+        """
+        Validate that the requested search method's prerequisites are met.
+        Falls back to POSTGRES_SIMPLE if prerequisites are not satisfied.
+        
+        Args:
+            requested_method: The search method to validate
+            
+        Returns:
+            The validated method (may be downgraded to POSTGRES_SIMPLE)
+        """
+        # If simple search requested, always honor it (no prerequisites)
+        if requested_method == SearchMethod.POSTGRES_SIMPLE:
+            return SearchMethod.POSTGRES_SIMPLE
+        
+        # Check prerequisites for each method
+        if requested_method == SearchMethod.POSTGRES_FTS:
+            # PostgreSQL FTS requires INDEX_THE_POSTGRES to be enabled
+            if not feature_flags.is_enabled('INDEX_THE_POSTGRES'):
+                logger.warning(
+                    f"POSTGRES_FTS requested but INDEX_THE_POSTGRES is disabled. "
+                    f"Falling back to {SearchMethod.POSTGRES_SIMPLE}"
+                )
+                return SearchMethod.POSTGRES_SIMPLE
+            return SearchMethod.POSTGRES_FTS
+        
+        elif requested_method == SearchMethod.OPENSEARCH:
+            # OpenSearch requires INDEX_THE_OPENSEARCH to be enabled
+            if not feature_flags.is_enabled('INDEX_THE_OPENSEARCH'):
+                logger.warning(
+                    f"OPENSEARCH requested but INDEX_THE_OPENSEARCH is disabled. "
+                    f"Falling back to {SearchMethod.POSTGRES_SIMPLE}"
+                )
+                return SearchMethod.POSTGRES_SIMPLE
+            return SearchMethod.OPENSEARCH
+        
+        else:
+            # Unknown method - fall back to simple
+            logger.warning(
+                f"Unknown search method '{requested_method}'. "
+                f"Falling back to {SearchMethod.POSTGRES_SIMPLE}"
+            )
+            return SearchMethod.POSTGRES_SIMPLE
+    
+    @staticmethod
+    def check_method_prerequisites(method: str) -> Dict[str, Any]:
+        """
+        Check if prerequisites for a search method are met.
+        Useful for validation before setting feature flags.
+        
+        Args:
+            method: The search method to check
+            
+        Returns:
+            Dict with 'available' (bool) and 'reason' (str) keys
+        """
+        if method == SearchMethod.POSTGRES_SIMPLE:
+            return {'available': True, 'reason': 'No prerequisites required'}
+        
+        elif method == SearchMethod.POSTGRES_FTS:
+            if feature_flags.is_enabled('INDEX_THE_POSTGRES'):
+                return {'available': True, 'reason': 'PostgreSQL indexing is enabled'}
+            return {
+                'available': False,
+                'reason': 'Requires INDEX_THE_POSTGRES feature flag to be enabled'
+            }
+        
+        elif method == SearchMethod.OPENSEARCH:
+            if feature_flags.is_enabled('INDEX_THE_OPENSEARCH'):
+                return {'available': True, 'reason': 'OpenSearch indexing is enabled'}
+            return {
+                'available': False,
+                'reason': 'Requires INDEX_THE_OPENSEARCH feature flag to be enabled'
+            }
+        
+        else:
+            return {'available': False, 'reason': f"Unknown search method: {method}"}
+    
+    # ==================== ORGANIZATION SEARCH (3-TIER) ====================
+    
     @query_debugger
     def search_organizations(self, query: str, limit: int = 20) -> QuerySet:
-        """Search organizations by label"""
+        """
+        Search organizations using the configured search method.
+        
+        Supports three tiers:
+        1. postgres_simple: Basic icontains search (default)
+        2. postgres_fts: PostgreSQL Full-Text Search with smart language detection
+        3. opensearch: OpenSearch with advanced features (TODO)
+        
+        The method automatically detects if the query is in Greek or Latin
+        and adjusts ranking weights accordingly.
+        
+        Automatically falls back to postgres_simple if prerequisites are not met.
+        """
         if not query:
             return Organization.objects.none()
         
+        # Get configured search method with validation and auto-fallback
+        requested_method = feature_flags.get_value('ENTITY_SEARCH_METHOD', SearchMethod.DEFAULT)
+        method = self._get_validated_search_method(requested_method)
+        
+        if method == SearchMethod.OPENSEARCH:
+            return self._search_organizations_opensearch(query, limit)
+        elif method == SearchMethod.POSTGRES_FTS:
+            return self._search_organizations_fts(query, limit)
+        else:  # POSTGRES_SIMPLE (default fallback)
+            return self._search_organizations_simple(query, limit)
+    
+    def _search_organizations_simple(self, query: str, limit: int = 20) -> QuerySet:
+        """Simple PostgreSQL ILIKE search (Tier 1)"""
         return Organization.objects.filter(
-            label__icontains=query
+            Q(label__icontains=query) | Q(latin_name__icontains=query)
         ).order_by('label')[:limit]
+    
+    def _search_organizations_fts(self, query: str, limit: int = 20) -> QuerySet:
+        """
+        PostgreSQL Full-Text Search with smart language detection (Tier 2).
+        
+        Detects if the query is Greek or Latin and adjusts ranking:
+        - Greek query → prioritize 'label' field (Greek names)
+        - Latin query → prioritize 'latin_name' field
+        - Mixed → balanced weighting
+        """
+        # Detect query language for smart weighting
+        query_lang = TransliterationService.detect_language(query)
+        
+        # Create search query (using Greek config for better stemming)
+        search_query = SearchQuery(query, config='greek')
+        
+        # Get dynamic weights based on query language
+        weights = TransliterationService.get_search_rank_weights(query)
+        
+        # Search with ranking
+        qs = Organization.objects.annotate(
+            rank=SearchRank(F('search_vector'), search_query, weights=weights)
+        ).filter(search_vector=search_query).order_by('-rank', 'label')[:limit]
+        
+        logger.debug(f"Organization FTS: query='{query}', lang={query_lang}, found={qs.count()}")
+        return qs
+    
+    def _search_organizations_opensearch(self, query: str, limit: int = 20) -> QuerySet:
+        """
+        OpenSearch-based entity search (Tier 3) - Future implementation.
+        
+        Will support:
+        - Fuzzy matching (typo tolerance)
+        - Phonetic search
+        - Cross-entity relevance
+        - Advanced filtering
+        """
+        # TODO: Implement OpenSearch entity indexing
+        logger.warning("OpenSearch entity search not yet implemented, falling back to FTS")
+        return self._search_organizations_fts(query, limit)
+    
+    # ==================== UNIT SEARCH (3-TIER) ====================
     
     @query_debugger
     def search_units(self, query: str, organization_id: Optional[str] = None, limit: int = 20) -> QuerySet:
-        """Search for units by label"""
-        from core.models.organizations import Unit
+        """
+        Search units using the configured search method.
         
-        return Unit.objects.filter(
-            label__icontains=query
-        ).select_related('organization').order_by('label')[:20]  # Limit results for performance
+        Supports filtering by organization_id when provided.
+        Automatically falls back to postgres_simple if prerequisites are not met.
+        """
+        if not query:
+            return Unit.objects.none()
+        
+        requested_method = feature_flags.get_value('ENTITY_SEARCH_METHOD', SearchMethod.DEFAULT)
+        method = self._get_validated_search_method(requested_method)
+        
+        if method == SearchMethod.OPENSEARCH:
+            return self._search_units_opensearch(query, organization_id, limit)
+        elif method == SearchMethod.POSTGRES_FTS:
+            return self._search_units_fts(query, organization_id, limit)
+        else:
+            return self._search_units_simple(query, organization_id, limit)
+    
+    def _search_units_simple(self, query: str, organization_id: Optional[str] = None, limit: int = 20) -> QuerySet:
+        """Simple PostgreSQL ILIKE search (Tier 1)"""
+        qs = Unit.objects.filter(label__icontains=query)
+        
+        if organization_id:
+            qs = qs.filter(organization__uid=organization_id)
+        
+        return qs.select_related('organization').order_by('label')[:limit]
+    
+    def _search_units_fts(self, query: str, organization_id: Optional[str] = None, limit: int = 20) -> QuerySet:
+        """PostgreSQL Full-Text Search with smart language detection (Tier 2)"""
+        query_lang = TransliterationService.detect_language(query)
+        search_query = SearchQuery(query, config='greek')
+        weights = TransliterationService.get_search_rank_weights(query)
+        
+        qs = Unit.objects.annotate(
+            rank=SearchRank(F('search_vector'), search_query, weights=weights)
+        ).filter(search_vector=search_query)
+        
+        if organization_id:
+            qs = qs.filter(organization__uid=organization_id)
+        
+        return qs.select_related('organization').order_by('-rank', 'label')[:limit]
+    
+    def _search_units_opensearch(self, query: str, organization_id: Optional[str] = None, limit: int = 20) -> QuerySet:
+        """OpenSearch-based search (Tier 3) - Future"""
+        logger.warning("OpenSearch unit search not yet implemented, falling back to FTS")
+        return self._search_units_fts(query, organization_id, limit)
+    
+    # ==================== SIGNER SEARCH (3-TIER) ====================
     
     @query_debugger
     def search_signers(self, query: str, organization_id: Optional[str] = None, limit: int = 20) -> QuerySet:
-        """Search signers by first_name and last_name"""
+        """
+        Search signers using the configured search method.
+        
+        Searches across first_name and last_name fields.
+        Automatically falls back to postgres_simple if prerequisites are not met.
+        """
         if not query:
             return Signer.objects.none()
         
+        requested_method = feature_flags.get_value('ENTITY_SEARCH_METHOD', SearchMethod.DEFAULT)
+        method = self._get_validated_search_method(requested_method)
+        
+        if method == SearchMethod.OPENSEARCH:
+            return self._search_signers_opensearch(query, organization_id, limit)
+        elif method == SearchMethod.POSTGRES_FTS:
+            return self._search_signers_fts(query, organization_id, limit)
+        else:
+            return self._search_signers_simple(query, organization_id, limit)
+    
+    def _search_signers_simple(self, query: str, organization_id: Optional[str] = None, limit: int = 20) -> QuerySet:
+        """Simple PostgreSQL ILIKE search (Tier 1)"""
         qs = Signer.objects.filter(
             Q(first_name__icontains=query) | 
             Q(last_name__icontains=query)
@@ -54,6 +263,26 @@ class SearchService:
             qs = qs.filter(organization__uid=organization_id)
         
         return qs.select_related('organization').order_by('last_name', 'first_name')[:limit]
+    
+    def _search_signers_fts(self, query: str, organization_id: Optional[str] = None, limit: int = 20) -> QuerySet:
+        """PostgreSQL Full-Text Search with smart language detection (Tier 2)"""
+        query_lang = TransliterationService.detect_language(query)
+        search_query = SearchQuery(query, config='greek')
+        weights = TransliterationService.get_search_rank_weights(query)
+        
+        qs = Signer.objects.annotate(
+            rank=SearchRank(F('search_vector'), search_query, weights=weights)
+        ).filter(search_vector=search_query)
+        
+        if organization_id:
+            qs = qs.filter(organization__uid=organization_id)
+        
+        return qs.select_related('organization').order_by('-rank', 'last_name', 'first_name')[:limit]
+    
+    def _search_signers_opensearch(self, query: str, organization_id: Optional[str] = None, limit: int = 20) -> QuerySet:
+        """OpenSearch-based search (Tier 3) - Future"""
+        logger.warning("OpenSearch signer search not yet implemented, falling back to FTS")
+        return self._search_signers_fts(query, organization_id, limit)
     
     @query_debugger
     def search_documents(
@@ -479,13 +708,31 @@ class SearchService:
         cache.set(cache_key, options, 3600)
         return options
     
+    # ==================== COMPANY SEARCH (3-TIER) ====================
+    
     @query_debugger
     def search_companies(self, query: str, limit: int = 20) -> QuerySet:
-        """Search companies by names and titles"""
+        """
+        Search companies using the configured search method.
+        
+        Searches across Greek/English names, titles, AFM, and GEMI numbers.
+        Automatically falls back to postgres_simple if prerequisites are not met.
+        """
         if not query:
             return Company.objects.none()
         
-        # Search in various name fields
+        requested_method = feature_flags.get_value('ENTITY_SEARCH_METHOD', SearchMethod.DEFAULT)
+        method = self._get_validated_search_method(requested_method)
+        
+        if method == SearchMethod.OPENSEARCH:
+            return self._search_companies_opensearch(query, limit)
+        elif method == SearchMethod.POSTGRES_FTS:
+            return self._search_companies_fts(query, limit)
+        else:
+            return self._search_companies_simple(query, limit)
+    
+    def _search_companies_simple(self, query: str, limit: int = 20) -> QuerySet:
+        """Simple PostgreSQL ILIKE search (Tier 1)"""
         qs = Company.objects.filter(
             Q(is_branch=False) & (
                 Q(co_name_el__icontains=query) |
@@ -499,21 +746,85 @@ class SearchService:
         
         return qs
     
+    def _search_companies_fts(self, query: str, limit: int = 20) -> QuerySet:
+        """
+        PostgreSQL Full-Text Search with smart language detection (Tier 2).
+        
+        Note: Companies have both Greek and English name fields,
+        so language detection helps prioritize the right fields.
+        """
+        query_lang = TransliterationService.detect_language(query)
+        search_query = SearchQuery(query, config='greek')
+        weights = TransliterationService.get_search_rank_weights(query)
+        
+        qs = Company.objects.filter(
+            is_branch=False
+        ).annotate(
+            rank=SearchRank(F('search_vector'), search_query, weights=weights)
+        ).filter(search_vector=search_query).order_by('-rank', 'co_name_el')[:limit]
+        
+        return qs
+    
+    def _search_companies_opensearch(self, query: str, limit: int = 20) -> QuerySet:
+        """OpenSearch-based search (Tier 3) - Future"""
+        logger.warning("OpenSearch company search not yet implemented, falling back to FTS")
+        return self._search_companies_fts(query, limit)
+    
+    # ==================== COMPANY PERSON SEARCH (3-TIER) ====================
+    
     @query_debugger
     def search_company_persons(self, query: str, company_id: Optional[int] = None, limit: int = 20) -> QuerySet:
-        """Search company persons by name and business name"""
+        """
+        Search company persons using the configured search method.
+        
+        Supports filtering by company_id when provided.
+        Automatically falls back to postgres_simple if prerequisites are not met.
+        """
         if not query:
             return CompanyPerson.objects.none()
         
+        requested_method = feature_flags.get_value('ENTITY_SEARCH_METHOD', SearchMethod.DEFAULT)
+        method = self._get_validated_search_method(requested_method)
+        
+        if method == SearchMethod.OPENSEARCH:
+            return self._search_company_persons_opensearch(query, company_id, limit)
+        elif method == SearchMethod.POSTGRES_FTS:
+            return self._search_company_persons_fts(query, company_id, limit)
+        else:
+            return self._search_company_persons_simple(query, company_id, limit)
+    
+    def _search_company_persons_simple(self, query: str, company_id: Optional[int] = None, limit: int = 20) -> QuerySet:
+        """Simple PostgreSQL ILIKE search (Tier 1)"""
         qs = CompanyPerson.objects.filter(
             Q(person_name__icontains=query) |
-            Q(business_name__icontains=query)
+            Q(business_name__icontains=query) |
+            Q(role__icontains=query)
         )
         
         if company_id:
             qs = qs.filter(company_id=company_id)
         
         return qs.select_related('company').order_by('person_name')[:limit]
+    
+    def _search_company_persons_fts(self, query: str, company_id: Optional[int] = None, limit: int = 20) -> QuerySet:
+        """PostgreSQL Full-Text Search with smart language detection (Tier 2)"""
+        query_lang = TransliterationService.detect_language(query)
+        search_query = SearchQuery(query, config='greek')
+        weights = TransliterationService.get_search_rank_weights(query)
+        
+        qs = CompanyPerson.objects.annotate(
+            rank=SearchRank(F('search_vector'), search_query, weights=weights)
+        ).filter(search_vector=search_query)
+        
+        if company_id:
+            qs = qs.filter(company_id=company_id)
+        
+        return qs.select_related('company').order_by('-rank', 'person_name')[:limit]
+    
+    def _search_company_persons_opensearch(self, query: str, company_id: Optional[int] = None, limit: int = 20) -> QuerySet:
+        """OpenSearch-based search (Tier 3) - Future"""
+        logger.warning("OpenSearch company person search not yet implemented, falling back to FTS")
+        return self._search_company_persons_fts(query, company_id, limit)
     
     @query_debugger
     def search_all_entities_extended(

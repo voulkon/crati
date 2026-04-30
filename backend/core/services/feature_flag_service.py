@@ -73,15 +73,17 @@ class FeatureFlagService:
         'ENTITY_SEARCH_METHOD': {
             'name': 'Entity Search Method',
             'description': 'Search method for entities (organizations, signers, units, companies, company persons). '
-                          'Options: postgres_simple (basic ILIKE), postgres_fts (full-text search with smart language detection), '
-                          'opensearch (advanced search - not yet implemented). '
-                          'postgres_fts requires backfill of search_vector fields.',
+                          'Options: postgres_simple (basic ILIKE, always available), '
+                          'postgres_fts (full-text search, requires INDEX_THE_POSTGRES), '
+                          'opensearch (advanced search, requires INDEX_THE_OPENSEARCH, not yet fully implemented). '
+                          'Automatically falls back to postgres_simple if prerequisites are not met.',
             'default': 'postgres_simple',
             'env_var': 'ENTITY_SEARCH_METHOD',
             'category': 'data_indexing',
             'requires_restart': False,
             'value_type': 'choice',
             'choices': ['postgres_simple', 'postgres_fts', 'opensearch'],
+            'validate_prerequisites': True,  # Special flag to check prerequisites
         },
         'HAVE_AFM_FETCH_JOB': {
             'name': 'Company Data Fetching',

@@ -158,7 +158,28 @@ class FeatureFlag(models.Model):
         return None
     
     def save(self, *args, **kwargs):
-        """Override save to invalidate cache when flag changes."""
+        """Override save to invalidate cache and validate prerequisites when flag changes."""
+        # Validate prerequisites for ENTITY_SEARCH_METHOD
+        if self.key == 'ENTITY_SEARCH_METHOD' and self.value_type == 'choice':
+            from core.services.search_service import SearchService
+            
+            method = self.string_value
+            if method:
+                # Check if prerequisites are met
+                prereq_check = SearchService.check_method_prerequisites(method)
+                if not prereq_check['available']:
+                    # Instead of failing, we log a warning
+                    # The system will automatically fall back at runtime
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(
+                        f"Setting ENTITY_SEARCH_METHOD to '{method}' but prerequisites not met: "
+                        f"{prereq_check['reason']}. System will fall back to 'postgres_simple' at runtime."
+                    )
+                    # Optionally, you can uncomment this to prevent setting invalid values entirely:
+                    # from django.core.exceptions import ValidationError
+                    # raise ValidationError(f"Cannot set search method to '{method}': {prereq_check['reason']}")
+        
         super().save(*args, **kwargs)
         # Invalidate cache for this flag
         cache_key = f"feature_flag:{self.key}"

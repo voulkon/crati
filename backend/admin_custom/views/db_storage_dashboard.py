@@ -21,33 +21,125 @@ import json
 
 @staff_member_required
 def db_storage_dashboard(request):
-    """Main dashboard for database storage analysis"""
+    """Main dashboard for database storage analysis - loads minimal data initially"""
     
-    # Get overall database stats
-    db_stats = _get_database_stats()
-    
-    # Get table sizes
-    table_stats = _get_table_stats()
-    
-    # Get index stats
-    index_stats = _get_index_stats()
-    
-    # Get column stats for key tables
-    column_stats = _get_column_stats()
-    
-    # Get bloat estimates
-    bloat_stats = _get_bloat_estimates()
+    # Only get basic database size - everything else loads on demand
+    db_stats = _get_basic_database_stats()
     
     context = {
         'title': 'Database Storage Dashboard',
         'db_stats': db_stats,
-        'table_stats': table_stats,
-        'index_stats': index_stats,
-        'column_stats': column_stats,
-        'bloat_stats': bloat_stats,
     }
     
     return render(request, 'admin/db_storage_dashboard.html', context)
+
+
+def _get_basic_database_stats():
+    """Get only the fastest, most essential database stats (size only)"""
+    with connection.cursor() as cursor:
+        # Get database size - this is fast
+        cursor.execute("""
+            SELECT 
+                pg_database.datname,
+                pg_size_pretty(pg_database_size(pg_database.datname)) as size_pretty,
+                pg_database_size(pg_database.datname) as size_bytes,
+                ROUND(pg_database_size(pg_database.datname) / (1024.0 * 1024.0 * 1024.0), 2) as size_gb
+            FROM pg_database
+            WHERE datname = current_database()
+        """)
+        db_row = cursor.fetchone()
+        
+        return {
+            'database_name': db_row[0],
+            'total_size': db_row[1],
+            'total_size_bytes': db_row[2],
+            'size_gb': db_row[3],
+        }
+
+
+@staff_member_required
+def get_extended_database_stats(request):
+    """API endpoint to get extended database statistics"""
+    try:
+        stats = _get_database_stats()
+        return JsonResponse({
+            'status': 'success',
+            'data': stats
+        })
+    except Exception as e:
+        logger.error(f"Error getting extended database stats: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@staff_member_required
+def get_table_stats(request):
+    """API endpoint to get table statistics"""
+    try:
+        stats = _get_table_stats()
+        return JsonResponse({
+            'status': 'success',
+            'data': stats
+        })
+    except Exception as e:
+        logger.error(f"Error getting table stats: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@staff_member_required
+def get_index_stats(request):
+    """API endpoint to get index statistics"""
+    try:
+        stats = _get_index_stats()
+        return JsonResponse({
+            'status': 'success',
+            'data': stats
+        })
+    except Exception as e:
+        logger.error(f"Error getting index stats: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@staff_member_required
+def get_column_stats(request):
+    """API endpoint to get column statistics"""
+    try:
+        stats = _get_column_stats()
+        return JsonResponse({
+            'status': 'success',
+            'data': stats
+        })
+    except Exception as e:
+        logger.error(f"Error getting column stats: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@staff_member_required
+def get_bloat_stats(request):
+    """API endpoint to get bloat estimates"""
+    try:
+        stats = _get_bloat_estimates()
+        return JsonResponse({
+            'status': 'success',
+            'data': stats
+        })
+    except Exception as e:
+        logger.error(f"Error getting bloat stats: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
 
 
 def _get_database_stats():

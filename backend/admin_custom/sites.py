@@ -64,6 +64,13 @@ class CustomAdminSite(admin.AdminSite):
             path("db-storage/vacuum/", self._wrap_view('db_storage_dashboard', 'run_vacuum'), name="run_vacuum"),
             path("db-storage/vacuum/bloated/", self._wrap_view('db_storage_dashboard', 'run_vacuum_bloated'), name="run_vacuum_bloated"),
             path("db-storage/vacuum/status/<str:task_id>/", self._wrap_view('db_storage_dashboard', 'vacuum_task_status'), name="vacuum_task_status"),
+            
+            # Database Storage Dashboard API URLs (for lazy loading)
+            path("db-storage/extended-stats/", self._wrap_view('db_storage_dashboard', 'get_extended_database_stats'), name="get_extended_database_stats"),
+            path("db-storage/tables/", self._wrap_view('db_storage_dashboard', 'get_table_stats'), name="get_table_stats"),
+            path("db-storage/indexes/", self._wrap_view('db_storage_dashboard', 'get_index_stats'), name="get_index_stats"),
+            path("db-storage/columns/", self._wrap_view('db_storage_dashboard', 'get_column_stats'), name="get_column_stats"),
+            path("db-storage/bloat/", self._wrap_view('db_storage_dashboard', 'get_bloat_stats'), name="get_bloat_stats"),
         ]
         return custom_urls + urls
     

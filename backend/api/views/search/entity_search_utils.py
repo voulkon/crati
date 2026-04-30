@@ -1,5 +1,5 @@
 from core.services.search_service import SearchService
-from core.services.greek_transliteration_service import GreekTransliterationService
+from core.services.transliteration import TransliterationService
 import re
 
 def determine_matched_field(entity_type, entity, query):
@@ -90,7 +90,7 @@ def get_administrative_terms_autocomplete(query_prefix=''):
     """
     # Transliterate the query prefix if provided
     if query_prefix:
-        query_prefix = GreekTransliterationService.transliterate_query(query_prefix).upper()
+        query_prefix = TransliterationService.transliterate_query(query_prefix).upper()
     
     GREEK_ADMINISTRATIVE_TERMS = [
         {'text': 'ΔΗΜΟΣ', 'category': 'organization', 'description': 'Municipality'},
@@ -118,7 +118,7 @@ def get_entities_fast(query, **kwargs):
     Automatically transliterates English letters to Greek (e.g., "DHMOS" -> "ΔΗΜΟΣ")
     """
     # Transliterate English letters to Greek if needed
-    query = GreekTransliterationService.transliterate_query(query)
+    query = TransliterationService.transliterate_query(query)
     
     search_service = SearchService()
     
@@ -177,7 +177,7 @@ def get_documents_slow(query, limit=5):
     # Transliterate English letters to Greek if needed
     # I'm not sure I want this here. If someone is looking for "mydata", I don't want to transliterate it to "μυδατα". Maybe we should only transliterate if the query is all uppercase and matches common patterns for Greek words?
     # Yet again, there time that I want it
-    # query = GreekTransliterationService.transliterate_query(query)
+    # query = TransliterationService.transliterate_query(query)
     
     search_service = SearchService()
     

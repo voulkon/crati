@@ -127,6 +127,11 @@ class DocumentExtractionImporter:
             page = DocumentPage(
                 extraction=extraction,
                 page_number=page_data['page_number'],
+                # TODO: This raw_text is a huge mistake. It just repeats the whole data stored in the DocumentExtraction.
+                # I gotta remove it asap. If I want to somehow split between pages, I gotta: 
+                # 1) just note on which character index each page starts and ends, and then I can easily reconstruct the page text from the main text stored in DocumentExtraction.
+                # or - even better - 2) store the page text here, but then I gotta make sure to not store the full text in DocumentExtraction to avoid data duplication and have the respective service (either the search or the opensearch indexing consider both scenarios - if page text is available, use it, otherwise fallback to the main text in DocumentExtraction)
+                
                 raw_text=page_data['text'],
                 character_count=page_data.get('character_count', len(page_data['text']) if page_data['text'] else 0),
                 # TODO: Add image/table detection from page_data if available

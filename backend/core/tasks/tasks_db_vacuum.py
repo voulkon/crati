@@ -43,38 +43,34 @@ def vacuum_table_task(self, table_name: str, full: bool = False, analyze: bool =
     
     try:
         # VACUUM cannot run inside a transaction block
+        # Close any existing transaction and ensure we're in autocommit mode
+        connection.close()
+        connection.ensure_connection()
+        connection.set_autocommit(True)
+        
         with connection.cursor() as cursor:
-            # Set autocommit mode for VACUUM
-            old_isolation_level = connection.isolation_level
-            connection.set_isolation_level(0)
+            # Sanitize table name to prevent SQL injection
+            # Only allow alphanumeric, underscore, and dot (for schema.table)
+            if not all(c.isalnum() or c in ('_', '.') for c in table_name):
+                raise ValueError(f"Invalid table name: {table_name}")
             
-            try:
-                # Sanitize table name to prevent SQL injection
-                # Only allow alphanumeric, underscore, and dot (for schema.table)
-                if not all(c.isalnum() or c in ('_', '.') for c in table_name):
-                    raise ValueError(f"Invalid table name: {table_name}")
-                
-                # Execute VACUUM
-                sql = f"{command} {table_name}"
-                logger.info(f"Executing: {sql}")
-                cursor.execute(sql)
-                
-                elapsed = time.time() - start_time
-                
-                result = {
-                    'status': 'success',
-                    'table': table_name,
-                    'vacuum_type': vacuum_type,
-                    'duration_seconds': round(elapsed, 2),
-                    'message': f'{command} completed successfully in {elapsed:.1f} seconds'
-                }
-                
-                logger.info(f"Completed {command} on {table_name} in {elapsed:.1f}s")
-                return result
-                
-            finally:
-                # Restore isolation level
-                connection.set_isolation_level(old_isolation_level)
+            # Execute VACUUM
+            sql = f"{command} {table_name}"
+            logger.info(f"Executing: {sql}")
+            cursor.execute(sql)
+            
+            elapsed = time.time() - start_time
+            
+            result = {
+                'status': 'success',
+                'table': table_name,
+                'vacuum_type': vacuum_type,
+                'duration_seconds': round(elapsed, 2),
+                'message': f'{command} completed successfully in {elapsed:.1f} seconds'
+            }
+            
+            logger.info(f"Completed {command} on {table_name} in {elapsed:.1f}s")
+            return result
     
     except Exception as e:
         elapsed = time.time() - start_time

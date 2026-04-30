@@ -90,8 +90,17 @@ from .tasks_db_vacuum import (
     vacuum_multiple_tables_task,
 )
 
+from .tasks_search_management import (
+    backfill_search_vectors_task,
+    cleanup_search_vectors_task,
+    manage_postgres_search_task
+)
+
 # This ensures all tasks are available when importing from core.tasks
 __all__ = [
+    "backfill_search_vectors_task",
+    "cleanup_search_vectors_task",
+    "manage_postgres_search_task",
     # Documents
     "process_document_task",
     "process_scanned_document_task",

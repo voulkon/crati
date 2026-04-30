@@ -335,3 +335,86 @@
   background-color: #451a03;
   color: #fbbf24;
 }
+
+/* Category Tabs */
+.super-search-tabs {
+  display: flex;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background-color: var(--hover-bg);
+  border-bottom: 1px solid var(--border-color);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.super-search-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--muted-text);
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  white-space: nowrap;
+}
+
+.super-search-tab:hover {
+  background-color: var(--card-bg);
+  color: var(--text-color);
+}
+
+.super-search-tab.active {
+  background-color: var(--primary-blue);
+  color: white;
+  border-color: var(--primary-blue);
+}
+
+.super-search-tab-count {
+  padding: 2px 6px;
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: var(--font-bold);
+}
+
+.super-search-tab.active .super-search-tab-count {
+  background-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Load more trigger */
+.super-search-load-more-trigger {
+  height: 1px;
+  width: 100%;
+}
+
+/* No more results indicator */
+.super-search-no-more-results {
+  padding: var(--spacing-lg);
+  text-align: center;
+  color: var(--muted-text);
+  font-size: var(--font-sm);
+  font-style: italic;
+  border-top: 1px solid var(--border-color);
+}
+
+/* Loading more indicator */
+.super-search-loading-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  color: var(--primary-blue);
+  font-size: var(--font-sm);
+  border-top: 1px solid var(--border-color);
+}
+
+.super-search-loading-more .super-search-loading-spinner {
+  position: static;
+  transform: none;
+}

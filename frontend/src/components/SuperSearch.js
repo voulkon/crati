@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { streamSearch, getDefaultSuggestions } from '../api/searchApi';
+import { streamSearch, getDefaultSuggestions, searchCategories } from '../api/searchApi';
 import { OrganizationIcon, UserIcon, UnitIcon, CompanyIcon, FileIcon, SearchIcon, PenIcon } from './Icons.js';
 import './SuperSearch.css';
 
@@ -17,6 +17,23 @@ const SuperSearch = ({
   const [showResults, setShowResults] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [documentsLoading, setDocumentsLoading] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('all'); // 'all' or specific category name
+  const [categoryLimits, setCategoryLimits] = useState({
+    organizations: 5,
+    signers: 5,
+    units: 5,
+    companies: 5,
+    company_persons: 5,
+    documents: 5
+  });
+  const [hasMoreResults, setHasMoreResults] = useState({
+    organizations: true,
+    signers: true,
+    units: true,
+    companies: true,
+    company_persons: true,
+    documents: true
+  });
   
   const navigate = useNavigate();
   const inputRef = useRef(null);
@@ -24,6 +41,9 @@ const SuperSearch = ({
   const searchTimeoutRef = useRef(null);
   const sseCleanupRef = useRef(null);
   const currentResultsRef = useRef(null);
+  const loadMoreObserverRef = useRef(null);
+  const loadMoreTriggerRef = useRef(null);
+  const loadMoreCallbackRef = useRef(null);
   
   // Auto focus if requested
   useEffect(() => {
@@ -88,6 +108,25 @@ const SuperSearch = ({
             return newResults;
           });
           
+          // Check initial results to see if any categories have fewer than requested
+          const initialHasMore = {
+            organizations: (entityData.results.organizations?.length || 0) >= 5,
+            signers: (entityData.results.signers?.length || 0) >= 5,
+            units: (entityData.results.units?.length || 0) >= 5,
+            companies: (entityData.results.companies?.length || 0) >= 5,
+            company_persons: (entityData.results.company_persons?.length || 0) >= 5,
+            documents: true // Will be updated when documents arrive
+          };
+          setHasMoreResults(initialHasMore);
+          
+          // Auto-select first category with results
+          const firstCategory = Object.keys(entityData.results).find(
+            key => entityData.results[key] && entityData.results[key].length > 0
+          );
+          if (firstCategory) {
+            setSelectedCategory(firstCategory);
+          }
+          
           setShowResults(true);
           setIsLoading(false);
           setDocumentsLoading(showFullResults); // Start loading documents indicator
@@ -108,6 +147,12 @@ const SuperSearch = ({
               total_count: prevResults.total_count + (documentData.results.documents?.length || 0)
             };
           });
+          
+          // Update hasMoreResults for documents
+          setHasMoreResults(prev => ({
+            ...prev,
+            documents: (documentData.results.documents?.length || 0) >= 5
+          }));
           
           setDocumentsLoading(false);
         },
@@ -150,10 +195,158 @@ const SuperSearch = ({
     }
   }, [showFullResults]);
 
+  // Load more results for a specific category or all categories
+  const loadMoreResults = useCallback(async () => {
+    if (!query.trim()) return;
+
+    // Check if already loading (use ref to avoid adding to dependencies)
+    if (isLoading) {
+      console.log('Already loading, skipping');
+      return;
+    }
+
+    // Check if we should load more based on selected category
+    if (selectedCategory === 'all') {
+      // If all categories have no more results, don't load
+      const hasAnyMore = Object.values(hasMoreResults).some(v => v === true);
+      if (!hasAnyMore) {
+        console.log('All categories exhausted');
+        return;
+      }
+      console.log('Loading more from all categories with remaining results');
+    } else {
+      // If the selected category has no more results, don't load
+      if (!hasMoreResults[selectedCategory]) {
+        console.log(`Category ${selectedCategory} exhausted`);
+        return;
+      }
+      console.log(`Loading more from ${selectedCategory}`);
+    }
+
+    try {
+      setIsLoading(true);
+
+      // Determine which categories to increase limits for
+      let newLimits = { ...categoryLimits };
+      
+      if (selectedCategory === 'all') {
+        // Increase all category limits that still have more results
+        Object.keys(newLimits).forEach(key => {
+          if (hasMoreResults[key]) {
+            newLimits[key] += 5;
+            console.log(`Increasing ${key} limit to ${newLimits[key]}`);
+          }
+        });
+      } else {
+        // Increase only the selected category limit
+        newLimits[selectedCategory] += 5;
+        console.log(`Increasing ${selectedCategory} limit to ${newLimits[selectedCategory]}`);
+      }
+
+      // Fetch with new limits
+      const newResults = await searchCategories(query, newLimits);
+      console.log('Received results:', newResults);
+      
+      // Check which categories have reached their end
+      const newHasMoreResults = { ...hasMoreResults };
+      Object.keys(newLimits).forEach(category => {
+        const resultsKey = category; // e.g., 'organizations'
+        const currentCount = newResults.results[resultsKey]?.length || 0;
+        const requestedLimit = newLimits[category];
+        
+        // If we got fewer results than requested, we've reached the end
+        if (currentCount < requestedLimit) {
+          newHasMoreResults[category] = false;
+          console.log(`Category ${category} exhausted (${currentCount} < ${requestedLimit})`);
+        } else {
+          console.log(`Category ${category} still has more (${currentCount} >= ${requestedLimit})`);
+        }
+      });
+      
+      setResults(newResults);
+      setCategoryLimits(newLimits);
+      setHasMoreResults(newHasMoreResults);
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Load more failed:', error);
+      setIsLoading(false);
+    }
+  }, [query, categoryLimits, selectedCategory, hasMoreResults, isLoading]);
+  
+  // Store the callback in a ref so the observer always has the latest version
+  // This runs every render to keep the ref up-to-date
+  loadMoreCallbackRef.current = loadMoreResults;
+
+  // Setup infinite scroll observer
+  useEffect(() => {
+    if (!showResults || !results || !loadMoreTriggerRef.current) {
+      console.log('Observer not set up:', { showResults, hasResults: !!results, hasTrigger: !!loadMoreTriggerRef.current });
+      return;
+    }
+
+    // Check if there are more results to load
+    const shouldObserve = selectedCategory === 'all' 
+      ? Object.values(hasMoreResults).some(v => v === true)
+      : hasMoreResults[selectedCategory];
+    
+    if (!shouldObserve) {
+      console.log('No more results to observe for', selectedCategory);
+      return;
+    }
+
+    console.log('Setting up infinite scroll observer for', selectedCategory);
+
+    const observerCallback = (entries) => {
+      const [entry] = entries;
+      if (entry.isIntersecting) {
+        console.log('Intersection detected! Calling loadMoreResults');
+        // Use the ref to always get the latest callback
+        if (loadMoreCallbackRef.current) {
+          loadMoreCallbackRef.current();
+        }
+      }
+    };
+
+    const observer = new IntersectionObserver(observerCallback, {
+      root: resultsRef.current,
+      threshold: 0.1
+    });
+
+    observer.observe(loadMoreTriggerRef.current);
+    loadMoreObserverRef.current = observer;
+    console.log('Observer attached successfully');
+
+    return () => {
+      console.log('Cleaning up observer');
+      if (loadMoreObserverRef.current) {
+        loadMoreObserverRef.current.disconnect();
+      }
+    };
+  }, [showResults, results, hasMoreResults, selectedCategory]);
+
   // Handle input changes with debouncing
   const handleInputChange = (e) => {
     const newQuery = e.target.value;
     setQuery(newQuery);
+
+    // Reset category limits and hasMoreResults when query changes
+    setCategoryLimits({
+      organizations: 5,
+      signers: 5,
+      units: 5,
+      companies: 5,
+      company_persons: 5,
+      documents: 5
+    });
+    
+    setHasMoreResults({
+      organizations: true,
+      signers: true,
+      units: true,
+      companies: true,
+      company_persons: true,
+      documents: true
+    });
 
     // Clear previous timeout
     if (searchTimeoutRef.current) {
@@ -187,7 +380,14 @@ const SuperSearch = ({
   };
 
   // Handle input blur (with delay to allow clicks)
-  const handleInputBlur = () => {
+  const handleInputBlur = (e) => {
+    // Check if the click target is within the results container
+    const relatedTarget = e.relatedTarget;
+    if (relatedTarget && resultsRef.current?.contains(relatedTarget)) {
+      // Don't hide results if clicking within results
+      return;
+    }
+    
     setTimeout(() => {
       setShowResults(false);
       setSelectedIndex(-1);
@@ -449,7 +649,91 @@ const SuperSearch = ({
             </div>
           ) : (
             <>
-              {Object.entries(results.results).map(([category, categoryResults]) => {
+              {/* Category Tabs */}
+              <div className="super-search-tabs">
+                <button
+                  className={`super-search-tab ${selectedCategory === 'all' ? 'active' : ''}`}
+                  onClick={() => setSelectedCategory('all')}
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  All Results
+                  <span className="super-search-tab-count">{results.total_count}</span>
+                </button>
+                {results.results.organizations && results.results.organizations.length > 0 && (
+                  <button
+                    className={`super-search-tab ${selectedCategory === 'organizations' ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory('organizations')}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    <OrganizationIcon size={14} />
+                    Organizations
+                    <span className="super-search-tab-count">{results.results.organizations.length}</span>
+                  </button>
+                )}
+                {results.results.signers && results.results.signers.length > 0 && (
+                  <button
+                    className={`super-search-tab ${selectedCategory === 'signers' ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory('signers')}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    <PenIcon size={14} />
+                    Signers
+                    <span className="super-search-tab-count">{results.results.signers.length}</span>
+                  </button>
+                )}
+                {results.results.units && results.results.units.length > 0 && (
+                  <button
+                    className={`super-search-tab ${selectedCategory === 'units' ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory('units')}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    <UnitIcon size={14} />
+                    Units
+                    <span className="super-search-tab-count">{results.results.units.length}</span>
+                  </button>
+                )}
+                {results.results.companies && results.results.companies.length > 0 && (
+                  <button
+                    className={`super-search-tab ${selectedCategory === 'companies' ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory('companies')}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    <CompanyIcon size={14} />
+                    Companies
+                    <span className="super-search-tab-count">{results.results.companies.length}</span>
+                  </button>
+                )}
+                {results.results.company_persons && results.results.company_persons.length > 0 && (
+                  <button
+                    className={`super-search-tab ${selectedCategory === 'company_persons' ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory('company_persons')}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    <UserIcon size={14} />
+                    People
+                    <span className="super-search-tab-count">{results.results.company_persons.length}</span>
+                  </button>
+                )}
+                {results.results.documents && results.results.documents.length > 0 && (
+                  <button
+                    className={`super-search-tab ${selectedCategory === 'documents' ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory('documents')}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    <FileIcon size={14} />
+                    Documents
+                    <span className="super-search-tab-count">{results.results.documents.length}</span>
+                  </button>
+                )}
+              </div>
+
+              {Object.entries(results.results)
+                .filter(([category]) => {
+                  // If 'all' is selected, show all categories
+                  // Otherwise, only show the selected category
+                  return selectedCategory === 'all' || category === selectedCategory;
+                })
+                .map(([category, categoryResults]) => {
                 if (!categoryResults || categoryResults.length === 0) return null;
 
                 return (
@@ -516,10 +800,38 @@ const SuperSearch = ({
                 <button 
                   className="super-search-view-all"
                   onClick={handleViewAll}
+                  onMouseDown={(e) => e.preventDefault()}
                 >
                   View all {results.total_count} results
                 </button>
               )}
+              
+              {/* Show loading indicator when fetching more */}
+              {isLoading && (
+                <div className="super-search-loading-more">
+                  <div className="super-search-loading-spinner" />
+                  <span>Loading more results...</span>
+                </div>
+              )}
+              
+              {/* Show "No more results" when infinite scroll has ended */}
+              {(() => {
+                const noMoreResults = selectedCategory === 'all'
+                  ? Object.values(hasMoreResults).every(v => v === false)
+                  : hasMoreResults[selectedCategory] === false;
+                
+                return noMoreResults && !isLoading && (
+                  <div className="super-search-no-more-results">
+                    No more results
+                  </div>
+                );
+              })()}
+              
+              {/* Infinite scroll trigger */}
+              <div 
+                ref={loadMoreTriggerRef}
+                className="super-search-load-more-trigger"
+              />
             </>
           )}
         </div>

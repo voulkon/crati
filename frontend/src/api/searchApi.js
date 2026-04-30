@@ -210,3 +210,95 @@ export const getDefaultSuggestions = async (limit = 10) => {
     throw error;
   }
 };
+
+/**
+ * Search specific entity categories with custom limits per category
+ * @param {string} query - Search query
+ * @param {Object} categoryLimits - Limits per category { organizations: 5, signers: 10, ... }
+ * @returns {Promise<Object>} Category-specific search results
+ */
+export const searchCategories = async (query, categoryLimits = {}) => {
+  const {
+    organizations = 5,
+    signers = 5,
+    units = 5,
+    companies = 5,
+    company_persons = 5,
+    documents = 5
+  } = categoryLimits;
+
+  // Build entity type list and determine max limit for entities
+  const entityTypes = [];
+  let maxEntityLimit = 0;
+  
+  if (organizations > 0) {
+    entityTypes.push('organization');
+    maxEntityLimit = Math.max(maxEntityLimit, organizations);
+  }
+  if (signers > 0) {
+    entityTypes.push('signer');
+    maxEntityLimit = Math.max(maxEntityLimit, signers);
+  }
+  if (units > 0) {
+    entityTypes.push('unit');
+    maxEntityLimit = Math.max(maxEntityLimit, units);
+  }
+  if (companies > 0) {
+    entityTypes.push('company');
+    maxEntityLimit = Math.max(maxEntityLimit, companies);
+  }
+  if (company_persons > 0) {
+    entityTypes.push('company_person');
+    maxEntityLimit = Math.max(maxEntityLimit, company_persons);
+  }
+
+  try {
+    // Fetch entities with the max limit to avoid multiple calls
+    const entityParams = new URLSearchParams({
+      q: query,
+      types: entityTypes.join(','),
+      limit: maxEntityLimit
+    });
+
+    const entityResponse = await apiClient.get(`/search/entities-fast/?${entityParams}`);
+    const results = {
+      query: query,
+      results: {},
+      total_count: 0
+    };
+
+    // Trim results to match requested limits
+    if (entityResponse.data.results) {
+      Object.entries(entityResponse.data.results).forEach(([category, items]) => {
+        const categoryKey = category; // e.g., 'organizations'
+        
+        // Find the corresponding limit
+        let limit = 5;
+        if (categoryKey === 'organizations') limit = organizations;
+        else if (categoryKey === 'signers') limit = signers;
+        else if (categoryKey === 'units') limit = units;
+        else if (categoryKey === 'companies') limit = companies;
+        else if (categoryKey === 'company_persons') limit = company_persons;
+
+        if (limit > 0 && items && items.length > 0) {
+          results.results[categoryKey] = items.slice(0, limit);
+          results.total_count += results.results[categoryKey].length;
+        }
+      });
+    }
+
+    // Fetch documents if requested
+    if (documents > 0) {
+      const docResponse = await searchDocuments(query, documents);
+      if (docResponse.results?.documents) {
+        results.results.documents = docResponse.results.documents;
+        results.total_count += results.results.documents.length;
+      }
+    }
+
+    return results;
+  } catch (error) {
+    console.error('Category search failed:', error);
+    throw error;
+  }
+};

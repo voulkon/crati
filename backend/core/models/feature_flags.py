@@ -36,6 +36,7 @@ class FeatureFlag(models.Model):
         ('boolean', 'Boolean (True/False)'),
         ('list', 'List (Multiple Values)'),
         ('string', 'String (Text)'),
+        ('choice', 'Choice (String from Predefined List)'),
     ]
     
     # Core fields
@@ -151,6 +152,8 @@ class FeatureFlag(models.Model):
         elif self.value_type == 'list':
             return self.list_value or []
         elif self.value_type == 'string':
+            return self.string_value
+        elif self.value_type == 'choice':
             return self.string_value
         return None
     

@@ -81,6 +81,22 @@ class FeatureFlagForm(forms.ModelForm):
         label="Additional Email Addresses"
     )
     
+    # Dynamic field for ENTITY_SEARCH_METHOD
+    selected_search_method = forms.ChoiceField(
+        required=False,
+        choices=[
+            ('postgres_simple', 'PostgreSQL Simple (Basic ILIKE search)'),
+            ('postgres_fts', 'PostgreSQL Full-Text Search (Smart language detection)'),
+            ('opensearch', 'OpenSearch (Advanced search - not yet implemented)'),
+        ],
+        widget=forms.Select(attrs={'style': 'width: 100%; max-width: 600px;'}),
+        help_text=(
+            "Select the search method for entities (organizations, signers, units, companies, company persons). "
+            "Note: postgres_fts requires backfill of search_vector fields."
+        ),
+        label="Search Method"
+    )
+    
     class Meta:
         model = FeatureFlag
         fields = '__all__'
@@ -159,6 +175,11 @@ class FeatureFlagForm(forms.ModelForm):
                 if additional:
                     self.fields['additional_emails'].initial = '\n'.join(additional)
         
+        # If this is ENTITY_SEARCH_METHOD flag and we have string_value, pre-select the method
+        if self.instance and self.instance.pk and self.instance.key == 'ENTITY_SEARCH_METHOD':
+            if self.instance.string_value:
+                self.fields['selected_search_method'].initial = self.instance.string_value
+        
         # Show/hide fields based on value_type
         if self.instance and self.instance.pk:
             if self.instance.value_type == 'boolean':
@@ -200,6 +221,7 @@ class FeatureFlagForm(forms.ModelForm):
                     self.fields['always_exempt_prefixes_display'].widget = forms.HiddenInput()
                     self.fields['selected_users'].widget = forms.HiddenInput()
                     self.fields['additional_emails'].widget = forms.HiddenInput()
+                self.fields['selected_search_method'].widget = forms.HiddenInput()
             elif self.instance.value_type == 'string':
                 self.fields['enabled'].widget = forms.HiddenInput()
                 self.fields['list_value'].widget = forms.HiddenInput()
@@ -208,6 +230,28 @@ class FeatureFlagForm(forms.ModelForm):
                 self.fields['always_exempt_prefixes_display'].widget = forms.HiddenInput()
                 self.fields['selected_users'].widget = forms.HiddenInput()
                 self.fields['additional_emails'].widget = forms.HiddenInput()
+                # For ENTITY_SEARCH_METHOD (choice type), show the dropdown selector
+                if self.instance.key == 'ENTITY_SEARCH_METHOD':
+                    # Hide the raw string field, show the dropdown instead
+                    self.fields['string_value'].widget = forms.HiddenInput()
+                else:
+                    # For other string-type flags, hide the dropdown
+                    self.fields['selected_search_method'].widget = forms.HiddenInput()
+            elif self.instance.value_type == 'choice':
+                self.fields['enabled'].widget = forms.HiddenInput()
+                self.fields['list_value'].widget = forms.HiddenInput()
+                self.fields['selected_decision_types'].widget = forms.HiddenInput()
+                self.fields['selected_exempt_prefixes'].widget = forms.HiddenInput()
+                self.fields['always_exempt_prefixes_display'].widget = forms.HiddenInput()
+                self.fields['selected_users'].widget = forms.HiddenInput()
+                self.fields['additional_emails'].widget = forms.HiddenInput()
+                # For ENTITY_SEARCH_METHOD (choice type), show the dropdown selector
+                if self.instance.key == 'ENTITY_SEARCH_METHOD':
+                    # Hide the raw string field, show the dropdown instead
+                    self.fields['string_value'].widget = forms.HiddenInput()
+                else:
+                    # For other choice-type flags, hide the dropdown
+                    self.fields['selected_search_method'].widget = forms.HiddenInput()
     
     def clean(self):
         cleaned_data = super().clean()
@@ -251,6 +295,12 @@ class FeatureFlagForm(forms.ModelForm):
                     unique_emails.append(email)
             
             cleaned_data['list_value'] = unique_emails
+        
+        # For ENTITY_SEARCH_METHOD, sync selected_search_method to string_value
+        if cleaned_data.get('key') == 'ENTITY_SEARCH_METHOD' and cleaned_data.get('value_type') in ('string', 'choice'):
+            selected_method = cleaned_data.get('selected_search_method')
+            if selected_method:
+                cleaned_data['string_value'] = selected_method
         
         return cleaned_data
 
@@ -313,7 +363,7 @@ class FeatureFlagAdmin(admin.ModelAdmin):
             'fields': ('key', 'name', 'category', 'value_type', 'is_active')
         }),
         ('Value Configuration', {
-            'fields': ('enabled', 'list_value', 'string_value', 'selected_decision_types', 'selected_exempt_prefixes', 'always_exempt_prefixes_display', 'selected_users', 'additional_emails'),
+            'fields': ('enabled', 'list_value', 'string_value', 'selected_decision_types', 'selected_exempt_prefixes', 'always_exempt_prefixes_display', 'selected_users', 'additional_emails', 'selected_search_method'),
             'description': 'Configure the value based on the value type selected above.'
         }),
         ('Description', {

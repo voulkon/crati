@@ -70,6 +70,19 @@ class FeatureFlagService:
             'category': 'data_indexing',
             'requires_restart': False,
         },
+        'ENTITY_SEARCH_METHOD': {
+            'name': 'Entity Search Method',
+            'description': 'Search method for entities (organizations, signers, units, companies, company persons). '
+                          'Options: postgres_simple (basic ILIKE), postgres_fts (full-text search with smart language detection), '
+                          'opensearch (advanced search - not yet implemented). '
+                          'postgres_fts requires backfill of search_vector fields.',
+            'default': 'postgres_simple',
+            'env_var': 'ENTITY_SEARCH_METHOD',
+            'category': 'data_indexing',
+            'requires_restart': False,
+            'value_type': 'choice',
+            'choices': ['postgres_simple', 'postgres_fts', 'opensearch'],
+        },
         'HAVE_AFM_FETCH_JOB': {
             'name': 'Company Data Fetching',
             'description': 'Enable automatic fetching of company information from GEMI/AFM registry. '
@@ -441,6 +454,9 @@ class FeatureFlagService:
                     defaults['list_value'] = flag_data.get('default', [])
                 elif value_type == 'string':
                     defaults['string_value'] = flag_data.get('default', '')
+                elif value_type == 'choice':
+                    # Choice is a string from a predefined list
+                    defaults['string_value'] = flag_data.get('default', '')
                 
                 flag, created = FeatureFlag.objects.get_or_create(
                     key=flag_key,
@@ -460,9 +476,11 @@ class FeatureFlagService:
                         logger.info(
                             f"Created feature flag: {flag_key} (list with {count} items)"
                         )
-                    else:
+                    elif value_type in ('string', 'choice'):
+                        value_display = defaults['string_value'] or '(empty)'
+                        type_label = 'choice' if value_type == 'choice' else 'string'
                         logger.info(
-                            f"Created feature flag: {flag_key} (string)"
+                            f"Created feature flag: {flag_key} = {value_display} ({type_label})"
                         )
             
             if created_count > 0:

@@ -15,13 +15,13 @@ import time
 
 
 @shared_task(bind=True, name="search.backfill_search_vectors")
-def backfill_search_vectors_task(self, batch_size: int = 1000, only_null: bool = True, model_scope: str = 'all'):
+def backfill_search_vectors_task(self, batch_size: int = 1000, only_null: bool = False, model_scope: str = 'all'):
     """
     Backfill search_vector for specified models.
     
     Args:
         batch_size: Number of records to process per batch
-        only_null: If True, only backfill NULL search_vector fields
+        only_null: If True, only backfill NULL search_vector fields (default: False - backfill all)
         model_scope: Which models to process - 'all', 'extraction', or 'others'
     
     Returns:

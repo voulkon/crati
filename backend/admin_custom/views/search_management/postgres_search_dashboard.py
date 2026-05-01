@@ -525,7 +525,7 @@ def _execute_command(command_type, model_scope, options):
             # Long-running operation - launch async task
             task = backfill_search_vectors_task.delay(
                 batch_size=options.get('batch_size', 1000),
-                only_null=options.get('only_null', True),
+                only_null=options.get('only_null', False),
                 model_scope=model_scope
             )
             

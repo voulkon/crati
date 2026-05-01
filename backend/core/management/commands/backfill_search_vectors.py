@@ -42,7 +42,7 @@ class Command(BaseCommand):
     def _get_model_class(model_path: str):
         """Dynamically load model class from path (e.g., 'core.models.entities.AFMEntity')"""
         app_label, model_name = model_path.rsplit('.', 1)
-        return apps.get_model(app_label.split('.')[-2], model_name)
+        return apps.get_model(app_label.split('.')[0], model_name)
     
     def add_arguments(self, parser):
         # Model selection arguments

@@ -26,24 +26,29 @@ def get_month_calendar_data(month, year, entity_type, entity_id):
     # Get decision coverage data
     coverage_data = {}
     if entity_type == 'all':
-        # For "all" decisions, query Decision model directly grouped by date
+        # For "all" decisions, use indexed date columns for fast aggregation
         from core.models.decisions import Decision
         from django.db.models import Count
         
-        decisions_by_day = Decision.objects.filter(
-            issue_date__year=year,
-            issue_date__month=month
-        ).extra(
-            select={'day': 'DATE(issue_date)'}
-        ).values('day').annotate(
-            count=Count('id')
-        ).order_by('day')
+        # issue_date_day is already a full date, so filter and group by it directly
+        first_day = date(year, month, 1)
+        if month == 12:
+            last_day = date(year + 1, 1, 1) - timedelta(days=1)
+        else:
+            last_day = date(year, month + 1, 1) - timedelta(days=1)
         
+        decisions_by_day = Decision.objects.filter(
+            issue_date_day__gte=first_day,
+            issue_date_day__lte=last_day
+        ).values('issue_date_day').annotate(
+            count=Count('id')
+        ).order_by('issue_date_day')
+        
+        # issue_date_day is already a date object
         for item in decisions_by_day:
-            day_date = item['day']
-            if isinstance(day_date, str):
-                day_date = datetime.strptime(day_date, '%Y-%m-%d').date()
-            coverage_data[day_date] = item['count']
+            day_date = item['issue_date_day']
+            if day_date:
+                coverage_data[day_date] = item['count']
     elif entity_id:
         # Get the date coverage for the selected entity
         coverage_query = DateCoverage.objects.filter(date__year=year, date__month=month)
@@ -150,17 +155,20 @@ def get_year_summary_data(year, entity_type, entity_id):
     months_with_data = 0
 
     if entity_type == 'all':
-        # For "all" decisions, query Decision model directly
+        # For "all" decisions, use indexed date columns for fast aggregation
         from core.models.decisions import Decision
         from django.db.models import Count
         
+        # issue_date_month is a date (first day of month), filter by year and group by it
+        first_day_of_year = date(year, 1, 1)
+        last_day_of_year = date(year, 12, 31)
+        
         decisions_by_month = Decision.objects.filter(
-            issue_date__year=year
-        ).extra(
-            select={'month': 'EXTRACT(MONTH FROM issue_date)'}
-        ).values('month').annotate(
+            issue_date_month__gte=first_day_of_year,
+            issue_date_month__lte=last_day_of_year
+        ).values('issue_date_month').annotate(
             count=Count('id')
-        ).order_by('month')
+        ).order_by('issue_date_month')
         
         total_decisions = sum(item['count'] for item in decisions_by_month)
         months_with_data = len(decisions_by_month)

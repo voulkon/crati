@@ -27,14 +27,76 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 from django.contrib.postgres.search import SearchVector
 from core.models.document_analysis import DocumentExtraction
+from core.models.entities import AFMEntity
+from core.models.organizations import Organization, Unit, Signer
+from core.models.companies import Company, CompanyPerson
 from loguru import logger
 import time
 
 
 class Command(BaseCommand):
-    help = 'Regenerate search_vector data from existing raw_text'
+    help = 'Regenerate search_vector data for all models with search_vector fields'
+    
+    # Model configurations
+    MODELS = {
+        'extraction': {
+            'model_class': DocumentExtraction,
+            'table': 'core_documentextraction',
+            'text_fields': ['raw_text'],
+            'search_config': 'greek'
+        },
+        'afmentity': {
+            'model_class': AFMEntity,
+            'table': 'core_afmentity',
+            'text_fields': ['name'],
+            'search_config': 'greek'
+        },
+        'organization': {
+            'model_class': Organization,
+            'table': 'core_organization',
+            'text_fields': ['label'],
+            'search_config': 'greek'
+        },
+        'unit': {
+            'model_class': Unit,
+            'table': 'core_unit',
+            'text_fields': ['label'],
+            'search_config': 'greek'
+        },
+        'signer': {
+            'model_class': Signer,
+            'table': 'core_signer',
+            'text_fields': ['first_name', 'last_name'],
+            'search_config': 'greek'
+        },
+        'company': {
+            'model_class': Company,
+            'table': 'companies',
+            'text_fields': ['co_name_el', 'co_names_en', 'co_titles_el', 'co_titles_en'],
+            'search_config': 'greek'
+        },
+        'companyperson': {
+            'model_class': CompanyPerson,
+            'table': 'company_persons',
+            'text_fields': ['person_name'],
+            'search_config': 'greek'
+        }
+    }
     
     def add_arguments(self, parser):
+        # Model selection arguments
+        parser.add_argument(
+            '--extraction-only',
+            action='store_true',
+            help='Backfill only extraction model'
+        )
+        parser.add_argument(
+            '--others-only',
+            action='store_true',
+            help='Backfill only other models (afmentity, organization, unit, signer, company, companyperson)'
+        )
+        
+        # Operation arguments
         parser.add_argument(
             '--batch-size',
             type=int,
@@ -59,15 +121,29 @@ class Command(BaseCommand):
     
     def handle(self, *args, **options):
         """Main command handler"""
-        # Only support extraction model now
-        model = 'extraction'
+        # Determine which models to operate on
+        extraction_only = options.get('extraction_only', False)
+        others_only = options.get('others_only', False)
+        
+        if extraction_only and others_only:
+            raise CommandError('Cannot specify both --extraction-only and --others-only')
+        
+        if extraction_only:
+            models = ['extraction']
+            model_description = 'Extraction Model'
+        elif others_only:
+            models = [m for m in self.MODELS.keys() if m != 'extraction']
+            model_description = 'Other Models (6 models)'
+        else:
+            models = list(self.MODELS.keys())
+            model_description = 'All Models (7 models)'
         
         # Check trigger status
         if not options['force']:
             self._check_trigger_status()
         
         # Show what will be affected
-        stats = self._get_stats([model], options['only_null'])
+        stats = self._get_stats(models, options['only_null'])
         self._show_stats(stats, options['dry_run'])
         
         if options['dry_run']:
@@ -76,11 +152,11 @@ class Command(BaseCommand):
         
         # Confirmation
         if not options['force']:
-            total_records = stats[model]['to_backfill']
+            total_records = sum(s['to_backfill'] for s in stats.values())
             estimated_time = total_records / 1500  # Rough estimate: 1500 records/second
             
             self.stdout.write(self.style.WARNING(
-                f'\nThis will regenerate search_vector for {total_records:,} records.\n'
+                f'\nThis will regenerate search_vector for {total_records:,} records in {model_description.lower()}.\n'
                 f'Estimated time: {estimated_time/60:.1f} minutes'
             ))
             
@@ -89,21 +165,25 @@ class Command(BaseCommand):
                 self.stdout.write('Aborted')
                 return
         
-        # Perform backfill
+        # Perform backfill for selected models
         start_time = time.time()
+        total_processed = 0
         
-        if stats[model]['to_backfill'] > 0:
-            self.stdout.write(self.style.WARNING(f'\n=== Backfilling {model.upper()} ==='))
-            self._backfill_model(model, options)
+        for model in models:
+            if stats[model]['to_backfill'] > 0:
+                self.stdout.write(self.style.WARNING(f'\n=== Backfilling {model.upper()} ==='))
+                processed = self._backfill_model(model, options)
+                total_processed += processed
         
         elapsed = time.time() - start_time
         self.stdout.write(self.style.SUCCESS(
             f'\n✓ Backfill completed in {elapsed:.1f} seconds ({elapsed/60:.1f} minutes)'
         ))
+        self.stdout.write(f'Total records processed: {total_processed:,}')
         
         # Show final stats
         self.stdout.write('\n=== Final Status ===')
-        final_stats = self._get_stats([model], only_null=False)
+        final_stats = self._get_stats(models, only_null=False)
         self._show_stats(final_stats, dry_run=False)
     
     def _check_trigger_status(self):
@@ -140,26 +220,18 @@ class Command(BaseCommand):
         
         with connection.cursor() as cursor:
             for model in models:
-                # Only extraction model supported now
-                table = 'core_documentextraction'
-                text_field = 'raw_text'
+                config = self.MODELS[model]
+                table = config['table']
+                
+                # For models with multiple text fields, just check if any field has data
+                # We'll use the model class to do the actual filtering
+                model_class = config['model_class']
                 
                 # Count records to backfill
                 if only_null:
-                    cursor.execute(f"""
-                        SELECT COUNT(*) 
-                        FROM {table}
-                        WHERE search_vector IS NULL 
-                        AND {text_field} IS NOT NULL
-                    """)
+                    to_backfill = model_class.objects.filter(search_vector__isnull=True).count()
                 else:
-                    cursor.execute(f"""
-                        SELECT COUNT(*) 
-                        FROM {table}
-                        WHERE {text_field} IS NOT NULL
-                    """)
-                
-                to_backfill = cursor.fetchone()[0]
+                    to_backfill = model_class.objects.all().count()
                 
                 # Get total counts
                 cursor.execute(f"""
@@ -204,28 +276,25 @@ class Command(BaseCommand):
     
     def _backfill_model(self, model, options):
         """Backfill search_vector for a specific model"""
-        model_class = DocumentExtraction
-        text_field = 'raw_text'
+        config = self.MODELS[model]
+        model_class = config['model_class']
+        text_fields = config['text_fields']
+        search_config = config['search_config']
         
         batch_size = options['batch_size']
         only_null = options['only_null']
         
-        # Build queryset
+        # Build queryset with explicit ordering for consistent batching
         if only_null:
-            qs = model_class.objects.filter(
-                search_vector__isnull=True,
-                **{f'{text_field}__isnull': False}
-            )
+            qs = model_class.objects.filter(search_vector__isnull=True).order_by('pk')
         else:
-            qs = model_class.objects.filter(
-                **{f'{text_field}__isnull': False}
-            )
+            qs = model_class.objects.all().order_by('pk')
         
         total = qs.count()
         
         if total == 0:
             self.stdout.write(self.style.SUCCESS('✓ No records to backfill'))
-            return
+            return 0
         
         self.stdout.write(f'Backfilling search_vector for {total:,} records (batch size: {batch_size:,})...')
         
@@ -239,16 +308,21 @@ class Command(BaseCommand):
             batch_start = time.time()
             
             # Get IDs for this batch
-            batch_ids = list(qs.values_list('id', flat=True)[processed:processed + batch_size])
+            batch_ids = list(qs.values_list('pk', flat=True)[processed:processed + batch_size])
             
             if not batch_ids:
                 break
             
+            # Build SearchVector from multiple fields
+            # Combine all text fields with space separator
+            search_vector_expr = SearchVector(text_fields[0], config=search_config)
+            for field in text_fields[1:]:
+                search_vector_expr = search_vector_expr + SearchVector(field, config=search_config)
+            
             # Update search_vector for this batch using Django's SearchVector
-            # Use Greek configuration for proper text analysis
             with transaction.atomic():
-                model_class.objects.filter(id__in=batch_ids).update(
-                    search_vector=SearchVector(text_field, config='greek')
+                model_class.objects.filter(pk__in=batch_ids).update(
+                    search_vector=search_vector_expr
                 )
             
             processed += len(batch_ids)
@@ -272,3 +346,5 @@ class Command(BaseCommand):
             f'(avg: {avg_speed:.0f} records/second)'
         ))
         logger.info(f"Backfilled search_vector for {processed:,} {model} records in {total_elapsed:.1f}s")
+        
+        return processed

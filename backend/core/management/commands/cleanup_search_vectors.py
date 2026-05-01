@@ -30,14 +30,41 @@ Space Reclamation:
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 from core.models.document_analysis import DocumentExtraction
+from core.models.entities import AFMEntity
+from core.models.organizations import Organization, Unit, Signer
+from core.models.companies import Company, CompanyPerson
 from loguru import logger
 import time
 
 
 class Command(BaseCommand):
-    help = 'NULL search_vector data and VACUUM to reclaim disk space'
+    help = 'NULL search_vector data and VACUUM to reclaim disk space for all models'
+    
+    # Model configurations (table names)
+    MODELS = {
+        'extraction': 'core_documentextraction',
+        'afmentity': 'core_afmentity',
+        'organization': 'core_organization',
+        'unit': 'core_unit',
+        'signer': 'core_signer',
+        'company': 'companies',
+        'companyperson': 'company_persons'
+    }
     
     def add_arguments(self, parser):
+        # Model selection arguments
+        parser.add_argument(
+            '--extraction-only',
+            action='store_true',
+            help='Clean only extraction model'
+        )
+        parser.add_argument(
+            '--others-only',
+            action='store_true',
+            help='Clean only other models (afmentity, organization, unit, signer, company, companyperson)'
+        )
+        
+        # Operation arguments
         parser.add_argument(
             '--dry-run',
             action='store_true',
@@ -67,14 +94,28 @@ class Command(BaseCommand):
     
     def handle(self, *args, **options):
         """Main command handler"""
-        # Only support extraction model now
-        model = 'extraction'
+        # Determine which models to operate on
+        extraction_only = options.get('extraction_only', False)
+        others_only = options.get('others_only', False)
+        
+        if extraction_only and others_only:
+            raise CommandError('Cannot specify both --extraction-only and --others-only')
+        
+        if extraction_only:
+            models = ['extraction']
+            model_description = 'Extraction Model'
+        elif others_only:
+            models = [m for m in self.MODELS.keys() if m != 'extraction']
+            model_description = 'Other Models (6 models)'
+        else:
+            models = list(self.MODELS.keys())
+            model_description = 'All Models (7 models)'
         
         # Check trigger status and warn if enabled
         self._check_trigger_status()
         
         # Show what will be affected
-        stats = self._get_stats([model])
+        stats = self._get_stats(models)
         self._show_stats(stats, options['dry_run'])
         
         if options['dry_run']:
@@ -88,9 +129,9 @@ class Command(BaseCommand):
                     '\n⚠️  VACUUM FULL will lock tables and may take 10-30 minutes!'
                 ))
             
-            total_records = stats[model]['indexed_count']
+            total_records = sum(s['indexed_count'] for s in stats.values())
             self.stdout.write(self.style.WARNING(
-                f'\nThis will NULL search_vector for {total_records:,} records.'
+                f'\nThis will NULL search_vector for {total_records:,} records in {model_description.lower()}.'
             ))
             
             confirm = input('Continue? [y/N]: ')
@@ -98,11 +139,12 @@ class Command(BaseCommand):
                 self.stdout.write('Aborted')
                 return
         
-        # Perform cleanup
+        # Perform cleanup for selected models
         start_time = time.time()
         
-        self.stdout.write(self.style.WARNING(f'\n=== Cleaning {model.upper()} ==='))
-        self._cleanup_model(model, options)
+        for model in models:
+            self.stdout.write(self.style.WARNING(f'\n=== Cleaning {model.upper()} ==='))
+            self._cleanup_model(model, options)
         
         elapsed = time.time() - start_time
         self.stdout.write(self.style.SUCCESS(
@@ -111,7 +153,7 @@ class Command(BaseCommand):
         
         # Show final stats
         self.stdout.write('\n=== Final Status ===')
-        final_stats = self._get_stats([model])
+        final_stats = self._get_stats(models)
         self._show_stats(final_stats, dry_run=False)
     
     def _check_trigger_status(self):
@@ -148,8 +190,7 @@ class Command(BaseCommand):
         
         with connection.cursor() as cursor:
             for model in models:
-                # Only extraction model supported now
-                table = 'core_documentextraction'
+                table = self.MODELS[model]
                 
                 cursor.execute(f"""
                     SELECT 
@@ -197,10 +238,7 @@ class Command(BaseCommand):
     
     def _cleanup_model(self, model, options):
         """Clean up search_vector for a specific model"""
-        # Only extraction model supported now
-        table = 'core_documentextraction'
-        model_class = DocumentExtraction
-        
+        table = self.MODELS[model]
         batch_size = options['batch_size']
         
         # Get count of records to update
@@ -222,19 +260,22 @@ class Command(BaseCommand):
         updated_count = 0
         batch_num = 0
         
+        # Determine primary key field based on table
+        pk_field = 'uid' if table in ['core_organization', 'core_unit', 'core_signer'] else 'id'
+        
         while updated_count < total_to_update:
             batch_num += 1
             with transaction.atomic():
                 with connection.cursor() as cursor:
                     cursor.execute(f"""
                         WITH to_update AS (
-                            SELECT id FROM {table}
+                            SELECT {pk_field} FROM {table}
                             WHERE search_vector IS NOT NULL
                             LIMIT %s
                         )
                         UPDATE {table}
                         SET search_vector = NULL
-                        WHERE id IN (SELECT id FROM to_update)
+                        WHERE {pk_field} IN (SELECT {pk_field} FROM to_update)
                     """, [batch_size])
                     
                     rows_updated = cursor.rowcount

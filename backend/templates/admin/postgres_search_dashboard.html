@@ -425,6 +425,70 @@
         background: #2196F3;
         color: white;
     }
+    
+    /* Model Selector */
+    .model-selector {
+        background: var(--darkened-bg);
+        padding: 20px;
+        border-radius: 4px;
+        border: 1px solid var(--hairline-color);
+        margin-bottom: 20px;
+    }
+    
+    .model-selector h4 {
+        margin: 0 0 15px 0;
+        color: var(--body-fg);
+        font-size: 1.1em;
+    }
+    
+    .model-selector-options {
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+    }
+    
+    .model-option {
+        flex: 1;
+        min-width: 200px;
+        position: relative;
+    }
+    
+    .model-option input[type="radio"] {
+        position: absolute;
+        opacity: 0;
+        cursor: pointer;
+    }
+    
+    .model-option label {
+        display: block;
+        padding: 15px;
+        background: var(--body-bg);
+        border: 2px solid var(--hairline-color);
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .model-option input[type="radio"]:checked + label {
+        border-color: var(--primary);
+        background: var(--darkened-bg);
+        box-shadow: 0 0 0 2px rgba(var(--primary-rgb), 0.1);
+    }
+    
+    .model-option label:hover {
+        border-color: var(--link-fg);
+    }
+    
+    .model-option-title {
+        font-weight: bold;
+        color: var(--body-fg);
+        margin-bottom: 5px;
+    }
+    
+    .model-option-description {
+        font-size: 0.85em;
+        color: var(--body-quiet-color);
+    }
 </style>
 {% endblock %}
 
@@ -456,7 +520,7 @@
         <div class="stat-card {% if summary.total_null > 0 %}warning{% else %}{% endif %}">
             <span class="stat-label">Total Records</span>
             <span class="stat-value">{{ summary.total_records|floatformat:0 }}</span>
-            <span class="stat-subtext">DocumentExtraction</span>
+            <span class="stat-subtext">Across {{ all_models_status.model_count }} models</span>
         </div>
         
         <div class="stat-card {% if summary.indexing_percentage < 100 %}warning{% else %}{% endif %}">
@@ -499,86 +563,185 @@
     </div>
     {% endif %}
     
-    <!-- DocumentExtraction Status -->
+    <!-- All Models Status Overview -->
     <div class="model-section">
-        <h2>DocumentExtraction (Documents)</h2>
+        <h2>All Search Models Overview</h2>
+        <p style="color: var(--body-quiet-color); margin-bottom: 20px;">
+            Managing {{ all_models_status.model_count }} models: DocumentExtraction, AFMEntity, Organization, Unit, Signer, Company, CompanyPerson
+        </p>
         
         <div class="status-grid">
-            <div class="status-item {% if extraction_status.trigger_status == 'enabled' %}good{% else %}bad{% endif %}">
+            <div class="status-item {% if all_models_status.trigger_status == 'enabled' %}good{% elif all_models_status.trigger_status == 'disabled' %}bad{% else %}neutral{% endif %}">
                 <div class="status-item-label">Trigger Status</div>
                 <div class="status-item-value">
-                    {% if extraction_status.trigger_status == 'enabled' %}
-                        Enabled
-                    {% elif extraction_status.trigger_status == 'disabled' %}
-                        Disabled
+                    {% if all_models_status.trigger_status == 'enabled' %}
+                        All Enabled
+                    {% elif all_models_status.trigger_status == 'disabled' %}
+                        All Disabled
+                    {% elif all_models_status.trigger_status == 'mixed' %}
+                        Mixed (some on/off)
                     {% else %}
-                        {{ extraction_status.trigger_status|title }}
+                        {{ all_models_status.trigger_status|title }}
                     {% endif %}
                 </div>
             </div>
             
-            <div class="status-item {% if extraction_status.index_status == 'exists' %}good{% else %}bad{% endif %}">
-                <div class="status-item-label">GIN Index</div>
+            <div class="status-item {% if all_models_status.index_status == 'exists' %}good{% elif all_models_status.index_status == 'missing' %}bad{% else %}neutral{% endif %}">
+                <div class="status-item-label">GIN Indexes</div>
                 <div class="status-item-value">
-                    {% if extraction_status.index_status == 'exists' %}
-                        {{ extraction_status.index_size }}
+                    {% if all_models_status.index_status == 'exists' %}
+                        All Created (~{{ summary.index_size_gb }}GB)
+                    {% elif all_models_status.index_status == 'missing' %}
+                        All Missing
+                    {% elif all_models_status.index_status == 'partial' %}
+                        Partial (~{{ summary.index_size_gb }}GB)
                     {% else %}
-                        Missing
+                        Unknown
                     {% endif %}
                 </div>
             </div>
             
             <div class="status-item neutral">
                 <div class="status-item-label">Total Records</div>
-                <div class="status-item-value">{{ extraction_status.total_count|floatformat:0 }}</div>
+                <div class="status-item-value">{{ all_models_status.total_count|floatformat:0 }}</div>
             </div>
             
-            <div class="status-item {% if extraction_status.null_count > 0 %}bad{% else %}good{% endif %}">
+            <div class="status-item {% if all_models_status.null_count > 0 %}bad{% else %}good{% endif %}">
                 <div class="status-item-label">Missing Vectors</div>
-                <div class="status-item-value">{{ extraction_status.null_count|floatformat:0 }}</div>
+                <div class="status-item-value">{{ all_models_status.null_count|floatformat:0 }}</div>
             </div>
         </div>
         
         <div class="progress-container">
             <div class="progress-label">
-                <span>Indexing Coverage</span>
-                <span>{{ extraction_status.indexing_percentage }}%</span>
+                <span>Overall Indexing Coverage</span>
+                <span>{{ all_models_status.indexing_percentage }}%</span>
             </div>
             <div class="progress-bar-wrapper">
-                <div class="progress-bar-fill {% if extraction_status.indexing_percentage < 50 %}danger{% elif extraction_status.indexing_percentage < 90 %}warning{% endif %}" 
-                     style="width: {{ extraction_status.indexing_percentage }}%;">
-                    {% if extraction_status.indexing_percentage > 10 %}
-                        {{ extraction_status.indexed_count|floatformat:0 }} / {{ extraction_status.total_count|floatformat:0 }}
+                <div class="progress-bar-fill {% if all_models_status.indexing_percentage < 50 %}danger{% elif all_models_status.indexing_percentage < 90 %}warning{% endif %}" 
+                     style="width: {{ all_models_status.indexing_percentage }}%;">
+                    {% if all_models_status.indexing_percentage > 10 %}
+                        {{ all_models_status.indexed_count|floatformat:0 }} / {{ all_models_status.total_count|floatformat:0 }}
                     {% endif %}
                 </div>
             </div>
         </div>
         
+        <!-- Model Details Table -->
+        <details style="margin-top: 20px;">
+            <summary style="cursor: pointer; font-weight: bold; padding: 10px; background: var(--darkened-bg); border-radius: 4px;">
+                View Breakdown by Model ({{ all_models_status.model_count }} models)
+            </summary>
+            <table style="width: 100%; margin-top: 10px; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: var(--darkened-bg);">
+                        <th style="padding: 10px; text-align: left;">Model</th>
+                        <th style="padding: 10px; text-align: right;">Total</th>
+                        <th style="padding: 10px; text-align: right;">Indexed</th>
+                        <th style="padding: 10px; text-align: right;">Missing</th>
+                        <th style="padding: 10px; text-align: center;">Trigger</th>
+                        <th style="padding: 10px; text-align: center;">Index</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for model in all_models_status.model_details %}
+                    <tr style="border-bottom: 1px solid var(--hairline-color);">
+                        <td style="padding: 10px;">{{ model.name|title }}</td>
+                        <td style="padding: 10px; text-align: right;">{{ model.total_count|floatformat:0 }}</td>
+                        <td style="padding: 10px; text-align: right;">{{ model.indexed_count|floatformat:0 }}</td>
+                        <td style="padding: 10px; text-align: right;">{{ model.null_count|floatformat:0 }}</td>
+                        <td style="padding: 10px; text-align: center;">
+                            <span class="badge {% if model.trigger_status == 'enabled' %}success{% elif model.trigger_status == 'disabled' %}error{% else %}warning{% endif %}">
+                                {{ model.trigger_status }}
+                            </span>
+                        </td>
+                        <td style="padding: 10px; text-align: center;">
+                            <span class="badge {% if model.index_status == 'exists' %}success{% else %}error{% endif %}">
+                                {{ model.index_status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </details>
+        
+        <div class="model-selector">
+            <h4>Select Model Scope for Actions</h4>
+            <p style="color: var(--body-quiet-color); margin-bottom: 15px; font-size: 0.9em;">
+                Choose which models the actions below will operate on.
+            </p>
+            <div class="model-selector-options">
+                <div class="model-option">
+                    <input type="radio" id="scope-all" name="model-scope" value="all" checked>
+                    <label for="scope-all">
+                        <div class="model-option-title">All Models (7 models)</div>
+                        <div class="model-option-description">
+                            DocumentExtraction, AFMEntity, Organization, Unit, Signer, Company, CompanyPerson
+                        </div>
+                    </label>
+                </div>
+                <div class="model-option">
+                    <input type="radio" id="scope-extraction" name="model-scope" value="extraction">
+                    <label for="scope-extraction">
+                        <div class="model-option-title">Extraction Only</div>
+                        <div class="model-option-description">
+                            Only DocumentExtraction (largest model, ~500k records)
+                        </div>
+                    </label>
+                </div>
+                <div class="model-option">
+                    <input type="radio" id="scope-others" name="model-scope" value="others">
+                    <label for="scope-others">
+                        <div class="model-option-title">Other Models (6 models)</div>
+                        <div class="model-option-description">
+                            AFMEntity, Organization, Unit, Signer, Company, CompanyPerson
+                        </div>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
         <div class="actions-section">
-            <h3>Actions</h3>
+            <h3>Bulk Actions</h3>
+            <p style="color: var(--body-quiet-color); margin-bottom: 15px; font-size: 0.9em;">
+                Actions will be applied to the selected model scope above.
+            </p>
             <div class="actions-grid">
                 <button class="action-button primary" 
-                        title="Regenerate search_vector for all DocumentExtraction records. Updates existing vectors and creates new ones for records with NULL values."
-                        onclick="confirmCommand('backfill_search_vectors', 'Backfill Vectors')">
-                    Backfill Vectors
+                        title="Regenerate search_vector for all records across all models. Updates existing vectors and creates new ones for records with NULL values."
+                        onclick="confirmCommand('backfill_search_vectors', 'Backfill All Vectors')">
+                    Backfill All Vectors
                 </button>
                 
-                <button class="action-button {% if extraction_status.trigger_status == 'enabled' %}warning{% else %}primary{% endif %}" 
-                        title="{% if extraction_status.trigger_status == 'enabled' %}Stop automatic search_vector updates on INSERT/UPDATE. New/modified documents won't be searchable until manually backfilled.{% else %}Enable automatic search_vector generation on INSERT/UPDATE. New and modified documents will be immediately searchable.{% endif %}"
-                        onclick="confirmCommand('{% if extraction_status.trigger_status == 'enabled' %}disable_trigger{% else %}enable_trigger{% endif %}', '{% if extraction_status.trigger_status == 'enabled' %}Disable{% else %}Enable{% endif %} Trigger')">
-                    {% if extraction_status.trigger_status == 'enabled' %}Disable Trigger{% else %}Enable Trigger{% endif %}
+                <button class="action-button {% if all_models_status.trigger_status == 'enabled' %}warning{% else %}primary{% endif %}" 
+                        title="{% if all_models_status.trigger_status == 'enabled' %}Stop automatic search_vector updates for all models. New/modified records won't be searchable until manually backfilled.{% else %}Enable automatic search_vector generation for all models. New and modified records will be immediately searchable.{% endif %}"
+                        onclick="confirmCommand('{% if all_models_status.trigger_status == 'enabled' %}disable_trigger{% else %}enable_trigger{% endif %}', '{% if all_models_status.trigger_status == 'enabled' %}Disable All Triggers{% else %}Enable All Triggers{% endif %}')">
+                    {% if all_models_status.trigger_status == 'enabled' %}Disable All Triggers{% else %}Enable All Triggers{% endif %}
                 </button>
                 
-                <button class="action-button {% if extraction_status.index_status == 'exists' %}danger{% else %}primary{% endif %}" 
-                        title="{% if extraction_status.index_status == 'exists' %}Remove the GIN index on search_vector. Saves ~9GB disk space but search queries will be much slower.{% else %}Create GIN index on search_vector column. Enables fast full-text search queries. Uses ~9GB disk space.{% endif %}"
-                        onclick="confirmCommand('{% if extraction_status.index_status == 'exists' %}drop_index{% else %}create_index{% endif %}', '{% if extraction_status.index_status == 'exists' %}Drop{% else %}Create{% endif %} Index')">
-                    {% if extraction_status.index_status == 'exists' %}Drop Index{% else %}Create Index{% endif %}
+                <button class="action-button {% if all_models_status.index_status == 'exists' %}danger{% else %}primary{% endif %}" 
+                        title="{% if all_models_status.index_status == 'exists' %}Remove all GIN indexes on search_vector fields. Saves disk space but search queries will be much slower.{% else %}Create GIN indexes on all search_vector columns. Enables fast full-text search queries.{% endif %}"
+                        onclick="confirmCommand('{% if all_models_status.index_status == 'exists' %}drop_index{% else %}create_index{% endif %}', '{% if all_models_status.index_status == 'exists' %}Drop All Indexes{% else %}Create All Indexes{% endif %}')">
+                    {% if all_models_status.index_status == 'exists' %}Drop All Indexes{% else %}Create All Indexes{% endif %}
                 </button>
                 
                 <button class="action-button warning" 
-                        title="Set all search_vector values to NULL and run VACUUM to reclaim disk space (~7GB). Use when temporarily disabling search functionality."
-                        onclick="confirmCommand('cleanup_search_vectors', 'Cleanup Vectors')">
-                    Cleanup Vectors
+                        title="Set all search_vector values to NULL across all models and run VACUUM to reclaim disk space. Use when disabling search functionality."
+                        onclick="confirmCommand('cleanup_search_vectors', 'Cleanup All Vectors')">
+                    Cleanup All Vectors
+                </button>
+                
+                <button class="action-button primary" 
+                        title="Complete enable workflow: Create all indexes and enable all triggers. Run this to fully activate PostgreSQL search."
+                        onclick="confirmCommand('enable_all', 'Enable All')">
+                    Enable All (Full Setup)
+                </button>
+                
+                <button class="action-button danger" 
+                        title="Complete disable workflow: Disable all triggers and drop all indexes. Fastest way to deactivate PostgreSQL search."
+                        onclick="confirmCommand('disable_all', 'Disable All')">
+                    Disable All (Full Shutdown)
                 </button>
             </div>
         </div>
@@ -625,44 +788,61 @@
 <script>
 let currentCommand = null;
 
+function getSelectedModelScope() {
+    const selected = document.querySelector('input[name="model-scope"]:checked');
+    return selected ? selected.value : 'all';
+}
+
+function getModelScopeLabel() {
+    const scope = getSelectedModelScope();
+    const labels = {
+        'all': 'all 7 models',
+        'extraction': 'extraction model only',
+        'others': 'other 6 models (excluding extraction)'
+    };
+    return labels[scope] || scope;
+}
+
 function confirmCommand(command, label) {
     currentCommand = command;
+    const modelScope = getSelectedModelScope();
+    const scopeLabel = getModelScopeLabel();
     
     document.getElementById('modalTitle').textContent = label;
     
     // Set appropriate message and warnings
     const messages = {
         'backfill_search_vectors': {
-            message: `This will regenerate search_vector data for DocumentExtraction records. This may take several minutes.`,
+            message: `This will regenerate search_vector data for ${scopeLabel}. This may take several minutes.`,
             warning: 'This is a long-running operation that will be executed asynchronously.'
         },
         'cleanup_search_vectors': {
-            message: `This will NULL all search_vector data for DocumentExtraction and run VACUUM to reclaim disk space.`,
-            warning: 'This operation will reclaim ~7GB of disk space but may take 10-30 minutes. It will be executed asynchronously.'
+            message: `This will NULL all search_vector data for ${scopeLabel} and run VACUUM to reclaim disk space.`,
+            warning: 'This operation will reclaim disk space but may take 10-30 minutes. It will be executed asynchronously.'
         },
         'disable_trigger': {
-            message: `This will stop automatically indexing new/updated DocumentExtraction records.`,
-            warning: 'New documents will not be searchable until you enable the trigger and backfill.'
+            message: `This will stop automatically indexing new/updated records for ${scopeLabel}.`,
+            warning: 'New records will not be searchable until you enable triggers and backfill.'
         },
         'enable_trigger': {
-            message: `This will enable automatic indexing for new/updated DocumentExtraction records.`,
+            message: `This will enable automatic indexing for new/updated records for ${scopeLabel}.`,
             warning: null
         },
         'drop_index': {
-            message: `This will drop the GIN index for DocumentExtraction, saving ~9GB of disk space.`,
-            warning: 'Search queries will be significantly slower without the index. You can recreate it later.'
+            message: `This will remove all GIN indexes on search_vector fields for ${scopeLabel}.`,
+            warning: 'Search queries will be much slower without indexes. You can recreate them later with "Create All Indexes".'
         },
         'create_index': {
-            message: `This will create the GIN index for DocumentExtraction. This may take 5-10 minutes.`,
-            warning: 'This will use ~9GB of additional disk space and be executed asynchronously.'
+            message: `This will create GIN indexes on search_vector fields for ${scopeLabel}.`,
+            warning: 'This operation will take several minutes and use disk space. It will be executed asynchronously.'
         },
         'disable_all': {
-            message: `This will disable triggers and drop indexes for DocumentExtraction.`,
-            warning: 'This will save ~9GB of disk space but disable PostgreSQL full-text search entirely.'
+            message: `Complete disable workflow: Disable all triggers and drop all indexes for ${scopeLabel}.`,
+            warning: 'This will stop automatic indexing and remove all search indexes. Use this when temporarily disabling PostgreSQL search.'
         },
         'enable_all': {
-            message: `This will create indexes and enable triggers for DocumentExtraction.`,
-            warning: 'This will use ~9GB of disk space and may take 5-10 minutes. Remember to backfill existing data afterward.'
+            message: `Complete enable workflow: Create all indexes and enable all triggers for ${scopeLabel}.`,
+            warning: 'This will take several minutes. After completion, run "Backfill All Vectors" to index existing data.'
         }
     };
     
@@ -693,6 +873,7 @@ function executeCommand() {
     
     // Save values before closing modal (which clears them)
     const command = currentCommand;
+    const modelScope = getSelectedModelScope();
     
     closeModal();
     showExecutionModal(command);
@@ -707,6 +888,7 @@ function executeCommand() {
         },
         body: JSON.stringify({
             command: command,
+            model_scope: modelScope,
             options: {}
         })
     })

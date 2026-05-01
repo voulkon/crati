@@ -29,29 +29,28 @@ from core.tasks.tasks_search_management import (
 def postgres_search_dashboard(request):
     """Main dashboard for PostgreSQL search management"""
     
-    # Get status for extraction model only
-    extraction_status = _get_model_status('extraction')
+    # Get aggregate status for all models
+    all_models_status = _get_all_models_status()
     
     # Get feature flag status
     opensearch_enabled = feature_flags.is_enabled('INDEX_THE_OPENSEARCH')
     postgres_enabled = feature_flags.is_enabled('INDEX_THE_POSTGRES')
     
-    # Calculate summary statistics (extraction only)
-    total_records = extraction_status['total_count']
-    total_indexed = extraction_status['indexed_count']
-    total_null = extraction_status['null_count']
+    # Calculate aggregate summary statistics
+    total_records = all_models_status['total_count']
+    total_indexed = all_models_status['indexed_count']
+    total_null = all_models_status['null_count']
     
     # Calculate estimated space usage
-    extraction_index_size_bytes = extraction_status.get('index_size_bytes', 0)
-    total_index_size_gb = extraction_index_size_bytes / (1024**3)
+    total_index_size_gb = all_models_status['total_index_size_gb']
     
-    # Estimate search_vector data size (rough: ~7GB for 500k records)
-    estimated_vector_size_gb = (total_indexed / 500000) * 7 if total_indexed > 0 else 0
+    # Estimate search_vector data size (rough: ~7GB for 500k DocumentExtraction records, less for others)
+    estimated_vector_size_gb = all_models_status['estimated_vector_size_gb']
     total_search_size_gb = total_index_size_gb + estimated_vector_size_gb
     
     context = {
         'title': 'PostgreSQL Search Management',
-        'extraction_status': extraction_status,
+        'all_models_status': all_models_status,
         'opensearch_enabled': opensearch_enabled,
         'postgres_enabled': postgres_enabled,
         'summary': {
@@ -64,7 +63,7 @@ def postgres_search_dashboard(request):
             'indexing_percentage': round((total_indexed / total_records * 100) if total_records > 0 else 0, 1),
         },
         # Workflow recommendations
-        'workflows': _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extraction_status),
+        'workflows': _get_workflow_recommendations(opensearch_enabled, postgres_enabled, all_models_status),
     }
     
     return render(request, 'admin/postgres_search_dashboard.html', context)
@@ -85,10 +84,10 @@ def execute_search_command(request):
         logger.info(f"Parsed data: {data}")
         
         command_type = data.get('command')
-        model = data.get('model', 'both')
+        model_scope = data.get('model_scope', 'all')  # 'all', 'extraction', or 'others'
         options = data.get('options', {})
         
-        logger.info(f"Command: {command_type}, Model: {model}, Options: {options}")
+        logger.info(f"Command: {command_type}, Model Scope: {model_scope}, Options: {options}")
         
         # Validate command type
         valid_commands = [
@@ -111,7 +110,7 @@ def execute_search_command(request):
             }, status=400)
         
         # Execute the command as async task (or synchronously for quick operations)
-        result = _execute_command(command_type, options)
+        result = _execute_command(command_type, model_scope, options)
         logger.info(f"Command result: {result}")
         
         return JsonResponse(result)
@@ -164,6 +163,179 @@ def search_task_status(request, task_id):
             'success': False,
             'error': str(e)
         }, status=500)
+
+
+def _get_all_models_status():
+    """Get aggregate status for all models with search_vector fields"""
+    
+    # All models with search_vector fields
+    MODELS = {
+        'extraction': {
+            'table': 'core_documentextraction',
+            'trigger': 'document_extraction_search_vector_update',
+            'index': 'core_docume_search__d7ddb0_gin',
+            'weight': 1.0,  # Weight for size estimation (extraction is largest)
+        },
+        'afmentity': {
+            'table': 'core_afmentity',
+            'trigger': 'afmentity_search_vector_update',
+            'index': 'core_afmentity_search_vector_idx',
+            'weight': 0.01,
+        },
+        'organization': {
+            'table': 'core_organization',
+            'trigger': 'organization_search_vector_update',
+            'index': 'core_organization_search_vector_idx',
+            'weight': 0.05,
+        },
+        'unit': {
+            'table': 'core_unit',
+            'trigger': 'unit_search_vector_update',
+            'index': 'core_unit_search_vector_idx',
+            'weight': 0.05,
+        },
+        'signer': {
+            'table': 'core_signer',
+            'trigger': 'signer_search_vector_update',
+            'index': 'core_signer_search_vector_idx',
+            'weight': 0.05,
+        },
+        'company': {
+            'table': 'companies',
+            'trigger': 'companies_search_vector_update',
+            'index': 'companies_search_vector_idx',
+            'weight': 0.1,
+        },
+        'companyperson': {
+            'table': 'company_persons',
+            'trigger': 'company_person_search_vector_update',
+            'index': 'company_persons_search_vector_idx',
+            'weight': 0.05,
+        }
+    }
+    
+    # Aggregate counters
+    total_count = 0
+    indexed_count = 0
+    null_count = 0
+    total_index_size_bytes = 0
+    estimated_vector_size_gb = 0
+    
+    # Track trigger and index status
+    all_triggers_enabled = True
+    all_triggers_disabled = True
+    all_indexes_exist = True
+    all_indexes_missing = True
+    
+    model_details = []
+    
+    with connection.cursor() as cursor:
+        for model_name, config in MODELS.items():
+            table = config['table']
+            trigger = config['trigger']
+            index = config['index']
+            weight = config['weight']
+            
+            # Get record counts
+            cursor.execute(f"""
+                SELECT 
+                    COUNT(*) FILTER (WHERE search_vector IS NULL) as null_count,
+                    COUNT(*) FILTER (WHERE search_vector IS NOT NULL) as indexed_count,
+                    COUNT(*) as total_count
+                FROM {table}
+            """)
+            counts = cursor.fetchone()
+            
+            total_count += counts[2]
+            indexed_count += counts[1]
+            null_count += counts[0]
+            
+            # Get trigger status
+            cursor.execute("""
+                SELECT 
+                    CASE tgenabled 
+                        WHEN 'O' THEN 'enabled'
+                        WHEN 'D' THEN 'disabled'
+                        ELSE 'unknown'
+                    END as status
+                FROM pg_trigger 
+                WHERE tgname = %s
+            """, [trigger])
+            trigger_row = cursor.fetchone()
+            trigger_status = trigger_row[0] if trigger_row else 'not_found'
+            
+            if trigger_status != 'enabled':
+                all_triggers_enabled = False
+            if trigger_status != 'disabled':
+                all_triggers_disabled = False
+            
+            # Get index status and size
+            cursor.execute("""
+                SELECT 
+                    pg_relation_size(pg_class.oid) as size_bytes,
+                    pg_size_pretty(pg_relation_size(pg_class.oid)) as size_pretty
+                FROM pg_indexes
+                JOIN pg_class ON pg_class.relname = pg_indexes.indexname
+                WHERE indexname = %s
+            """, [index])
+            index_row = cursor.fetchone()
+            
+            if index_row:
+                index_status = 'exists'
+                index_size_bytes = index_row[0]
+                total_index_size_bytes += index_size_bytes
+                all_indexes_missing = False
+            else:
+                index_status = 'missing'
+                index_size_bytes = 0
+                all_indexes_exist = False
+            
+            # Estimate search_vector data size based on indexed records and weight
+            # Base: ~7GB for 500k DocumentExtraction records, scaled by weight for other models
+            model_vector_size_gb = (counts[1] / 500000) * 7 * weight if counts[1] > 0 else 0
+            estimated_vector_size_gb += model_vector_size_gb
+            
+            model_details.append({
+                'name': model_name,
+                'table': table,
+                'null_count': counts[0],
+                'indexed_count': counts[1],
+                'total_count': counts[2],
+                'trigger_status': trigger_status,
+                'index_status': index_status,
+                'index_size_bytes': index_size_bytes,
+            })
+    
+    # Determine overall trigger status
+    if all_triggers_enabled:
+        trigger_status = 'enabled'
+    elif all_triggers_disabled:
+        trigger_status = 'disabled'
+    else:
+        trigger_status = 'mixed'
+    
+    # Determine overall index status
+    if all_indexes_exist:
+        index_status = 'exists'
+    elif all_indexes_missing:
+        index_status = 'missing'
+    else:
+        index_status = 'partial'
+    
+    total_index_size_gb = total_index_size_bytes / (1024**3)
+    
+    return {
+        'total_count': total_count,
+        'indexed_count': indexed_count,
+        'null_count': null_count,
+        'indexing_percentage': round((indexed_count / total_count * 100) if total_count > 0 else 0, 1),
+        'trigger_status': trigger_status,
+        'index_status': index_status,
+        'total_index_size_gb': total_index_size_gb,
+        'estimated_vector_size_gb': estimated_vector_size_gb,
+        'model_details': model_details,
+        'model_count': len(MODELS),
+    }
 
 
 def _get_model_status(model_name):
@@ -245,7 +417,7 @@ def _get_model_status(model_name):
     }
 
 
-def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extraction_status):
+def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, all_models_status):
     """Generate workflow recommendations based on current state"""
     
     workflows = []
@@ -266,14 +438,14 @@ def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extracti
         })
     
     # Check if triggers are enabled but indexes are missing
-    extraction_triggers_on = extraction_status['trigger_status'] == 'enabled'
-    extraction_index_missing = extraction_status['index_status'] == 'missing'
+    trigger_status = all_models_status['trigger_status']
+    index_status = all_models_status['index_status']
     
-    if extraction_triggers_on and extraction_index_missing:
+    if trigger_status in ['enabled', 'mixed'] and index_status in ['missing', 'partial']:
         workflows.append({
             'title': '⚠️ Triggers Without Indexes',
             'type': 'warning',
-            'description': 'Triggers are enabled but indexes are missing. Searches will be slow.',
+            'description': 'Some or all triggers are enabled but indexes are missing. Searches will be slow.',
             'actions': [
                 {
                     'label': 'Create Indexes',
@@ -284,12 +456,12 @@ def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extracti
         })
     
     # Check if there are unindexed records
-    total_null = extraction_status['null_count']
+    total_null = all_models_status['null_count']
     if total_null > 0 and postgres_enabled:
         workflows.append({
             'title': '🔄 Backfill Needed',
             'type': 'info',
-            'description': f'{total_null:,} records need search_vector backfill for full-text search.',
+            'description': f'{total_null:,} records across {all_models_status["model_count"]} models need search_vector backfill for full-text search.',
             'actions': [
                 {
                     'label': 'Backfill Search Vectors',
@@ -300,12 +472,13 @@ def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extracti
         })
     
     # Suggest cleanup if PostgreSQL search is disabled and vectors exist
-    total_indexed = extraction_status['indexed_count']
+    total_indexed = all_models_status['indexed_count']
+    estimated_size = all_models_status['total_index_size_gb'] + all_models_status['estimated_vector_size_gb']
     if not postgres_enabled and total_indexed > 0:
         workflows.append({
             'title': '💾 Reclaim Disk Space',
             'type': 'info',
-            'description': f'PostgreSQL search is disabled but {total_indexed:,} records still have search_vector data (~7GB).',
+            'description': f'PostgreSQL search is disabled but {total_indexed:,} records still have search_vector data (~{estimated_size:.1f}GB).',
             'actions': [
                 {
                     'label': 'Cleanup & Reclaim Space',
@@ -320,7 +493,7 @@ def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extracti
         workflows.append({
             'title': '💡 Optimization Opportunity',
             'type': 'suggestion',
-            'description': 'Both search engines are enabled. If OpenSearch is your primary search, you can disable PostgreSQL search to save ~9GB.',
+            'description': f'Both search engines are enabled. If OpenSearch is your primary search, you can disable PostgreSQL search to save ~{estimated_size:.1f}GB.',
             'actions': [
                 {
                     'label': 'Disable PostgreSQL Search',
@@ -333,18 +506,18 @@ def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extracti
     return workflows
 
 
-def _execute_command(command_type, options):
+def _execute_command(command_type, model_scope, options):
     """Execute a management command (async for long-running ops, sync for quick ones)"""
     
     try:
         if command_type == 'check_status':
             # Quick status check - synchronous
-            extraction_status = _get_model_status('extraction')
+            all_models_status = _get_all_models_status()
             return {
                 'success': True,
                 'message': 'Status refreshed',
                 'data': {
-                    'extraction': extraction_status,
+                    'all_models': all_models_status,
                 }
             }
         
@@ -352,14 +525,22 @@ def _execute_command(command_type, options):
             # Long-running operation - launch async task
             task = backfill_search_vectors_task.delay(
                 batch_size=options.get('batch_size', 1000),
-                only_null=options.get('only_null', True)
+                only_null=options.get('only_null', True),
+                model_scope=model_scope
             )
+            
+            # Determine description based on model_scope
+            scope_desc = {
+                'all': 'all models',
+                'extraction': 'extraction model',
+                'others': 'other 6 models'
+            }.get(model_scope, model_scope)
             
             return {
                 'success': True,
                 'async': True,
                 'task_id': task.id,
-                'message': f'Backfill task started (ID: {task.id})'
+                'message': f'Backfill task started for {scope_desc} (ID: {task.id})'
             }
             
         elif command_type == 'cleanup_search_vectors':
@@ -367,40 +548,59 @@ def _execute_command(command_type, options):
             task = cleanup_search_vectors_task.delay(
                 batch_size=options.get('batch_size', 5000),
                 no_vacuum=options.get('no_vacuum', False),
-                vacuum_full=options.get('vacuum_full', False)
+                vacuum_full=options.get('vacuum_full', False),
+                model_scope=model_scope
             )
+            
+            scope_desc = {
+                'all': 'all models',
+                'extraction': 'extraction model',
+                'others': 'other 6 models'
+            }.get(model_scope, model_scope)
             
             return {
                 'success': True,
                 'async': True,
                 'task_id': task.id,
-                'message': f'Cleanup task started (ID: {task.id})'
+                'message': f'Cleanup task started for {scope_desc} (ID: {task.id})'
             }
             
         elif command_type in ['disable_trigger', 'enable_trigger', 'drop_index', 'create_index']:
             # Individual trigger/index operations - can be async
             action = command_type.replace('_', '-')
             
-            task = manage_postgres_search_task.delay(action=action)
+            task = manage_postgres_search_task.delay(action=action, model_scope=model_scope)
+            
+            scope_desc = {
+                'all': 'all models',
+                'extraction': 'extraction model',
+                'others': 'other 6 models'
+            }.get(model_scope, model_scope)
             
             return {
                 'success': True,
                 'async': True,
                 'task_id': task.id,
-                'message': f'{command_type} task started (ID: {task.id})'
+                'message': f'{command_type} task started for {scope_desc} (ID: {task.id})'
             }
             
         elif command_type in ['disable_all', 'enable_all']:
             # Complete workflows - async
             action = command_type.replace('_', '-')
             
-            task = manage_postgres_search_task.delay(action=action)
+            task = manage_postgres_search_task.delay(action=action, model_scope=model_scope)
+            
+            scope_desc = {
+                'all': 'all models',
+                'extraction': 'extraction model',
+                'others': 'other 6 models'
+            }.get(model_scope, model_scope)
             
             return {
                 'success': True,
                 'async': True,
                 'task_id': task.id,
-                'message': f'{command_type} task started (ID: {task.id})'
+                'message': f'{command_type} task started for {scope_desc} (ID: {task.id})'
             }
         
         return {

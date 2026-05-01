@@ -4,26 +4,36 @@ Manage PostgreSQL full-text search triggers and indexes.
 This command provides tools for enabling/disabling PostgreSQL full-text search
 to save database space (~9GB total: 9GB index + search_vector data in TOAST).
 
-Usage:
-    # Check current status
+Model Selection:
+    # Operate on extraction model only
+    python manage.py manage_postgres_search --extraction-only --status
+    
+    # Operate on other 6 models (excluding extraction)
+    python manage.py manage_postgres_search --others-only --status
+    
+    # Operate on all 7 models (default behavior)
+    python manage.py manage_postgres_search --status
+
+Usage Examples:
+    # Check current status (all models by default)
     python manage.py manage_postgres_search --status
     
-    # Disable trigger (stop auto-indexing new/updated documents)
-    python manage.py manage_postgres_search --disable-trigger
+    # Disable trigger for extraction only
+    python manage.py manage_postgres_search --extraction-only --disable-trigger
     
-    # Enable trigger (resume auto-indexing)
-    python manage.py manage_postgres_search --enable-trigger
+    # Enable trigger for other 6 models
+    python manage.py manage_postgres_search --others-only --enable-trigger
     
-    # Drop GIN index (saves ~9GB, can rebuild later)
+    # Drop GIN index for all models (saves ~9GB)
     python manage.py manage_postgres_search --drop-index
     
-    # Create GIN index (if previously dropped)
-    python manage.py manage_postgres_search --create-index
+    # Create GIN index for extraction model
+    python manage.py manage_postgres_search --extraction-only --create-index
     
-    # Complete disable workflow (trigger + index)
-    python manage.py manage_postgres_search --disable-all
+    # Complete disable workflow for other 6 models (trigger + index)
+    python manage.py manage_postgres_search --others-only --disable-all
     
-    # Complete enable workflow (index + trigger)
+    # Complete enable workflow for all models (index + trigger)
     python manage.py manage_postgres_search --enable-all
 """
 
@@ -43,10 +53,65 @@ class Command(BaseCommand):
             'function': 'document_extraction_search_vector_update',
             'index': 'core_docume_search__d7ddb0_gin',
             'field': 'search_vector'
+        },
+        'afmentity': {
+            'table': 'core_afmentity',
+            'trigger': 'afmentity_search_vector_update',
+            'function': 'afmentity_search_vector_update',
+            'index': 'core_afmentity_search_vector_idx',
+            'field': 'search_vector'
+        },
+        'organization': {
+            'table': 'core_organization',
+            'trigger': 'organization_search_vector_update',
+            'function': 'organization_search_vector_update',
+            'index': 'core_organization_search_vector_idx',
+            'field': 'search_vector'
+        },
+        'unit': {
+            'table': 'core_unit',
+            'trigger': 'unit_search_vector_update',
+            'function': 'unit_search_vector_update',
+            'index': 'core_unit_search_vector_idx',
+            'field': 'search_vector'
+        },
+        'signer': {
+            'table': 'core_signer',
+            'trigger': 'signer_search_vector_update',
+            'function': 'signer_search_vector_update',
+            'index': 'core_signer_search_vector_idx',
+            'field': 'search_vector'
+        },
+        'company': {
+            'table': 'companies',
+            'trigger': 'companies_search_vector_update',
+            'function': 'companies_search_vector_update',
+            'index': 'companies_search_vector_idx',
+            'field': 'search_vector'
+        },
+        'companyperson': {
+            'table': 'company_persons',
+            'trigger': 'company_person_search_vector_update',
+            'function': 'company_person_search_vector_update',
+            'index': 'company_persons_search_vector_idx',
+            'field': 'search_vector'
         }
     }
     
     def add_arguments(self, parser):
+        # Model selection arguments
+        parser.add_argument(
+            '--extraction-only',
+            action='store_true',
+            help='Apply operations only to extraction model'
+        )
+        parser.add_argument(
+            '--others-only',
+            action='store_true',
+            help='Apply operations only to other models (afmentity, organization, unit, signer, company, companyperson)'
+        )
+        
+        # Operation arguments
         parser.add_argument(
             '--status',
             action='store_true',
@@ -90,40 +155,67 @@ class Command(BaseCommand):
     
     def handle(self, *args, **options):
         """Main command handler"""
-        # Only support extraction model now
-        model = 'extraction'
+        # Determine which models to operate on
+        extraction_only = options.get('extraction_only', False)
+        others_only = options.get('others_only', False)
+        
+        if extraction_only and others_only:
+            raise CommandError('Cannot specify both --extraction-only and --others-only')
+        
+        if extraction_only:
+            models_to_process = ['extraction']
+            model_description = 'Extraction Model'
+        elif others_only:
+            models_to_process = [m for m in self.MODELS.keys() if m != 'extraction']
+            model_description = 'Other Models (6 models)'
+        else:
+            models_to_process = list(self.MODELS.keys())
+            model_description = 'All Models (7 models)'
         
         # Handle compound operations
         if options['disable_all']:
-            self.stdout.write(self.style.WARNING('=== Complete Disable Workflow ==='))
-            self.disable_trigger(model, force=options['force'])
-            self.drop_index(model, force=options['force'])
-            self.stdout.write(self.style.SUCCESS('\n✓ PostgreSQL search fully disabled'))
+            self.stdout.write(self.style.WARNING(f'=== Complete Disable Workflow ({model_description}) ==='))
+            for model in models_to_process:
+                self.stdout.write(f'\n--- {model.upper()} ---')
+                self.disable_trigger(model, force=options['force'])
+                self.drop_index(model, force=options['force'])
+            self.stdout.write(self.style.SUCCESS(f'\n✓ PostgreSQL search fully disabled for {model_description.lower()}'))
             return
         
         if options['enable_all']:
-            self.stdout.write(self.style.WARNING('=== Complete Enable Workflow ==='))
-            self.create_index(model, force=options['force'])
-            self.enable_trigger(model, force=options['force'])
-            self.stdout.write(self.style.SUCCESS('\n✓ PostgreSQL search fully enabled'))
+            self.stdout.write(self.style.WARNING(f'=== Complete Enable Workflow ({model_description}) ==='))
+            for model in models_to_process:
+                self.stdout.write(f'\n--- {model.upper()} ---')
+                self.create_index(model, force=options['force'])
+                self.enable_trigger(model, force=options['force'])
+            self.stdout.write(self.style.SUCCESS(f'\n✓ PostgreSQL search fully enabled for {model_description.lower()}'))
             self.stdout.write(self.style.WARNING('Run backfill_search_vectors to index existing data'))
             return
         
         # Handle individual operations
         if options['status']:
-            self.show_status(model)
+            for model in models_to_process:
+                self.show_status(model)
         
         if options['disable_trigger']:
-            self.disable_trigger(model, force=options['force'])
+            for model in models_to_process:
+                self.stdout.write(f'\n--- {model.upper()} ---')
+                self.disable_trigger(model, force=options['force'])
         
         if options['enable_trigger']:
-            self.enable_trigger(model, force=options['force'])
+            for model in models_to_process:
+                self.stdout.write(f'\n--- {model.upper()} ---')
+                self.enable_trigger(model, force=options['force'])
         
         if options['drop_index']:
-            self.drop_index(model, force=options['force'])
+            for model in models_to_process:
+                self.stdout.write(f'\n--- {model.upper()} ---')
+                self.drop_index(model, force=options['force'])
         
         if options['create_index']:
-            self.create_index(model, force=options['force'])
+            for model in models_to_process:
+                self.stdout.write(f'\n--- {model.upper()} ---')
+                self.create_index(model, force=options['force'])
         
         # If no options specified, show status
         if not any([
@@ -131,7 +223,8 @@ class Command(BaseCommand):
             options['drop_index'], options['create_index'], options['disable_all'],
             options['enable_all']
         ]):
-            self.show_status(model)
+            for model in models_to_process:
+                self.show_status(model)
     
     def show_status(self, model):
         """Show current status of triggers and indexes"""

@@ -15,24 +15,26 @@ import time
 
 
 @shared_task(bind=True, name="search.backfill_search_vectors")
-def backfill_search_vectors_task(self, batch_size: int = 1000, only_null: bool = True):
+def backfill_search_vectors_task(self, batch_size: int = 1000, only_null: bool = True, model_scope: str = 'all'):
     """
-    Backfill search_vector for DocumentExtraction.
+    Backfill search_vector for specified models.
     
     Args:
         batch_size: Number of records to process per batch
         only_null: If True, only backfill NULL search_vector fields
+        model_scope: Which models to process - 'all', 'extraction', or 'others'
     
     Returns:
         dict with status, duration, and output
     """
-    logger.info(f"Starting backfill_search_vectors task: batch_size={batch_size}")
+    logger.info(f"Starting backfill_search_vectors task: batch_size={batch_size}, model_scope={model_scope}")
     
     # Update task state
     self.update_state(
         state='STARTED',
         meta={
             'batch_size': batch_size,
+            'model_scope': model_scope,
             'status': 'Running backfill...'
         }
     )
@@ -41,13 +43,21 @@ def backfill_search_vectors_task(self, batch_size: int = 1000, only_null: bool =
     output = StringIO()
     
     try:
-        call_command(
-            'backfill_search_vectors',
-            batch_size=batch_size,
-            only_null=only_null,
-            force=True,
-            stdout=output
-        )
+        # Build command arguments based on model_scope
+        kwargs = {
+            'batch_size': batch_size,
+            'only_null': only_null,
+            'force': True,
+            'stdout': output
+        }
+        
+        if model_scope == 'extraction':
+            kwargs['extraction_only'] = True
+        elif model_scope == 'others':
+            kwargs['others_only'] = True
+        # If 'all', no additional flag needed
+        
+        call_command('backfill_search_vectors', **kwargs)
         
         elapsed = time.time() - start_time
         output_text = output.getvalue()
@@ -79,7 +89,7 @@ def backfill_search_vectors_task(self, batch_size: int = 1000, only_null: bool =
 
 @shared_task(bind=True, name="search.cleanup_search_vectors")
 def cleanup_search_vectors_task(self, batch_size: int = 5000, 
-                                no_vacuum: bool = False, vacuum_full: bool = False):
+                                no_vacuum: bool = False, vacuum_full: bool = False, model_scope: str = 'all'):
     """
     NULL out search_vector data and VACUUM to reclaim disk space.
     
@@ -87,17 +97,19 @@ def cleanup_search_vectors_task(self, batch_size: int = 5000,
         batch_size: Number of records to process per batch
         no_vacuum: If True, skip VACUUM (faster, but no space reclaimed)
         vacuum_full: If True, use VACUUM FULL (max space reclamation, locks table)
+        model_scope: Which models to process - 'all', 'extraction', or 'others'
     
     Returns:
         dict with status, duration, and output
     """
-    logger.info(f"Starting cleanup_search_vectors task: vacuum_full={vacuum_full}")
+    logger.info(f"Starting cleanup_search_vectors task: vacuum_full={vacuum_full}, model_scope={model_scope}")
     
     # Update task state
     self.update_state(
         state='STARTED',
         meta={
             'vacuum_full': vacuum_full,
+            'model_scope': model_scope,
             'status': 'Cleaning up search vectors...'
         }
     )
@@ -106,14 +118,22 @@ def cleanup_search_vectors_task(self, batch_size: int = 5000,
     output = StringIO()
     
     try:
-        call_command(
-            'cleanup_search_vectors',
-            batch_size=batch_size,
-            no_vacuum=no_vacuum,
-            vacuum_full=vacuum_full,
-            force=True,
-            stdout=output
-        )
+        # Build command arguments based on model_scope
+        kwargs = {
+            'batch_size': batch_size,
+            'no_vacuum': no_vacuum,
+            'vacuum_full': vacuum_full,
+            'force': True,
+            'stdout': output
+        }
+        
+        if model_scope == 'extraction':
+            kwargs['extraction_only'] = True
+        elif model_scope == 'others':
+            kwargs['others_only'] = True
+        # If 'all', no additional flag needed
+        
+        call_command('cleanup_search_vectors', **kwargs)
         
         elapsed = time.time() - start_time
         output_text = output.getvalue()
@@ -144,24 +164,26 @@ def cleanup_search_vectors_task(self, batch_size: int = 5000,
 
 
 @shared_task(bind=True, name="search.manage_postgres_search")
-def manage_postgres_search_task(self, action: str):
+def manage_postgres_search_task(self, action: str, model_scope: str = 'all'):
     """
     Manage PostgreSQL search infrastructure (triggers, indexes, etc.).
     
     Args:
         action: Action to perform (e.g., 'disable-trigger', 'enable-trigger', 
                 'drop-index', 'create-index', 'disable-all', 'enable-all')
+        model_scope: Which models to process - 'all', 'extraction', or 'others'
     
     Returns:
         dict with status, duration, and output
     """
-    logger.info(f"Starting manage_postgres_search task: action={action}")
+    logger.info(f"Starting manage_postgres_search task: action={action}, model_scope={model_scope}")
     
     # Update task state
     self.update_state(
         state='STARTED',
         meta={
             'action': action,
+            'model_scope': model_scope,
             'status': f'Running {action}...'
         }
     )
@@ -170,15 +192,23 @@ def manage_postgres_search_task(self, action: str):
     output = StringIO()
     
     try:
-        # Convert action to command-line argument
+        # Build command arguments based on model_scope
+        kwargs = {
+            'force': True,
+            'stdout': output
+        }
+        
+        # Add action flag
         action_arg = f'--{action}'
         
-        call_command(
-            'manage_postgres_search',
-            action_arg,
-            force=True,
-            stdout=output
-        )
+        # Add model scope flags
+        if model_scope == 'extraction':
+            kwargs['extraction_only'] = True
+        elif model_scope == 'others':
+            kwargs['others_only'] = True
+        # If 'all', no additional flag needed
+        
+        call_command('manage_postgres_search', action_arg, **kwargs)
         
         elapsed = time.time() - start_time
         output_text = output.getvalue()

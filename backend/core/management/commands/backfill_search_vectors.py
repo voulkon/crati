@@ -146,6 +146,11 @@ class Command(BaseCommand):
         self.stdout.write('\n=== Final Status ===')
         final_stats = self._get_stats(models, only_null=False)
         self._show_stats(final_stats, dry_run=False)
+        
+        # Clear prerequisite check cache so admin will see updated status
+        from core.services.prerequisite_check_service import prerequisite_check
+        prerequisite_check.clear_cache()
+        self.stdout.write(self.style.SUCCESS('\n✓ Cleared prerequisite check cache'))
     
     def _check_trigger_status(self):
         """Check if triggers are enabled and inform user"""

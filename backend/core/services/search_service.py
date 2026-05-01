@@ -3,14 +3,13 @@ from django.db.models import Q, QuerySet, F
 from django.contrib.postgres.search import SearchQuery, SearchRank
 from django.core.cache import cache
 from django.conf import settings
-from django.db import connection
-from django.apps import apps
-from core.constants.search_service import SearchMethod, POSTGRES_FTS_MODELS, POSTGRES_FTS_MIGRATION
+from core.constants.search_service import SearchMethod
 from core.models.organizations import Organization, Unit, Signer
 from core.models.document_analysis import DocumentExtraction, ProcessingStatus
 from core.models.companies import Company, CompanyPerson
 from core.services.opensearch_service import OpenSearchService
 from core.services.feature_flag_service import feature_flags
+from core.services.prerequisite_check_service import prerequisite_check
 from core.services.transliteration import TransliterationService
 from core.utils.performance import query_debugger
 from loguru import logger
@@ -23,74 +22,6 @@ class SearchService:
         self.opensearch_service = OpenSearchService()
     
     # ==================== PREREQUISITE CHECKING ====================
-    
-    @staticmethod
-    def _check_postgres_fts_migration() -> bool:
-        """Check if the PostgreSQL FTS migration has been applied"""
-        from django.db.migrations.recorder import MigrationRecorder
-        try:
-            return MigrationRecorder.Migration.objects.filter(
-                app='core',
-                name=POSTGRES_FTS_MIGRATION
-            ).exists()
-        except Exception as e:
-            logger.warning(f"Could not check migration status: {e}")
-            return False
-    
-    @staticmethod
-    def _check_postgres_fts_backfill_status() -> Dict[str, Any]:
-        """
-        Check if required search_vector fields are backfilled.
-        
-        Returns:
-            Dict with:
-                - 'ready': bool - True if all required models are backfilled
-                - 'details': dict - Per-model backfill status
-                - 'missing_models': list - Models that need backfilling
-        """
-        details = {}
-        missing_models = []
-        
-        with connection.cursor() as cursor:
-            for model_key, config in POSTGRES_FTS_MODELS.items():
-                # Skip models not required for FTS
-                if not config.get('required_for_fts', True):
-                    continue
-                
-                table = config['table']
-                
-                try:
-                    # Count NULL search vectors
-                    cursor.execute(f"""
-                        SELECT 
-                            COUNT(*) FILTER (WHERE search_vector IS NULL) as null_count,
-                            COUNT(*) as total_count
-                        FROM {table}
-                    """)
-                    null_count, total_count = cursor.fetchone()
-                    
-                    details[model_key] = {
-                        'table': table,
-                        'total': total_count,
-                        'null': null_count,
-                        'backfilled': total_count - null_count,
-                        'percentage': ((total_count - null_count) / total_count * 100) if total_count > 0 else 100
-                    }
-                    
-                    # Consider backfilled if >95% have search_vector (allows for edge cases)
-                    if total_count > 0 and null_count > total_count * 0.05:
-                        missing_models.append(model_key)
-                        
-                except Exception as e:
-                    logger.warning(f"Could not check backfill status for {model_key}: {e}")
-                    details[model_key] = {'error': str(e)}
-                    missing_models.append(model_key)
-        
-        return {
-            'ready': len(missing_models) == 0,
-            'details': details,
-            'missing_models': missing_models
-        }
     
     def _get_validated_search_method(self, requested_method: str) -> str:
         """
@@ -152,28 +83,8 @@ class SearchService:
             return {'available': True, 'reason': 'No prerequisites required'}
         
         elif method == SearchMethod.POSTGRES_FTS:
-            # Check 1: Migration must be applied
-            if not SearchService._check_postgres_fts_migration():
-                return {
-                    'available': False,
-                    'reason': f'Migration {POSTGRES_FTS_MIGRATION} not applied. Run migrations first.'
-                }
-            
-            # Check 2: Required search vectors must be backfilled
-            backfill_status = SearchService._check_postgres_fts_backfill_status()
-            if not backfill_status['ready']:
-                missing = ', '.join(backfill_status['missing_models'])
-                return {
-                    'available': False,
-                    'reason': f'Search vectors not backfilled for: {missing}. Run: python manage.py backfill_search_vectors --others-only',
-                    'details': backfill_status['details']
-                }
-            
-            return {
-                'available': True,
-                'reason': 'PostgreSQL FTS migration applied and search vectors backfilled',
-                'details': backfill_status['details']
-            }
+            # Use the shared prerequisite check service (cached)
+            return prerequisite_check.check_postgres_fts_prerequisites()
         
         elif method == SearchMethod.OPENSEARCH:
             if feature_flags.is_enabled('INDEX_THE_OPENSEARCH'):

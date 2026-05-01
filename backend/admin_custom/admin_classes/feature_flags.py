@@ -97,6 +97,18 @@ class FeatureFlagForm(forms.ModelForm):
         label="Search Method"
     )
     
+    # Read-only display of prerequisite status for ENTITY_SEARCH_METHOD
+    prerequisite_status_display = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'rows': 12,
+            'readonly': 'readonly',
+            'style': 'background-color: #f5f5f5; cursor: not-allowed; font-family: monospace; font-size: 12px;'
+        }),
+        help_text="Current status of PostgreSQL FTS prerequisites. Updated when page loads.",
+        label="PostgreSQL FTS Prerequisites"
+    )
+    
     class Meta:
         model = FeatureFlag
         fields = '__all__'
@@ -179,6 +191,57 @@ class FeatureFlagForm(forms.ModelForm):
         if self.instance and self.instance.pk and self.instance.key == 'ENTITY_SEARCH_METHOD':
             if self.instance.string_value:
                 self.fields['selected_search_method'].initial = self.instance.string_value
+            
+            # Populate prerequisite status display
+            from core.services.prerequisite_check_service import prerequisite_check
+            prereq_status = prerequisite_check.check_postgres_fts_prerequisites()
+            
+            status_lines = []
+            status_lines.append("=" * 60)
+            status_lines.append("PostgreSQL Full-Text Search Prerequisites")
+            status_lines.append("=" * 60)
+            status_lines.append("")
+            
+            # Overall status
+            if prereq_status['available']:
+                status_lines.append("✓ STATUS: READY")
+            else:
+                status_lines.append("✗ STATUS: NOT READY")
+            status_lines.append("")
+            
+            # Migration status
+            status_lines.append(f"Migration: {'✓ Applied' if prereq_status.get('migration_applied') else '✗ Not Applied'}")
+            status_lines.append("")
+            
+            # Backfill status
+            if prereq_status.get('details'):
+                status_lines.append("Backfill Status:")
+                for model_key, details in prereq_status['details'].items():
+                    if 'error' in details:
+                        status_lines.append(f"  {model_key}: ERROR - {details['error']}")
+                    else:
+                        total = details.get('total', 0)
+                        backfilled = details.get('backfilled', 0)
+                        percentage = details.get('percentage', 0)
+                        status = "✓" if percentage >= 95 else "✗"
+                        status_lines.append(
+                            f"  {status} {model_key}: {backfilled:,}/{total:,} ({percentage:.1f}%)"
+                        )
+            status_lines.append("")
+            
+            # Summary message
+            status_lines.append("Summary:")
+            status_lines.append(f"  {prereq_status['reason']}")
+            status_lines.append("")
+            
+            if not prereq_status['available']:
+                status_lines.append("Action Required:")
+                if not prereq_status.get('migration_applied'):
+                    status_lines.append("  1. Run: python manage.py migrate")
+                if prereq_status.get('missing_models'):
+                    status_lines.append("  2. Run: python manage.py backfill_search_vectors --others-only")
+            
+            self.fields['prerequisite_status_display'].initial = '\n'.join(status_lines)
         
         # Show/hide fields based on value_type
         if self.instance and self.instance.pk:
@@ -190,6 +253,8 @@ class FeatureFlagForm(forms.ModelForm):
                 self.fields['always_exempt_prefixes_display'].widget = forms.HiddenInput()
                 self.fields['selected_users'].widget = forms.HiddenInput()
                 self.fields['additional_emails'].widget = forms.HiddenInput()
+                self.fields['selected_search_method'].widget = forms.HiddenInput()
+                self.fields['prerequisite_status_display'].widget = forms.HiddenInput()
             elif self.instance.value_type == 'list':
                 self.fields['enabled'].widget = forms.HiddenInput()
                 self.fields['default_value'].widget = forms.HiddenInput()
@@ -222,6 +287,7 @@ class FeatureFlagForm(forms.ModelForm):
                     self.fields['selected_users'].widget = forms.HiddenInput()
                     self.fields['additional_emails'].widget = forms.HiddenInput()
                 self.fields['selected_search_method'].widget = forms.HiddenInput()
+                self.fields['prerequisite_status_display'].widget = forms.HiddenInput()
             elif self.instance.value_type == 'string':
                 self.fields['enabled'].widget = forms.HiddenInput()
                 self.fields['list_value'].widget = forms.HiddenInput()
@@ -234,9 +300,11 @@ class FeatureFlagForm(forms.ModelForm):
                 if self.instance.key == 'ENTITY_SEARCH_METHOD':
                     # Hide the raw string field, show the dropdown instead
                     self.fields['string_value'].widget = forms.HiddenInput()
+                    # Show prerequisite status
                 else:
                     # For other string-type flags, hide the dropdown
                     self.fields['selected_search_method'].widget = forms.HiddenInput()
+                    self.fields['prerequisite_status_display'].widget = forms.HiddenInput()
             elif self.instance.value_type == 'choice':
                 self.fields['enabled'].widget = forms.HiddenInput()
                 self.fields['list_value'].widget = forms.HiddenInput()
@@ -249,9 +317,11 @@ class FeatureFlagForm(forms.ModelForm):
                 if self.instance.key == 'ENTITY_SEARCH_METHOD':
                     # Hide the raw string field, show the dropdown instead
                     self.fields['string_value'].widget = forms.HiddenInput()
+                    # Show prerequisite status
                 else:
                     # For other choice-type flags, hide the dropdown
                     self.fields['selected_search_method'].widget = forms.HiddenInput()
+                    self.fields['prerequisite_status_display'].widget = forms.HiddenInput()
     
     def clean(self):
         cleaned_data = super().clean()
@@ -301,6 +371,16 @@ class FeatureFlagForm(forms.ModelForm):
             selected_method = cleaned_data.get('selected_search_method')
             if selected_method:
                 cleaned_data['string_value'] = selected_method
+                
+                # Validate prerequisites for postgres_fts
+                if selected_method == 'postgres_fts':
+                    from core.services.prerequisite_check_service import prerequisite_check
+                    prereq_status = prerequisite_check.check_postgres_fts_prerequisites()
+                    
+                    if not prereq_status['available']:
+                        raise forms.ValidationError(
+                            f"Cannot set search method to 'postgres_fts': {prereq_status['reason']}"
+                        )
         
         return cleaned_data
 
@@ -363,7 +443,7 @@ class FeatureFlagAdmin(admin.ModelAdmin):
             'fields': ('key', 'name', 'category', 'value_type', 'is_active')
         }),
         ('Value Configuration', {
-            'fields': ('enabled', 'list_value', 'string_value', 'selected_decision_types', 'selected_exempt_prefixes', 'always_exempt_prefixes_display', 'selected_users', 'additional_emails', 'selected_search_method'),
+            'fields': ('enabled', 'list_value', 'string_value', 'selected_decision_types', 'selected_exempt_prefixes', 'always_exempt_prefixes_display', 'selected_users', 'additional_emails', 'selected_search_method', 'prerequisite_status_display'),
             'description': 'Configure the value based on the value type selected above.'
         }),
         ('Description', {

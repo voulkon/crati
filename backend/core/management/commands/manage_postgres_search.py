@@ -2,7 +2,7 @@
 Manage PostgreSQL full-text search triggers and indexes.
 
 This command provides tools for enabling/disabling PostgreSQL full-text search
-to save database space (~16GB total: 9GB index + 7GB search_vector data).
+to save database space (~9GB total: 9GB index + search_vector data in TOAST).
 
 Usage:
     # Check current status
@@ -25,10 +25,6 @@ Usage:
     
     # Complete enable workflow (index + trigger)
     python manage.py manage_postgres_search --enable-all
-    
-    # Target specific model
-    python manage.py manage_postgres_search --status --model=extraction
-    python manage.py manage_postgres_search --status --model=page
 """
 
 from django.core.management.base import BaseCommand, CommandError
@@ -46,13 +42,6 @@ class Command(BaseCommand):
             'trigger': 'document_extraction_search_vector_update',
             'function': 'document_extraction_search_vector_update',
             'index': 'core_docume_search__d7ddb0_gin',
-            'field': 'search_vector'
-        },
-        'page': {
-            'table': 'core_documentpage',
-            'trigger': 'document_page_search_vector_update',
-            'function': 'document_page_search_vector_update',
-            'index': 'core_docume_search__9e73d9_gin',
             'field': 'search_vector'
         }
     }
@@ -94,12 +83,6 @@ class Command(BaseCommand):
             help='Complete enable: create index + enable trigger'
         )
         parser.add_argument(
-            '--model',
-            choices=['extraction', 'page', 'both'],
-            default='both',
-            help='Which model to operate on (default: both)'
-        )
-        parser.add_argument(
             '--force',
             action='store_true',
             help='Skip confirmation prompts'
@@ -107,50 +90,40 @@ class Command(BaseCommand):
     
     def handle(self, *args, **options):
         """Main command handler"""
-        # Determine which models to operate on
-        if options['model'] == 'both':
-            models = ['extraction', 'page']
-        else:
-            models = [options['model']]
+        # Only support extraction model now
+        model = 'extraction'
         
         # Handle compound operations
         if options['disable_all']:
             self.stdout.write(self.style.WARNING('=== Complete Disable Workflow ==='))
-            for model in models:
-                self.disable_trigger(model, force=options['force'])
-                self.drop_index(model, force=options['force'])
+            self.disable_trigger(model, force=options['force'])
+            self.drop_index(model, force=options['force'])
             self.stdout.write(self.style.SUCCESS('\n✓ PostgreSQL search fully disabled'))
             return
         
         if options['enable_all']:
             self.stdout.write(self.style.WARNING('=== Complete Enable Workflow ==='))
-            for model in models:
-                self.create_index(model, force=options['force'])
-                self.enable_trigger(model, force=options['force'])
+            self.create_index(model, force=options['force'])
+            self.enable_trigger(model, force=options['force'])
             self.stdout.write(self.style.SUCCESS('\n✓ PostgreSQL search fully enabled'))
             self.stdout.write(self.style.WARNING('Run backfill_search_vectors to index existing data'))
             return
         
         # Handle individual operations
         if options['status']:
-            for model in models:
-                self.show_status(model)
+            self.show_status(model)
         
         if options['disable_trigger']:
-            for model in models:
-                self.disable_trigger(model, force=options['force'])
+            self.disable_trigger(model, force=options['force'])
         
         if options['enable_trigger']:
-            for model in models:
-                self.enable_trigger(model, force=options['force'])
+            self.enable_trigger(model, force=options['force'])
         
         if options['drop_index']:
-            for model in models:
-                self.drop_index(model, force=options['force'])
+            self.drop_index(model, force=options['force'])
         
         if options['create_index']:
-            for model in models:
-                self.create_index(model, force=options['force'])
+            self.create_index(model, force=options['force'])
         
         # If no options specified, show status
         if not any([
@@ -158,8 +131,7 @@ class Command(BaseCommand):
             options['drop_index'], options['create_index'], options['disable_all'],
             options['enable_all']
         ]):
-            for model in models:
-                self.show_status(model)
+            self.show_status(model)
     
     def show_status(self, model):
         """Show current status of triggers and indexes"""

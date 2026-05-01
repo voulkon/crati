@@ -91,13 +91,8 @@ class DocumentExtraction(models.Model):
 
     @property
     def full_text(self):
-        """Get the complete document text by joining all pages"""
-        if self.pages.exists():
-            return "\n".join(
-                page.raw_text for page in self.pages.all().order_by('page_number')
-                if page.raw_text
-            )
-        return self.raw_text or ""  # Fallback to legacy field
+        """Get the complete document text"""
+        return self.raw_text or ""
 
     def __str__(self):
         return f"Extraction for {self.decision.ada}"
@@ -220,18 +215,14 @@ class DocumentEmbedding(models.Model):
 
 
 class DocumentPage(models.Model):
-    """Stores text content for individual pages"""
+    """Stores page-level metadata (text moved to DocumentExtraction.raw_text)"""
 
     extraction = models.ForeignKey(
         DocumentExtraction, on_delete=models.CASCADE, related_name="pages"
     )
 
     page_number = models.IntegerField()
-    raw_text = models.TextField(null=True, blank=True)
     character_count = models.IntegerField(null=True, blank=True)
-  
-    # Page-level search vector for better performance
-    search_vector = SearchVectorField(null=True, blank=True)
 
     # Optional: page-specific metadata
     has_images = models.BooleanField(default=False)
@@ -245,7 +236,6 @@ class DocumentPage(models.Model):
         unique_together = [["extraction", "page_number"]]
         indexes = [
             models.Index(fields=["page_number"]),
-            GinIndex(fields=["search_vector"]),
         ]
 
     def __str__(self):

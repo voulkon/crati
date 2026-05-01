@@ -18,7 +18,6 @@ from loguru import logger
 import json
 
 from core.services.feature_flag_service import feature_flags
-from core.models.document_analysis import DocumentExtraction, DocumentPage
 from core.tasks.tasks_search_management import (
     backfill_search_vectors_task,
     cleanup_search_vectors_task,
@@ -30,23 +29,21 @@ from core.tasks.tasks_search_management import (
 def postgres_search_dashboard(request):
     """Main dashboard for PostgreSQL search management"""
     
-    # Get status for both models
+    # Get status for extraction model only
     extraction_status = _get_model_status('extraction')
-    page_status = _get_model_status('page')
     
     # Get feature flag status
     opensearch_enabled = feature_flags.is_enabled('INDEX_THE_OPENSEARCH')
     postgres_enabled = feature_flags.is_enabled('INDEX_THE_POSTGRES')
     
-    # Calculate summary statistics
-    total_records = extraction_status['total_count'] + page_status['total_count']
-    total_indexed = extraction_status['indexed_count'] + page_status['indexed_count']
-    total_null = extraction_status['null_count'] + page_status['null_count']
+    # Calculate summary statistics (extraction only)
+    total_records = extraction_status['total_count']
+    total_indexed = extraction_status['indexed_count']
+    total_null = extraction_status['null_count']
     
     # Calculate estimated space usage
     extraction_index_size_bytes = extraction_status.get('index_size_bytes', 0)
-    page_index_size_bytes = page_status.get('index_size_bytes', 0)
-    total_index_size_gb = (extraction_index_size_bytes + page_index_size_bytes) / (1024**3)
+    total_index_size_gb = extraction_index_size_bytes / (1024**3)
     
     # Estimate search_vector data size (rough: ~7GB for 500k records)
     estimated_vector_size_gb = (total_indexed / 500000) * 7 if total_indexed > 0 else 0
@@ -55,7 +52,6 @@ def postgres_search_dashboard(request):
     context = {
         'title': 'PostgreSQL Search Management',
         'extraction_status': extraction_status,
-        'page_status': page_status,
         'opensearch_enabled': opensearch_enabled,
         'postgres_enabled': postgres_enabled,
         'summary': {
@@ -68,7 +64,7 @@ def postgres_search_dashboard(request):
             'indexing_percentage': round((total_indexed / total_records * 100) if total_records > 0 else 0, 1),
         },
         # Workflow recommendations
-        'workflows': _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extraction_status, page_status),
+        'workflows': _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extraction_status),
     }
     
     return render(request, 'admin/postgres_search_dashboard.html', context)
@@ -115,7 +111,7 @@ def execute_search_command(request):
             }, status=400)
         
         # Execute the command as async task (or synchronously for quick operations)
-        result = _execute_command(command_type, model, options)
+        result = _execute_command(command_type, options)
         logger.info(f"Command result: {result}")
         
         return JsonResponse(result)
@@ -173,14 +169,10 @@ def search_task_status(request, task_id):
 def _get_model_status(model_name):
     """Get detailed status for a specific model"""
     
-    if model_name == 'extraction':
-        table = 'core_documentextraction'
-        trigger = 'document_extraction_search_vector_update'
-        index = 'core_docume_search__d7ddb0_gin'
-    else:  # page
-        table = 'core_documentpage'
-        trigger = 'document_page_search_vector_update'
-        index = 'core_docume_search__9e73d9_gin'
+    # Only extraction model supported
+    table = 'core_documentextraction'
+    trigger = 'document_extraction_search_vector_update'
+    index = 'core_docume_search__d7ddb0_gin'
     
     with connection.cursor() as cursor:
         # Get record counts
@@ -253,7 +245,7 @@ def _get_model_status(model_name):
     }
 
 
-def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extraction_status, page_status):
+def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extraction_status):
     """Generate workflow recommendations based on current state"""
     
     workflows = []
@@ -268,7 +260,6 @@ def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extracti
                 {
                     'label': 'Enable PostgreSQL Search',
                     'command': 'enable_all',
-                    'model': 'both',
                     'style': 'primary'
                 }
             ]
@@ -277,10 +268,8 @@ def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extracti
     # Check if triggers are enabled but indexes are missing
     extraction_triggers_on = extraction_status['trigger_status'] == 'enabled'
     extraction_index_missing = extraction_status['index_status'] == 'missing'
-    page_triggers_on = page_status['trigger_status'] == 'enabled'
-    page_index_missing = page_status['index_status'] == 'missing'
     
-    if (extraction_triggers_on and extraction_index_missing) or (page_triggers_on and page_index_missing):
+    if extraction_triggers_on and extraction_index_missing:
         workflows.append({
             'title': '⚠️ Triggers Without Indexes',
             'type': 'warning',
@@ -289,14 +278,13 @@ def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extracti
                 {
                     'label': 'Create Indexes',
                     'command': 'create_index',
-                    'model': 'both',
                     'style': 'primary'
                 }
             ]
         })
     
     # Check if there are unindexed records
-    total_null = extraction_status['null_count'] + page_status['null_count']
+    total_null = extraction_status['null_count']
     if total_null > 0 and postgres_enabled:
         workflows.append({
             'title': '🔄 Backfill Needed',
@@ -306,14 +294,13 @@ def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extracti
                 {
                     'label': 'Backfill Search Vectors',
                     'command': 'backfill_search_vectors',
-                    'model': 'both',
                     'style': 'primary'
                 }
             ]
         })
     
     # Suggest cleanup if PostgreSQL search is disabled and vectors exist
-    total_indexed = extraction_status['indexed_count'] + page_status['indexed_count']
+    total_indexed = extraction_status['indexed_count']
     if not postgres_enabled and total_indexed > 0:
         workflows.append({
             'title': '💾 Reclaim Disk Space',
@@ -323,7 +310,6 @@ def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extracti
                 {
                     'label': 'Cleanup & Reclaim Space',
                     'command': 'cleanup_search_vectors',
-                    'model': 'both',
                     'style': 'warning'
                 }
             ]
@@ -334,12 +320,11 @@ def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extracti
         workflows.append({
             'title': '💡 Optimization Opportunity',
             'type': 'suggestion',
-            'description': 'Both search engines are enabled. If OpenSearch is your primary search, you can disable PostgreSQL search to save ~16GB.',
+            'description': 'Both search engines are enabled. If OpenSearch is your primary search, you can disable PostgreSQL search to save ~9GB.',
             'actions': [
                 {
                     'label': 'Disable PostgreSQL Search',
                     'command': 'disable_all',
-                    'model': 'both',
                     'style': 'secondary'
                 }
             ]
@@ -348,27 +333,24 @@ def _get_workflow_recommendations(opensearch_enabled, postgres_enabled, extracti
     return workflows
 
 
-def _execute_command(command_type, model, options):
+def _execute_command(command_type, options):
     """Execute a management command (async for long-running ops, sync for quick ones)"""
     
     try:
         if command_type == 'check_status':
             # Quick status check - synchronous
             extraction_status = _get_model_status('extraction')
-            page_status = _get_model_status('page')
             return {
                 'success': True,
                 'message': 'Status refreshed',
                 'data': {
                     'extraction': extraction_status,
-                    'page': page_status,
                 }
             }
         
         elif command_type == 'backfill_search_vectors':
             # Long-running operation - launch async task
             task = backfill_search_vectors_task.delay(
-                model=model,
                 batch_size=options.get('batch_size', 1000),
                 only_null=options.get('only_null', True)
             )
@@ -383,7 +365,6 @@ def _execute_command(command_type, model, options):
         elif command_type == 'cleanup_search_vectors':
             # Long-running operation - launch async task
             task = cleanup_search_vectors_task.delay(
-                model=model,
                 batch_size=options.get('batch_size', 5000),
                 no_vacuum=options.get('no_vacuum', False),
                 vacuum_full=options.get('vacuum_full', False)
@@ -400,10 +381,7 @@ def _execute_command(command_type, model, options):
             # Individual trigger/index operations - can be async
             action = command_type.replace('_', '-')
             
-            task = manage_postgres_search_task.delay(
-                action=action,
-                model=model
-            )
+            task = manage_postgres_search_task.delay(action=action)
             
             return {
                 'success': True,
@@ -416,10 +394,7 @@ def _execute_command(command_type, model, options):
             # Complete workflows - async
             action = command_type.replace('_', '-')
             
-            task = manage_postgres_search_task.delay(
-                action=action,
-                model=model
-            )
+            task = manage_postgres_search_task.delay(action=action)
             
             return {
                 'success': True,

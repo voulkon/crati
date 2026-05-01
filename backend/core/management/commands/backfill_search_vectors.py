@@ -1,21 +1,18 @@
 """
 Regenerate search_vector data from existing raw_text.
 
-This command backfills search_vector data for DocumentExtraction and DocumentPage tables,
+This command backfills search_vector data for DocumentExtraction table,
 allowing PostgreSQL full-text search to work on existing records.
 
 Usage:
     # Backfill all DocumentExtraction records
-    python manage.py backfill_search_vectors --model=extraction
+    python manage.py backfill_search_vectors
     
     # Backfill only records without search_vector (NULL)
-    python manage.py backfill_search_vectors --model=extraction --only-null
+    python manage.py backfill_search_vectors --only-null
     
     # Backfill with custom batch size
     python manage.py backfill_search_vectors --batch-size=1000
-    
-    # Backfill both models
-    python manage.py backfill_search_vectors --model=both
     
     # Dry run
     python manage.py backfill_search_vectors --dry-run
@@ -29,7 +26,7 @@ Performance:
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 from django.contrib.postgres.search import SearchVector
-from core.models.document_analysis import DocumentExtraction, DocumentPage
+from core.models.document_analysis import DocumentExtraction
 from loguru import logger
 import time
 
@@ -38,12 +35,6 @@ class Command(BaseCommand):
     help = 'Regenerate search_vector data from existing raw_text'
     
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--model',
-            choices=['extraction', 'page', 'both'],
-            default='extraction',
-            help='Which model to backfill (default: extraction)'
-        )
         parser.add_argument(
             '--batch-size',
             type=int,
@@ -68,18 +59,15 @@ class Command(BaseCommand):
     
     def handle(self, *args, **options):
         """Main command handler"""
-        # Determine which models to operate on
-        if options['model'] == 'both':
-            models = ['extraction', 'page']
-        else:
-            models = [options['model']]
+        # Only support extraction model now
+        model = 'extraction'
         
         # Check trigger status
         if not options['force']:
             self._check_trigger_status()
         
         # Show what will be affected
-        stats = self._get_stats(models, options['only_null'])
+        stats = self._get_stats([model], options['only_null'])
         self._show_stats(stats, options['dry_run'])
         
         if options['dry_run']:
@@ -88,7 +76,7 @@ class Command(BaseCommand):
         
         # Confirmation
         if not options['force']:
-            total_records = sum(s['to_backfill'] for s in stats.values())
+            total_records = stats[model]['to_backfill']
             estimated_time = total_records / 1500  # Rough estimate: 1500 records/second
             
             self.stdout.write(self.style.WARNING(
@@ -104,10 +92,9 @@ class Command(BaseCommand):
         # Perform backfill
         start_time = time.time()
         
-        for model in models:
-            if stats[model]['to_backfill'] > 0:
-                self.stdout.write(self.style.WARNING(f'\n=== Backfilling {model.upper()} ==='))
-                self._backfill_model(model, options)
+        if stats[model]['to_backfill'] > 0:
+            self.stdout.write(self.style.WARNING(f'\n=== Backfilling {model.upper()} ==='))
+            self._backfill_model(model, options)
         
         elapsed = time.time() - start_time
         self.stdout.write(self.style.SUCCESS(
@@ -116,7 +103,7 @@ class Command(BaseCommand):
         
         # Show final stats
         self.stdout.write('\n=== Final Status ===')
-        final_stats = self._get_stats(models, only_null=False)
+        final_stats = self._get_stats([model], only_null=False)
         self._show_stats(final_stats, dry_run=False)
     
     def _check_trigger_status(self):
@@ -153,12 +140,9 @@ class Command(BaseCommand):
         
         with connection.cursor() as cursor:
             for model in models:
-                if model == 'extraction':
-                    table = 'core_documentextraction'
-                    text_field = 'raw_text'
-                else:
-                    table = 'core_documentpage'
-                    text_field = 'raw_text'
+                # Only extraction model supported now
+                table = 'core_documentextraction'
+                text_field = 'raw_text'
                 
                 # Count records to backfill
                 if only_null:
@@ -220,12 +204,8 @@ class Command(BaseCommand):
     
     def _backfill_model(self, model, options):
         """Backfill search_vector for a specific model"""
-        if model == 'extraction':
-            model_class = DocumentExtraction
-            text_field = 'raw_text'
-        else:
-            model_class = DocumentPage
-            text_field = 'raw_text'
+        model_class = DocumentExtraction
+        text_field = 'raw_text'
         
         batch_size = options['batch_size']
         only_null = options['only_null']

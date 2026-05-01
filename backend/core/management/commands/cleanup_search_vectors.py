@@ -1,18 +1,12 @@
 """
 NULL out search_vector data and VACUUM to reclaim disk space.
 
-This command removes search_vector data from DocumentExtraction and DocumentPage tables,
+This command removes search_vector data from DocumentExtraction table,
 then runs VACUUM to reclaim the disk space (~7GB from TOAST table).
 
 Usage:
     # NULL all search vectors for DocumentExtraction (with standard VACUUM)
-    python manage.py cleanup_search_vectors --model=extraction
-    
-    # NULL all search vectors for DocumentPage
-    python manage.py cleanup_search_vectors --model=page
-    
-    # NULL both models
-    python manage.py cleanup_search_vectors --model=both
+    python manage.py cleanup_search_vectors
     
     # Use VACUUM FULL for maximum space reclamation (requires maintenance window)
     python manage.py cleanup_search_vectors --vacuum-full
@@ -35,7 +29,7 @@ Space Reclamation:
 
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
-from core.models.document_analysis import DocumentExtraction, DocumentPage
+from core.models.document_analysis import DocumentExtraction
 from loguru import logger
 import time
 
@@ -44,12 +38,6 @@ class Command(BaseCommand):
     help = 'NULL search_vector data and VACUUM to reclaim disk space'
     
     def add_arguments(self, parser):
-        parser.add_argument(
-            '--model',
-            choices=['extraction', 'page', 'both'],
-            default='both',
-            help='Which model to clean up (default: both)'
-        )
         parser.add_argument(
             '--dry-run',
             action='store_true',
@@ -79,17 +67,14 @@ class Command(BaseCommand):
     
     def handle(self, *args, **options):
         """Main command handler"""
-        # Determine which models to operate on
-        if options['model'] == 'both':
-            models = ['extraction', 'page']
-        else:
-            models = [options['model']]
+        # Only support extraction model now
+        model = 'extraction'
         
         # Check trigger status and warn if enabled
         self._check_trigger_status()
         
         # Show what will be affected
-        stats = self._get_stats(models)
+        stats = self._get_stats([model])
         self._show_stats(stats, options['dry_run'])
         
         if options['dry_run']:
@@ -103,7 +88,7 @@ class Command(BaseCommand):
                     '\n⚠️  VACUUM FULL will lock tables and may take 10-30 minutes!'
                 ))
             
-            total_records = sum(s['indexed_count'] for s in stats.values())
+            total_records = stats[model]['indexed_count']
             self.stdout.write(self.style.WARNING(
                 f'\nThis will NULL search_vector for {total_records:,} records.'
             ))
@@ -116,9 +101,8 @@ class Command(BaseCommand):
         # Perform cleanup
         start_time = time.time()
         
-        for model in models:
-            self.stdout.write(self.style.WARNING(f'\n=== Cleaning {model.upper()} ==='))
-            self._cleanup_model(model, options)
+        self.stdout.write(self.style.WARNING(f'\n=== Cleaning {model.upper()} ==='))
+        self._cleanup_model(model, options)
         
         elapsed = time.time() - start_time
         self.stdout.write(self.style.SUCCESS(
@@ -127,7 +111,7 @@ class Command(BaseCommand):
         
         # Show final stats
         self.stdout.write('\n=== Final Status ===')
-        final_stats = self._get_stats(models)
+        final_stats = self._get_stats([model])
         self._show_stats(final_stats, dry_run=False)
     
     def _check_trigger_status(self):
@@ -164,10 +148,8 @@ class Command(BaseCommand):
         
         with connection.cursor() as cursor:
             for model in models:
-                if model == 'extraction':
-                    table = 'core_documentextraction'
-                else:
-                    table = 'core_documentpage'
+                # Only extraction model supported now
+                table = 'core_documentextraction'
                 
                 cursor.execute(f"""
                     SELECT 
@@ -215,12 +197,9 @@ class Command(BaseCommand):
     
     def _cleanup_model(self, model, options):
         """Clean up search_vector for a specific model"""
-        if model == 'extraction':
-            table = 'core_documentextraction'
-            model_class = DocumentExtraction
-        else:
-            table = 'core_documentpage'
-            model_class = DocumentPage
+        # Only extraction model supported now
+        table = 'core_documentextraction'
+        model_class = DocumentExtraction
         
         batch_size = options['batch_size']
         

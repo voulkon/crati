@@ -473,7 +473,8 @@ const SuperSearch = ({
         navigate(`/entity/unit/${item.id}`);
         break;
       case 'company':
-        navigate(`/entity/company/${item.id}`);
+        // #TODO: Α separate company_person page showing companies they are associated with with their roles and also amounts per amountype
+        navigate(`/entity/afm/${item.afm}`);
         break;
       case 'company_person':
         navigate(`/entity/company-person/${item.id}`);

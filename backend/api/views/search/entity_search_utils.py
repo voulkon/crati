@@ -349,6 +349,7 @@ def format_company(company, query=None):
         'type': 'company',
         'title': highlight_query_in_text(company.co_name_el or 'No name', query, 100) if query else company.co_name_el or 'No name',
         'subtitle': f"{company.legal_type_name or 'Company'} • {company.municipality_name or 'Unknown location'}",
+        'afm': f"{company.afm or 'N/A'}" ,
         'description': f"AFM: {company.afm or 'N/A'} • Status: {company.status_name or 'Unknown'}",
         'details': {
             'co_name_el': company.co_name_el,

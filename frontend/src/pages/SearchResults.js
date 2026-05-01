@@ -54,7 +54,8 @@ const SearchResults = () => {
         navigate(`/entity/unit/${item.id}`);
         break;
       case 'company':
-        navigate(`/entity/company/${item.id}`);
+        // navigate(`/entity/company/${item.id}`);
+        navigate(`/entity/afm/${item.afm}`);
         break;
       case 'company_person':
         navigate(`/entity/company-person/${item.id}`);

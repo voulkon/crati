@@ -26,10 +26,8 @@ Performance:
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
 from django.contrib.postgres.search import SearchVector
-from core.models.document_analysis import DocumentExtraction
-from core.models.entities import AFMEntity
-from core.models.organizations import Organization, Unit, Signer
-from core.models.companies import Company, CompanyPerson
+from django.apps import apps
+from core.constants.search_service import POSTGRES_FTS_MODELS
 from loguru import logger
 import time
 
@@ -37,51 +35,14 @@ import time
 class Command(BaseCommand):
     help = 'Regenerate search_vector data for all models with search_vector fields'
     
-    # Model configurations
-    MODELS = {
-        'extraction': {
-            'model_class': DocumentExtraction,
-            'table': 'core_documentextraction',
-            'text_fields': ['raw_text'],
-            'search_config': 'greek'
-        },
-        'afmentity': {
-            'model_class': AFMEntity,
-            'table': 'core_afmentity',
-            'text_fields': ['name'],
-            'search_config': 'greek'
-        },
-        'organization': {
-            'model_class': Organization,
-            'table': 'core_organization',
-            'text_fields': ['label'],
-            'search_config': 'greek'
-        },
-        'unit': {
-            'model_class': Unit,
-            'table': 'core_unit',
-            'text_fields': ['label'],
-            'search_config': 'greek'
-        },
-        'signer': {
-            'model_class': Signer,
-            'table': 'core_signer',
-            'text_fields': ['first_name', 'last_name'],
-            'search_config': 'greek'
-        },
-        'company': {
-            'model_class': Company,
-            'table': 'companies',
-            'text_fields': ['co_name_el', 'co_names_en', 'co_titles_el', 'co_titles_en'],
-            'search_config': 'greek'
-        },
-        'companyperson': {
-            'model_class': CompanyPerson,
-            'table': 'company_persons',
-            'text_fields': ['person_name'],
-            'search_config': 'greek'
-        }
-    }
+    # Use centralized model configurations
+    MODELS = POSTGRES_FTS_MODELS
+    
+    @staticmethod
+    def _get_model_class(model_path: str):
+        """Dynamically load model class from path (e.g., 'core.models.entities.AFMEntity')"""
+        app_label, model_name = model_path.rsplit('.', 1)
+        return apps.get_model(app_label.split('.')[-2], model_name)
     
     def add_arguments(self, parser):
         # Model selection arguments
@@ -225,7 +186,7 @@ class Command(BaseCommand):
                 
                 # For models with multiple text fields, just check if any field has data
                 # We'll use the model class to do the actual filtering
-                model_class = config['model_class']
+                model_class = self._get_model_class(config['model_path'])
                 
                 # Count records to backfill
                 if only_null:
@@ -277,7 +238,7 @@ class Command(BaseCommand):
     def _backfill_model(self, model, options):
         """Backfill search_vector for a specific model"""
         config = self.MODELS[model]
-        model_class = config['model_class']
+        model_class = self._get_model_class(config['model_path'])
         text_fields = config['text_fields']
         search_config = config['search_config']
         

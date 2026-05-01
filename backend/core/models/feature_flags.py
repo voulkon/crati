@@ -166,6 +166,8 @@ class FeatureFlag(models.Model):
             
             method = self.string_value
             if method == 'postgres_fts':
+                # Clear cache first to get real-time status when saving
+                prerequisite_check.clear_cache()
                 # Check if PostgreSQL FTS prerequisites are met
                 prereq_check = prerequisite_check.check_postgres_fts_prerequisites()
                 if not prereq_check['available']:

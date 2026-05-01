@@ -40,10 +40,12 @@ class SearchService:
         
         # Check prerequisites for each method
         if requested_method == SearchMethod.POSTGRES_FTS:
-            # PostgreSQL FTS requires INDEX_THE_POSTGRES to be enabled
-            if not feature_flags.is_enabled('INDEX_THE_POSTGRES'):
+            # For entity searches, check if prerequisites are met (migration + backfill)
+            # Note: INDEX_THE_POSTGRES is only for document content, not entities
+            prereq = prerequisite_check.check_postgres_fts_prerequisites()
+            if not prereq['available']:
                 logger.warning(
-                    f"POSTGRES_FTS requested but INDEX_THE_POSTGRES is disabled. "
+                    f"POSTGRES_FTS requested but prerequisites not met: {prereq['reason']}. "
                     f"Falling back to {SearchMethod.POSTGRES_SIMPLE}"
                 )
                 return SearchMethod.POSTGRES_SIMPLE

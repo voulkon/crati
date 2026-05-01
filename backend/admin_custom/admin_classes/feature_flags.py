@@ -192,8 +192,10 @@ class FeatureFlagForm(forms.ModelForm):
             if self.instance.string_value:
                 self.fields['selected_search_method'].initial = self.instance.string_value
             
-            # Populate prerequisite status display
+            # Populate prerequisite status display (force fresh check, no cache)
             from core.services.prerequisite_check_service import prerequisite_check
+            # Clear cache first to get fresh status
+            prerequisite_check.clear_cache()
             prereq_status = prerequisite_check.check_postgres_fts_prerequisites()
             
             status_lines = []
@@ -372,9 +374,11 @@ class FeatureFlagForm(forms.ModelForm):
             if selected_method:
                 cleaned_data['string_value'] = selected_method
                 
-                # Validate prerequisites for postgres_fts
+                # Validate prerequisites for postgres_fts (force fresh check on save)
                 if selected_method == 'postgres_fts':
                     from core.services.prerequisite_check_service import prerequisite_check
+                    # Clear cache to get real-time status when saving
+                    prerequisite_check.clear_cache()
                     prereq_status = prerequisite_check.check_postgres_fts_prerequisites()
                     
                     if not prereq_status['available']:

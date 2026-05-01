@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.postgres.search import SearchVectorField
 from django.utils import timezone
 from django.core.validators import RegexValidator
 
@@ -189,6 +190,9 @@ class Company(models.Model):
         help_text="Last update from GEMI API"
     )
     
+    # PostgreSQL Full-Text Search
+    search_vector = SearchVectorField(null=True, blank=True)
+    
     class Meta:
         db_table = 'companies'
         indexes = [
@@ -247,6 +251,9 @@ class CompanyPerson(models.Model):
     is_representative_in_common = models.BooleanField(null=True, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
+    
+    # PostgreSQL Full-Text Search
+    search_vector = SearchVectorField(null=True, blank=True)
     
     class Meta:
         db_table = 'company_persons'

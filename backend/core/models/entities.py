@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.postgres.search import SearchVectorField
 from core.models.decisions import Decision
 from django.core.validators import RegexValidator
 
@@ -69,6 +70,9 @@ class AFMEntity(models.Model):
     error_count = models.PositiveIntegerField(
         default=0, help_text="Number of failed lookup attempts"
     )
+    
+    # PostgreSQL Full-Text Search
+    search_vector = SearchVectorField(null=True, blank=True)
 
     class Meta:
         verbose_name = "AFM Entity"

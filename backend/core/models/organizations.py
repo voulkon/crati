@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.postgres.search import SearchVectorField
 from django.utils import timezone
 
 
@@ -45,6 +46,9 @@ class Organization(models.Model):
     website = models.CharField(max_length=255, blank=True, null=True)
     supervisor_org_uid = models.CharField(max_length=255, blank=True, null=True)
     supervisor_org_name = models.CharField(max_length=255, blank=True, null=True)
+    
+    # PostgreSQL Full-Text Search
+    search_vector = SearchVectorField(null=True, blank=True)
 
     def __str__(self):
         return self.label
@@ -86,6 +90,9 @@ class Unit(models.Model):
         blank=True, 
         help_text="Tracks how organization was resolved if not directly specified"
     )
+    
+    # PostgreSQL Full-Text Search
+    search_vector = SearchVectorField(null=True, blank=True)
 
     def __str__(self):
         return self.label
@@ -129,6 +136,10 @@ class Signer(models.Model):
         blank=True, 
         help_text="Tracks how organization was resolved if not directly specified"
     )
+    
+    # PostgreSQL Full-Text Search
+    search_vector = SearchVectorField(null=True, blank=True)
+    
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
 

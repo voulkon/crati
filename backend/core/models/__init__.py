@@ -42,3 +42,4 @@ from .decision_health import DecisionHealthCheck, DecisionHealthSummary, HealthS
 from .backups import Backup
 from .import_thresholds import ImportThreshold
 from .feature_flags import FeatureFlag, FeatureFlagAuditLog
+from .classification_job import ClassificationJob, ClassificationJobLog

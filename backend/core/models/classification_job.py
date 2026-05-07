@@ -79,6 +79,12 @@ class ClassificationJob(models.Model):
         help_text="Number of decisions to process per batch"
     )
     
+    max_decisions = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Maximum number of decisions to process (leave empty for unlimited)"
+    )
+    
     reclassify = models.BooleanField(
         default=False,
         help_text="Re-classify even if already classified"

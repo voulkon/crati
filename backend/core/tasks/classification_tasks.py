@@ -157,15 +157,15 @@ def process_in_batches(job: ClassificationJob, decisions_qs) -> Dict[str, int]:
     
     batch_number = (processed // batch_size) + 1
     
-    # Use iterator for memory efficiency
-    iterator = decisions_qs.iterator(chunk_size=batch_size)
+    # Use manual batching with slicing to avoid PostgreSQL named cursor issues
+    # iterator() creates named cursors that break with Celery's prefork concurrency
+    offset = 0
     
-    while True:
+    while offset < total_count:
         # Check if job was paused or cancelled
         job.refresh_from_db()
         if job.status == JobStatus.PAUSED.value:
             log_job_event(job, 'INFO', f"Job paused at {processed:,} decisions")
-            # Wait for resume (task will be re-queued)
             return {
                 'processed': processed,
                 'direct_assignments': direct_assignments,
@@ -186,16 +186,13 @@ def process_in_batches(job: ClassificationJob, decisions_qs) -> Dict[str, int]:
                 'errors': errors
             }
         
-        # Fetch next batch
-        batch = []
-        try:
-            for _ in range(batch_size):
-                batch.append(next(iterator))
-        except StopIteration:
-            pass
+        # Fetch batch using slicing (creates a new query each time, avoiding cursors)
+        batch = list(decisions_qs[offset:offset + batch_size])
         
         if not batch:
             break
+        
+        offset += batch_size
         
         # Process batch
         try:

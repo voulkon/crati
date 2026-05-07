@@ -308,68 +308,83 @@ class DirectAssignmentDetectionService:
         from django.db.models import QuerySet
         if isinstance(decisions, QuerySet):
             decision_count = decisions.count()
-            decision_iterator = decisions.select_related('decision_type').prefetch_related('text_extraction').iterator(chunk_size=batch_size)
+            # Process QuerySet in batches using slicing to avoid named cursor issues
+            decisions_with_prefetch = decisions.select_related('decision_type').prefetch_related('text_extraction')
         else:
             # It's a list
             decision_count = len(decisions)
-            decision_iterator = iter(decisions)
+            decisions_with_prefetch = decisions
         
         logger.info(f"Starting bulk classification of {decision_count} decisions")
         
-        for decision in decision_iterator:
-            try:
-                result = self.classify_decision(decision)
-                stats['total_processed'] += 1
+        # Process in batches
+        offset = 0
+        while offset < decision_count:
+            # Fetch batch (for QuerySet, slice creates new query; for list, just slice)
+            if isinstance(decisions_with_prefetch, QuerySet):
+                batch = list(decisions_with_prefetch[offset:offset + batch_size])
+            else:
+                batch = decisions_with_prefetch[offset:offset + batch_size]
+            
+            if not batch:
+                break
                 
-                if result['is_direct_assignment']:
-                    stats['direct_assignments'] += 1
-                else:
-                    stats['non_direct_assignments'] += 1
-                
-                # Check if classification exists
-                if decision.id in existing_classifications:
-                    # Update existing (only if update_existing is True)
-                    if update_existing:
-                        existing = existing_classifications[decision.id]
-                        existing.is_direct_assignment = result['is_direct_assignment']
-                        existing.detection_method = result['detection_method']
-                        existing.classifier_version = self.CLASSIFIER_VERSION
-                        classifications_to_update.append(existing)
-                        stats['updated'] += 1
-                    # Skip if not updating existing
-                else:
-                    # Create new
-                    classifications_to_create.append(
-                        DecisionClassification(
-                            decision=decision,
-                            is_direct_assignment=result['is_direct_assignment'],
-                            detection_method=result['detection_method'],
-                            classifier_version=self.CLASSIFIER_VERSION
-                        )
-                    )
-                    stats['created'] += 1
-                
-                # Batch save when reaching batch_size
-                if len(classifications_to_create) >= batch_size:
-                    DecisionClassification.objects.bulk_create(
-                        classifications_to_create,
-                        batch_size=batch_size,
-                        ignore_conflicts=True
-                    )
-                    classifications_to_create = []
-                
-                if len(classifications_to_update) >= batch_size:
-                    DecisionClassification.objects.bulk_update(
-                        classifications_to_update,
-                        ['is_direct_assignment', 'detection_method', 'classifier_version', 'classified_at'],
-                        batch_size=batch_size
-                    )
-                    classifications_to_update = []
+            offset += batch_size
+            
+            for decision in batch:
+                try:
+                    result = self.classify_decision(decision)
+                    stats['total_processed'] += 1
                     
-            except Exception as e:
-                logger.error(f"Error classifying decision {decision.ada}: {e}")
-                stats['errors'] += 1
-                continue
+                    if result['is_direct_assignment']:
+                        stats['direct_assignments'] += 1
+                    else:
+                        stats['non_direct_assignments'] += 1
+                    
+                    # Check if classification exists
+                    if decision.id in existing_classifications:
+                        # Update existing (only if update_existing is True)
+                        if update_existing:
+                            existing = existing_classifications[decision.id]
+                            existing.is_direct_assignment = result['is_direct_assignment']
+                            existing.detection_method = result['detection_method']
+                            existing.classifier_version = self.CLASSIFIER_VERSION
+                            classifications_to_update.append(existing)
+                            stats['updated'] += 1
+                        # Skip if not updating existing
+                    else:
+                        # Create new
+                        classifications_to_create.append(
+                            DecisionClassification(
+                                decision=decision,
+                                is_direct_assignment=result['is_direct_assignment'],
+                                detection_method=result['detection_method'],
+                                classifier_version=self.CLASSIFIER_VERSION
+                            )
+                        )
+                        stats['created'] += 1
+                    
+                    # Batch save when reaching batch_size
+                    if len(classifications_to_create) >= batch_size:
+                        DecisionClassification.objects.bulk_create(
+                            classifications_to_create,
+                            batch_size=batch_size,
+                            ignore_conflicts=True
+                        )
+                        classifications_to_create = []
+                    
+                    if len(classifications_to_update) >= batch_size:
+                        DecisionClassification.objects.bulk_update(
+                            classifications_to_update,
+                            ['is_direct_assignment', 'detection_method', 'classifier_version', 'classified_at'],
+                            batch_size=batch_size
+                        )
+                        classifications_to_update = []
+                        
+                except Exception as e:
+                    logger.error(f"Error classifying decision {decision.ada}: {e}")
+                    stats['errors'] += 1
+                    continue
         
         # Save remaining
         if classifications_to_create:

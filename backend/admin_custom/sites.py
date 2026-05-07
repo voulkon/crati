@@ -72,6 +72,9 @@ class CustomAdminSite(admin.AdminSite):
             path("db-storage/indexes/", self._wrap_view('db_storage_dashboard', 'get_index_stats'), name="get_index_stats"),
             path("db-storage/columns/", self._wrap_view('db_storage_dashboard', 'get_column_stats'), name="get_column_stats"),
             path("db-storage/bloat/", self._wrap_view('db_storage_dashboard', 'get_bloat_stats'), name="get_bloat_stats"),
+            
+            # Classification Job URLs
+            path("classification/dashboard/", self._wrap_view('classification_jobs', 'dashboard'), name="classification_dashboard"),
         ]
         return custom_urls + urls
     
@@ -195,7 +198,8 @@ def register_all_models():
         ImportThresholdAdmin,
         NotificationSubscriptionAdmin, NotificationAdmin,
         NotificationBatchAdmin, NotificationBatchDecisionAdmin,
-        FeatureFlagAdmin, FeatureFlagAuditLogAdmin
+        FeatureFlagAdmin, FeatureFlagAuditLogAdmin,
+        ClassificationJobAdmin
     )
     
     from core.models.decisions import Decision, Attachment
@@ -207,6 +211,7 @@ def register_all_models():
     from core.models.import_thresholds import ImportThreshold
     from core.models.backups import Backup
     from core.models.feature_flags import FeatureFlag, FeatureFlagAuditLog
+    from core.models.classification_job import ClassificationJob
     from api.models import APIAnalytics, EndpointStats, DailyTraffic
     from users.models import CustomUser, Subscription
     from notifications.models import NotificationSubscription, Notification, NotificationBatch, NotificationBatchDecision
@@ -258,6 +263,9 @@ def register_all_models():
     # Register Feature Flag models
     admin_site.register(FeatureFlag, FeatureFlagAdmin)
     admin_site.register(FeatureFlagAuditLog, FeatureFlagAuditLogAdmin)
+    
+    # Register Classification Job models
+    admin_site.register(ClassificationJob, ClassificationJobAdmin)
     
     # Note: SearchSuggestion uses custom manager interface, not default admin
     admin_site.register(NotificationBatchDecision, NotificationBatchDecisionAdmin)

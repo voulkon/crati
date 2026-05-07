@@ -8,6 +8,7 @@ from .ai_pricing import AIModelPricingAdmin, TaskOutputEstimateAdmin, AIJobDefin
 from .import_thresholds import ImportThresholdAdmin
 from .notifications import NotificationSubscriptionAdmin, NotificationAdmin, NotificationBatchAdmin, NotificationBatchDecisionAdmin
 from .feature_flags import FeatureFlagAdmin, FeatureFlagAuditLogAdmin
+from .classification_jobs import ClassificationJobAdmin
 
 __all__ = [
     # Decision admin classes
@@ -57,4 +58,7 @@ __all__ = [
     # Feature Flag admin classes
     'FeatureFlagAdmin',
     'FeatureFlagAuditLogAdmin',
+    
+    # Classification Job admin classes
+    'ClassificationJobAdmin',
 ]

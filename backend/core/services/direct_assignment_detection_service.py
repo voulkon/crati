@@ -264,8 +264,9 @@ class DirectAssignmentDetectionService:
     
     def bulk_classify(
         self,
-        decisions: QuerySet,
-        batch_size: int = 1000
+        decisions,
+        batch_size: int = 1000,
+        update_existing: bool = False
     ) -> Dict[str, int]:
         """
         Efficiently classify multiple decisions in bulk.
@@ -273,10 +274,12 @@ class DirectAssignmentDetectionService:
         Used by:
         - Management command for backfilling existing decisions
         - Scheduled task for catching unclassified decisions
+        - Background classification jobs
         
         Args:
-            decisions: QuerySet of Decision objects to classify
+            decisions: QuerySet or list of Decision objects to classify
             batch_size: Number of decisions to process per batch
+            update_existing: If True, update existing classifications (default: False)
         
         Returns:
             Statistics dictionary with counts
@@ -301,9 +304,19 @@ class DirectAssignmentDetectionService:
             ).select_related('decision')
         }
         
-        logger.info(f"Starting bulk classification of {decisions.count()} decisions")
+        # Handle both QuerySet and list inputs
+        from django.db.models import QuerySet
+        if isinstance(decisions, QuerySet):
+            decision_count = decisions.count()
+            decision_iterator = decisions.select_related('decision_type').prefetch_related('text_extraction').iterator(chunk_size=batch_size)
+        else:
+            # It's a list
+            decision_count = len(decisions)
+            decision_iterator = iter(decisions)
         
-        for decision in decisions.select_related('decision_type').prefetch_related('text_extraction').iterator(chunk_size=batch_size):
+        logger.info(f"Starting bulk classification of {decision_count} decisions")
+        
+        for decision in decision_iterator:
             try:
                 result = self.classify_decision(decision)
                 stats['total_processed'] += 1
@@ -315,13 +328,15 @@ class DirectAssignmentDetectionService:
                 
                 # Check if classification exists
                 if decision.id in existing_classifications:
-                    # Update existing
-                    existing = existing_classifications[decision.id]
-                    existing.is_direct_assignment = result['is_direct_assignment']
-                    existing.detection_method = result['detection_method']
-                    existing.classifier_version = self.CLASSIFIER_VERSION
-                    classifications_to_update.append(existing)
-                    stats['updated'] += 1
+                    # Update existing (only if update_existing is True)
+                    if update_existing:
+                        existing = existing_classifications[decision.id]
+                        existing.is_direct_assignment = result['is_direct_assignment']
+                        existing.detection_method = result['detection_method']
+                        existing.classifier_version = self.CLASSIFIER_VERSION
+                        classifications_to_update.append(existing)
+                        stats['updated'] += 1
+                    # Skip if not updating existing
                 else:
                     # Create new
                     classifications_to_create.append(

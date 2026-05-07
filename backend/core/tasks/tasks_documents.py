@@ -51,7 +51,7 @@ def run_decision_pipeline_task(self, ada: str, force_reprocess: bool = False, sk
         force_reprocess=force_reprocess
     ):
         try:
-            logger.info("🚀 Starting FULL pipeline for decision")
+            logger.info("Starting FULL pipeline for decision")
             
             orchestrator = DecisionPipelineOrchestrator()
             health_check = orchestrator.run_pipeline(

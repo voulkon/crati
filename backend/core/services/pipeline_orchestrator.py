@@ -82,7 +82,13 @@ class DecisionPipelineOrchestrator:
         
         health_check.save()
 
-    def run_pipeline(self, decision_ada: str, force_reprocess: bool = False, skip_opensearch: bool = False, decision_dto=None) -> DecisionHealthCheck:
+    def run_pipeline(
+        self, 
+        decision_ada: str, 
+        force_reprocess: bool = False, 
+        skip_opensearch: bool = False, 
+        decision_dto=None
+        ) -> DecisionHealthCheck:
         """
         Runs the full processing pipeline for a decision.
         

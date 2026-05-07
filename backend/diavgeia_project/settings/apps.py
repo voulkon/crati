@@ -11,6 +11,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.humanize",  # For intcomma and other filters
     "core.apps.CoreConfig",
     "rest_framework",
     "rest_framework.authtoken",

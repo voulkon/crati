@@ -131,11 +131,34 @@ def clear_search_history_api(request):
 
 @swagger_auto_schema(
     method='get',
-    operation_description="Get recently visited items (entities/documents user clicked on from search results)",
+    operation_description="Get recently visited items (entities/documents user clicked on from search results). "
+                         "Returns enriched entity details including name and URL for easy navigation.",
     manual_parameters=[
         openapi.Parameter('limit', openapi.IN_QUERY, description="Maximum number of items", type=openapi.TYPE_INTEGER),
         openapi.Parameter('unique', openapi.IN_QUERY, description="Deduplicate by item ID", type=openapi.TYPE_BOOLEAN),
-    ]
+    ],
+    responses={
+        200: openapi.Response(
+            description="List of recently visited items with enriched details",
+            examples={
+                'application/json': {
+                    'visited': [
+                        {
+                            'query': 'ΔΗΜΟΣΙΑ ΕΠ',
+                            'normalized_query': 'δημοσια επ',
+                            'timestamp': 1778594856.1195428,
+                            'is_selection': True,
+                            'entity_type': 'unit',
+                            'selected_item_id': '100092757',
+                            'selected_item_name': 'ΔΗΜΟΣΙΑ ΕΠΙΧΕΙΡΗΣΗ',
+                            'selected_item_url': '/entity/unit/100092757'
+                        }
+                    ],
+                    'count': 1
+                }
+            }
+        )
+    }
 )
 @api_view(['GET'])
 @permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
@@ -145,6 +168,9 @@ def recently_visited_api(request):
     
     Returns only items that were actually clicked (is_selection=True),
     with full details (name, URL, type) for easy revisiting.
+    
+    Entity details are automatically enriched from the database if missing,
+    so this works even for items tracked before the name/URL fields were added.
     
     Perfect for "Recently Visited" or "Continue Where You Left Off" features.
     """

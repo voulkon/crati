@@ -302,3 +302,60 @@ export const searchCategories = async (query, categoryLimits = {}) => {
     throw error;
   }
 };
+
+/**
+ * Track a search result selection (when user clicks on a search result)
+ * This is used to differentiate between typing (keystroke tracking) and actual selections
+ * based on the SEARCH_HISTORY_RECORDING_MODE feature flag setting.
+ * 
+ * @param {string} query - The search query that was used
+ * @param {string} resultType - Type of result selected (e.g., 'organization', 'signer', 'document')
+ * @param {string|number} resultId - ID of the selected result
+ * @param {string} resultName - Name/title of the selected result
+ * @param {string} resultUrl - URL path to the selected result
+ * @returns {Promise<Object>} Success status
+ */
+export const trackSearchSelection = async (query, resultType, resultId, resultName, resultUrl) => {
+  if (!query) {
+    console.warn('Cannot track selection without query');
+    return { success: false };
+  }
+
+  try {
+    const response = await apiClient.post('/search/history/track-selection/', {
+      query: query,
+      result_type: resultType,
+      result_id: resultId,
+      result_name: resultName,
+      result_url: resultUrl
+    });
+    return response.data;
+  } catch (error) {
+    // Don't throw error - tracking failures shouldn't break user experience
+    console.error('Failed to track search selection:', error);
+    return { success: false };
+  }
+};
+
+/**
+ * Get recently visited items (entities/documents user clicked on from search)
+ * Returns only items that were actually clicked, with full details for easy revisiting.
+ * 
+ * @param {number} limit - Maximum number of items to return
+ * @param {boolean} unique - Deduplicate by item ID (default: true)
+ * @returns {Promise<Object>} Recently visited items with count
+ */
+export const getRecentlyVisited = async (limit = 10, unique = true) => {
+  const params = new URLSearchParams({
+    limit: limit,
+    unique: unique
+  });
+
+  try {
+    const response = await apiClient.get(`/search/history/recently-visited/?${params}`);
+    return response.data;
+  } catch (error) {
+    console.error('Failed to fetch recently visited:', error);
+    throw error;
+  }
+};

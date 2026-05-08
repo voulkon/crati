@@ -412,7 +412,95 @@ class SearchHistoryService:
                     unique_visited.append(item)
             visited = unique_visited
         
-        return visited[:limit]
+        # Enrich items with entity details if missing
+        enriched_visited = self._enrich_visited_items(visited)
+        
+        return enriched_visited[:limit]
+    
+    def _enrich_visited_items(self, visited: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Enrich visited items with entity details (name, URL) if missing.
+        
+        This handles cases where:
+        - Data was tracked before name/URL fields were added
+        - The frontend didn't send name/URL when tracking
+        - Name/URL were empty strings
+        
+        For each item, if selected_item_name or selected_item_url is missing,
+        we look up the entity from the database and populate these fields.
+        
+        Args:
+            visited: List of visited item dicts
+            
+        Returns:
+            List of enriched visited item dicts
+        """
+        from core.models import Organization, Unit, Signer
+        
+        enriched = []
+        
+        for item in visited:
+            # Check if enrichment is needed
+            has_name = bool(item.get('selected_item_name'))
+            has_url = bool(item.get('selected_item_url'))
+            
+            if has_name and has_url:
+                # Already has all needed fields
+                enriched.append(item)
+                continue
+            
+            # Need to enrich - look up entity
+            entity_type = item.get('entity_type')
+            entity_id = item.get('selected_item_id')
+            
+            if not entity_type or not entity_id:
+                # Can't enrich without these
+                enriched.append(item)
+                continue
+            
+            try:
+                # Look up entity based on type
+                entity_name = None
+                entity_url = None
+                
+                if entity_type == 'organization':
+                    try:
+                        org = Organization.objects.get(uid=entity_id)
+                        entity_name = org.label
+                        entity_url = f'/entity/organization/{entity_id}'
+                    except Organization.DoesNotExist:
+                        logger.warning(f"Organization {entity_id} not found for enrichment")
+                        
+                elif entity_type == 'unit':
+                    try:
+                        unit = Unit.objects.get(uid=entity_id)
+                        entity_name = unit.label
+                        entity_url = f'/entity/unit/{entity_id}'
+                    except Unit.DoesNotExist:
+                        logger.warning(f"Unit {entity_id} not found for enrichment")
+                        
+                elif entity_type == 'signer':
+                    try:
+                        signer = Signer.objects.get(uid=entity_id)
+                        entity_name = f"{signer.first_name} {signer.last_name}"
+                        entity_url = f'/entity/signer/{entity_id}'
+                    except Signer.DoesNotExist:
+                        logger.warning(f"Signer {entity_id} not found for enrichment")
+                
+                # Add enriched fields if found
+                if entity_name and not has_name:
+                    item['selected_item_name'] = entity_name
+                if entity_url and not has_url:
+                    item['selected_item_url'] = entity_url
+                    
+                enriched.append(item)
+                
+            except Exception as e:
+                logger.error(f"Error enriching item {entity_type}:{entity_id}: {e}")
+                # Keep item even if enrichment fails
+                enriched.append(item)
+        
+        return enriched
     
     def clear_user_history(self, user_id: int) -> bool:
         """Clear all search history for a user (privacy feature)."""

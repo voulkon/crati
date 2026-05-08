@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { streamSearch, getDefaultSuggestions, searchCategories } from '../api/searchApi';
-import { OrganizationIcon, UserIcon, UnitIcon, CompanyIcon, FileIcon, SearchIcon, PenIcon } from './Icons.js';
+import { streamSearch, getDefaultSuggestions, searchCategories, trackSearchSelection, getRecentlyVisited } from '../api/searchApi';
+import { OrganizationIcon, UserIcon, UnitIcon, CompanyIcon, FileIcon, SearchIcon, PenIcon, TimerIcon } from './Icons.js';
 import './SuperSearch.css';
 
 const SuperSearch = ({ 
@@ -367,11 +367,49 @@ const SuperSearch = ({
       return;
     }
     
-    // If input is empty, fetch and show default suggestions
+    // If input is empty, fetch and show default suggestions + recently visited
     if (!query.trim()) {
       try {
-        const defaultSuggestions = await getDefaultSuggestions(10);
-        setResults(defaultSuggestions);
+        // Fetch both default suggestions and recently visited items in parallel
+        const [defaultSuggestions, recentlyVisitedData] = await Promise.all([
+          getDefaultSuggestions(10),
+          getRecentlyVisited(5, true).catch(err => {
+            console.warn('Failed to fetch recently visited:', err);
+            return { visited: [], count: 0 };
+          })
+        ]);
+        
+        // Transform recently visited items into search result format
+        const recentlyVisitedItems = recentlyVisitedData.visited?.map(item => ({
+          id: item.selected_item_id,
+          name: item.selected_item_name,
+          title: item.selected_item_name,  // Used for display
+          label: item.selected_item_name,
+          type: item.entity_type,
+          url: item.selected_item_url,
+          timestamp: item.timestamp,  // Keep timestamp for sorting
+          // Add a flag to style these differently if needed
+          isRecentlyVisited: true
+        })) || [];
+        
+        // Sort by timestamp (most recent first)
+        recentlyVisitedItems.sort((a, b) => b.timestamp - a.timestamp);
+        
+        // Combine with default suggestions
+        const combinedResults = { 
+          ...defaultSuggestions,
+          results: {
+            ...defaultSuggestions.results
+          }
+        };
+        
+        // Add recently visited as a separate category
+        if (recentlyVisitedItems.length > 0) {
+          combinedResults.results.recently_visited = recentlyVisitedItems;
+          combinedResults.total_count += recentlyVisitedItems.length;
+        }
+        
+        setResults(combinedResults);
         setShowResults(true);
       } catch (error) {
         console.error('Failed to fetch default suggestions:', error);
@@ -455,6 +493,43 @@ const SuperSearch = ({
     setShowResults(false);
     setSelectedIndex(-1);
     
+    // Prepare tracking data
+    let itemUrl = '';
+    let itemName = item.name || item.title || item.label || '';
+    
+    // Determine URL based on item type
+    switch (item.type) {
+      case 'organization':
+        itemUrl = `/entity/organization/${item.id}`;
+        break;
+      case 'signer':
+        itemUrl = `/entity/signer/${item.id}`;
+        break;
+      case 'unit':
+        itemUrl = `/entity/unit/${item.id}`;
+        break;
+      case 'company':
+        itemUrl = `/entity/afm/${item.afm}`;
+        break;
+      case 'company_person':
+        itemUrl = `/entity/company-person/${item.id}`;
+        break;
+      case 'document':
+        itemUrl = `/decision/${item.details?.decision_id}`;
+        itemName = item.subject || item.description || itemName;
+        break;
+      default:
+        break;
+    }
+    
+    // Track the selection (fire and forget - don't wait for response)
+    if (query && item.type && item.id) {
+      trackSearchSelection(query, item.type, item.id, itemName, itemUrl).catch(err => {
+        // Silently fail - tracking shouldn't break UX
+        console.debug('Selection tracking failed:', err);
+      });
+    }
+    
     // Call custom handler if provided
     if (onResultClick) {
       onResultClick(item);
@@ -520,6 +595,7 @@ const SuperSearch = ({
   // Get category display name
   const getCategoryName = (category) => {
     const names = {
+      recently_visited: 'Recently Visited',
       organizations: 'Organizations',
       signers: 'Signers',
       units: 'Units',
@@ -660,6 +736,17 @@ const SuperSearch = ({
                   All Results
                   <span className="super-search-tab-count">{results.total_count}</span>
                 </button>
+                {results.results.recently_visited && results.results.recently_visited.length > 0 && (
+                  <button
+                    className={`super-search-tab ${selectedCategory === 'recently_visited' ? 'active' : ''}`}
+                    onClick={() => setSelectedCategory('recently_visited')}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    <TimerIcon size={14} />
+                    Recently Visited
+                    <span className="super-search-tab-count">{results.results.recently_visited.length}</span>
+                  </button>
+                )}
                 {results.results.organizations && results.results.organizations.length > 0 && (
                   <button
                     className={`super-search-tab ${selectedCategory === 'organizations' ? 'active' : ''}`}
@@ -741,7 +828,11 @@ const SuperSearch = ({
                   <div key={category} className="super-search-category">
                     <div className="super-search-category-header">
                       <span className="super-search-category-icon">
-                        {getItemIcon(categoryResults[0]?.type)}
+                        {category === 'recently_visited' ? (
+                          <TimerIcon size={16} />
+                        ) : (
+                          getItemIcon(categoryResults[0]?.type)
+                        )}
                       </span>
                       <span>{getCategoryName(category)}</span>
                       <span className="super-search-category-count">
@@ -759,7 +850,7 @@ const SuperSearch = ({
                       return (
                         <div
                           key={`${item.type}-${item.id}`}
-                          className={`super-search-item ${isDocument ? 'super-search-document-item' : ''} ${isSelected ? 'selected' : ''}`}
+                          className={`super-search-item ${isDocument ? 'super-search-document-item' : ''} ${isSelected ? 'selected' : ''} ${item.isRecentlyVisited ? 'recently-visited' : ''}`}
                           onClick={() => handleItemClick(item)}
                           onMouseEnter={() => setSelectedIndex(globalIndex)}
                           style={{
@@ -772,6 +863,11 @@ const SuperSearch = ({
                           
                           <div className="super-search-item-content">
                             <div className="super-search-item-title">
+                              {item.isRecentlyVisited && category !== 'recently_visited' && (
+                                <span className="recently-visited-badge" title="Recently Visited">
+                                  <TimerIcon size={14} />
+                                </span>
+                              )}
                               {renderHighlightedText(item.title)}
                             </div>
                             

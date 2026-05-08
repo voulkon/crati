@@ -24,7 +24,8 @@ export {
     AlertCircle as AlertIcon,
     Pencil as PencilIcon,
     Boxes as UnitIcon,
-    Store as CompanyIcon
+    Store as CompanyIcon,
+    Timer as TimerIcon
 } from 'lucide-react';
 export { 
     LibraryBig as LibraryToggleIcon, 

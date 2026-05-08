@@ -398,8 +398,23 @@
   text-align: center;
   color: var(--muted-text);
   font-size: var(--font-sm);
-  font-style: italic;
-  border-top: 1px solid var(--border-color);
+}
+
+/* Recently Visited Badge */
+.recently-visited-badge {
+  display: inline-block;
+  margin-right: var(--spacing-xs);
+  font-size: 14px;
+  opacity: 0.7;
+  filter: grayscale(30%);
+}
+
+.super-search-item.recently-visited {
+  border-left: 3px solid var(--primary-blue);
+}
+
+.super-search-item.recently-visited .super-search-item-icon {
+  background-color: rgba(59, 130, 246, 0.1);
 }
 
 /* Loading more indicator */

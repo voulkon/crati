@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { streamSearch, getDefaultSuggestions, searchCategories, trackSearchSelection, getRecentlyVisited } from '../api/searchApi';
-import { OrganizationIcon, UserIcon, UnitIcon, CompanyIcon, FileIcon, SearchIcon, PenIcon, TimerIcon } from './Icons.js';
+import { streamSearch, getDefaultSuggestions, searchCategories, trackSearchSelection, getRecentlyVisited, clearSearchHistory, deleteSingleHistoryItem } from '../api/searchApi';
+import { OrganizationIcon, UserIcon, UnitIcon, CompanyIcon, FileIcon, SearchIcon, PenIcon, TimerIcon, TrashIcon } from './Icons.js';
 import './SuperSearch.css';
 
 const SuperSearch = ({ 
@@ -571,6 +571,70 @@ const SuperSearch = ({
     inputRef.current?.focus();
   };
 
+  // Handle delete single history item
+  const handleDeleteHistoryItem = async (e, item) => {
+    e.stopPropagation(); // Prevent triggering item click
+    
+    if (!item.timestamp) {
+      console.error('No timestamp found for history item');
+      return;
+    }
+    
+    try {
+      await deleteSingleHistoryItem(item.timestamp);
+      
+      // Remove the item from the results
+      if (results?.results?.recently_visited) {
+        const newResults = { ...results };
+        newResults.results.recently_visited = newResults.results.recently_visited.filter(
+          i => i.timestamp !== item.timestamp
+        );
+        newResults.total_count -= 1;
+        
+        // If no more recently visited items, remove the category
+        if (newResults.results.recently_visited.length === 0) {
+          delete newResults.results.recently_visited;
+          if (selectedCategory === 'recently_visited') {
+            setSelectedCategory('all');
+          }
+        }
+        
+        setResults(newResults);
+      }
+    } catch (error) {
+      console.error('Failed to delete history item:', error);
+    }
+  };
+
+  // Handle clear history with confirmation
+  const handleClearHistory = async () => {
+    // Show confirmation dialog
+    const confirmed = window.confirm(
+      'Are you sure you want to clear all your search history? This action cannot be undone.'
+    );
+    
+    if (!confirmed) {
+      return;
+    }
+    
+    try {
+      await clearSearchHistory();
+      // Remove recently_visited from results
+      if (results?.results?.recently_visited) {
+        const newResults = { ...results };
+        newResults.total_count -= newResults.results.recently_visited.length;
+        delete newResults.results.recently_visited;
+        setResults(newResults);
+        // Switch to 'all' if we were on 'recently_visited'
+        if (selectedCategory === 'recently_visited') {
+          setSelectedCategory('all');
+        }
+      }
+    } catch (error) {
+      console.error('Failed to clear history:', error);
+    }
+  };
+
   // Handle view all results
   const handleViewAll = () => {
     setShowResults(false);
@@ -737,15 +801,27 @@ const SuperSearch = ({
                   <span className="super-search-tab-count">{results.total_count}</span>
                 </button>
                 {results.results.recently_visited && results.results.recently_visited.length > 0 && (
-                  <button
-                    className={`super-search-tab ${selectedCategory === 'recently_visited' ? 'active' : ''}`}
-                    onClick={() => setSelectedCategory('recently_visited')}
-                    onMouseDown={(e) => e.preventDefault()}
-                  >
-                    <TimerIcon size={14} />
-                    Recently Visited
-                    <span className="super-search-tab-count">{results.results.recently_visited.length}</span>
-                  </button>
+                  <div className="super-search-tab-wrapper">
+                    <button
+                      className={`super-search-tab ${selectedCategory === 'recently_visited' ? 'active' : ''}`}
+                      onClick={() => setSelectedCategory('recently_visited')}
+                      onMouseDown={(e) => e.preventDefault()}
+                    >
+                      <TimerIcon size={14} />
+                      Recently Visited
+                      <span className="super-search-tab-count">{results.results.recently_visited.length}</span>
+                    </button>
+                    {selectedCategory === 'recently_visited' && (
+                      <button
+                        className="super-search-clear-history"
+                        onClick={handleClearHistory}
+                        onMouseDown={(e) => e.preventDefault()}
+                        title="Clear all history"
+                      >
+                        <TrashIcon size={12} />
+                      </button>
+                    )}
+                  </div>
                 )}
                 {results.results.organizations && results.results.organizations.length > 0 && (
                   <button
@@ -846,6 +922,7 @@ const SuperSearch = ({
                       );
                       const isSelected = globalIndex === selectedIndex;
                       const isDocument = item.type === 'document';
+                      const isRecentlyVisitedCategory = category === 'recently_visited';
                       
                       return (
                         <div
@@ -886,6 +963,18 @@ const SuperSearch = ({
                             {isDocument && renderDocumentExcerpt(item)}
                             {isDocument && renderDocumentMetadata(item)}
                           </div>
+                          
+                          {/* Delete button for Recently Visited items */}
+                          {isRecentlyVisitedCategory && (
+                            <button
+                              className="super-search-item-delete"
+                              onClick={(e) => handleDeleteHistoryItem(e, item)}
+                              onMouseDown={(e) => e.preventDefault()}
+                              title="Remove from history"
+                            >
+                              <TrashIcon size={14} />
+                            </button>
+                          )}
                         </div>
                       );
                     })}

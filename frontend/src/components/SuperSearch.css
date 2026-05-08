@@ -386,6 +386,60 @@
   background-color: rgba(255, 255, 255, 0.25);
 }
 
+.super-search-tab-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.super-search-clear-history {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: none;
+  border: none;
+  color: var(--muted-text);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+}
+
+.super-search-clear-history:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+/* Delete button for individual history items */
+.super-search-item-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  background: none;
+  border: none;
+  color: var(--muted-text);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+  opacity: 0;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.super-search-item:hover .super-search-item-delete {
+  opacity: 1;
+}
+
+.super-search-item-delete:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.super-search-item-delete:active {
+  transform: scale(0.95);
+}
+
 /* Load more trigger */
 .super-search-load-more-trigger {
   height: 1px;

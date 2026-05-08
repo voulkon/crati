@@ -104,6 +104,81 @@ def recent_search_queries_api(request):
     })
 
 
+@swagger_auto_schema(
+    method='delete',
+    operation_description="Delete a single item from search history by timestamp",
+    request_body=openapi.Schema(
+        type=openapi.TYPE_OBJECT,
+        required=['timestamp'],
+        properties={
+            'timestamp': openapi.Schema(
+                type=openapi.TYPE_NUMBER, 
+                description='Unix timestamp of the item to delete'
+            ),
+        }
+    ),
+    responses={
+        200: openapi.Response(
+            description="Item deleted successfully",
+            examples={
+                'application/json': {
+                    'success': True,
+                    'message': 'History item deleted successfully'
+                }
+            }
+        ),
+        400: 'Timestamp is required',
+        404: 'Item not found'
+    }
+)
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_single_history_item_api(request):
+    """
+    Delete a single item from the user's search history.
+    
+    Requires the timestamp of the item to delete (from the history list).
+    This allows users to remove specific items without clearing their entire history.
+    """
+    timestamp = request.data.get('timestamp')
+    
+    if not timestamp:
+        return Response({
+            'success': False,
+            'message': 'Timestamp is required'
+        }, status=400)
+    
+    try:
+        timestamp = float(timestamp)
+    except (ValueError, TypeError):
+        return Response({
+            'success': False,
+            'message': 'Invalid timestamp format'
+        }, status=400)
+    
+    service = SearchHistoryService()
+    
+    user_id = request.user.id if request.user.is_authenticated else None
+    ip_address = get_client_ip(request)
+    
+    success = service.delete_single_item(
+        item_timestamp=timestamp,
+        user_id=user_id,
+        ip_address=ip_address
+    )
+    
+    if success:
+        return Response({
+            'success': True,
+            'message': 'History item deleted successfully'
+        })
+    else:
+        return Response({
+            'success': False,
+            'message': 'Failed to delete history item'
+        }, status=500)
+
+
 @swagger_auto_schema(method='post')
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])

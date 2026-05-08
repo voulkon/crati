@@ -30,6 +30,7 @@ urlpatterns = [
     path('history/', search_history_api.personal_search_history_api, name='personal_search_history'),
     path('history/recent-queries/', search_history_api.recent_search_queries_api, name='recent_search_queries'),
     path('history/recently-visited/', search_history_api.recently_visited_api, name='recently_visited'),
+    path('history/item/', search_history_api.delete_single_history_item_api, name='delete_single_history_item'),
     path('history/clear/', search_history_api.clear_search_history_api, name='clear_search_history'),
     path('history/track-selection/', search_history_api.track_search_selection_api, name='track_search_selection'),
     

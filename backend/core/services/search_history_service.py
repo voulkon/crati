@@ -502,6 +502,64 @@ class SearchHistoryService:
         
         return enriched
     
+    def delete_single_item(
+        self,
+        item_timestamp: float,
+        user_id: Optional[int] = None,
+        ip_address: Optional[str] = None
+    ) -> bool:
+        """
+        Delete a single item from search history by timestamp.
+        
+        Args:
+            item_timestamp: Unix timestamp of the item to delete
+            user_id: User ID (for authenticated users)
+            ip_address: IP address (for anonymous users or as fallback)
+            
+        Returns:
+            True if successfully deleted, False otherwise
+        """
+        try:
+            deleted = False
+            
+            # Delete from user history
+            if user_id:
+                key = get_user_search_history_key(user_id)
+                # Get all items with this timestamp
+                members = self.redis_client.zrangebyscore(key, item_timestamp, item_timestamp)
+                for member_bytes in members:
+                    try:
+                        member = member_bytes.decode('utf-8')
+                        # Remove this specific member
+                        self.redis_client.zrem(key, member)
+                        deleted = True
+                        logger.debug(f"Deleted item from user {user_id} history at timestamp {item_timestamp}")
+                    except (UnicodeDecodeError, Exception) as e:
+                        logger.warning(f"Failed to delete item from user history: {e}")
+                        continue
+            
+            # Delete from IP history
+            if ip_address:
+                key = get_ip_search_history_key(ip_address)
+                # Get all items with this timestamp
+                members = self.redis_client.zrangebyscore(key, item_timestamp, item_timestamp)
+                for member_bytes in members:
+                    try:
+                        member = member_bytes.decode('utf-8')
+                        # Remove this specific member
+                        self.redis_client.zrem(key, member)
+                        deleted = True
+                        logger.debug(f"Deleted item from IP {ip_address} history at timestamp {item_timestamp}")
+                    except (UnicodeDecodeError, Exception) as e:
+                        logger.warning(f"Failed to delete item from IP history: {e}")
+                        continue
+            
+            return deleted
+            
+        except Exception as e:
+            logger.error(f"Failed to delete single history item: {e}")
+            return False
+    
     def clear_user_history(self, user_id: int) -> bool:
         """Clear all search history for a user (privacy feature)."""
         key = get_user_search_history_key(user_id)

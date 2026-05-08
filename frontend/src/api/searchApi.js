@@ -359,3 +359,34 @@ export const getRecentlyVisited = async (limit = 10, unique = true) => {
     throw error;
   }
 };
+
+/**
+ * Delete a single item from search history
+ * @param {number} timestamp - Unix timestamp of the item to delete
+ * @returns {Promise<Object>} Success status
+ */
+export const deleteSingleHistoryItem = async (timestamp) => {
+  try {
+    const response = await apiClient.delete('/search/history/item/', {
+      data: { timestamp }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to delete history item:', error);
+    throw error;
+  }
+};
+
+/**
+ * Clear all search history
+ * @returns {Promise<Object>} Success status
+ */
+export const clearSearchHistory = async () => {
+  try {
+    const response = await apiClient.post('/search/history/clear/');
+    return response.data;
+  } catch (error) {
+    console.error('Failed to clear search history:', error);
+    throw error;
+  }
+};

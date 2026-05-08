@@ -2,6 +2,7 @@ import time
 from django.utils import timezone
 from django.db.models import Count, Avg, Q
 from core.models.search_analytics import SearchAnalytics, PopularQuery
+from api.utils.common import get_client_ip
 
 
 class SearchAnalyticsService:
@@ -15,7 +16,7 @@ class SearchAnalyticsService:
         # Extract request info
         user = request.user if request and hasattr(request, 'user') and request.user.is_authenticated else None
         session_key = request.session.session_key if request and hasattr(request, 'session') else None
-        ip_address = cls._get_client_ip(request) if request else None
+        ip_address = get_client_ip(request) if request else None
         user_agent = request.META.get('HTTP_USER_AGENT') if request else None
         
         # Start timing
@@ -156,13 +157,6 @@ class SearchAnalyticsService:
         stats['click_through_rate'] = (searches_with_clicks / total_searches * 100) if total_searches > 0 else 0
         
         return stats
-    
-    @classmethod
-    def _get_client_ip(cls, request):
-        """Extract client IP from request"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
+
+# get_client_ip is now imported from api.utils.common
         return ip

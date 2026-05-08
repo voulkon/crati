@@ -77,6 +77,9 @@ class SearchHistoryService:
         entity_type: Optional[str] = None,
         filters_applied: Optional[Dict[str, Any]] = None,
         is_selection: bool = False,
+        selected_item_id: Optional[str] = None,
+        selected_item_name: Optional[str] = None,
+        selected_item_url: Optional[str] = None,
     ) -> bool:
         """
         Track a search in Redis history.
@@ -90,6 +93,9 @@ class SearchHistoryService:
             entity_type: Primary entity type searched
             filters_applied: Any filters applied to the search
             is_selection: Whether this is a user selection/click (vs just typing)
+            selected_item_id: ID of the selected item (for selections)
+            selected_item_name: Name/title of the selected item (for selections)
+            selected_item_url: URL path of the selected item (for selections)
             
         Returns:
             True if successfully tracked, False otherwise
@@ -118,6 +124,7 @@ class SearchHistoryService:
             'query': query.strip(),  # Keep original casing
             'normalized_query': normalized_query,
             'timestamp': timestamp,
+            'is_selection': is_selection,  # Flag to distinguish clicks from typing
         }
         
         if results_count is not None:
@@ -128,6 +135,15 @@ class SearchHistoryService:
             metadata['entity_type'] = entity_type
         if filters_applied:
             metadata['filters_applied'] = filters_applied
+        
+        # Add selection-specific metadata
+        if is_selection:
+            if selected_item_id:
+                metadata['selected_item_id'] = selected_item_id
+            if selected_item_name:
+                metadata['selected_item_name'] = selected_item_name
+            if selected_item_url:
+                metadata['selected_item_url'] = selected_item_url
         
         success = False
         
@@ -341,6 +357,62 @@ class SearchHistoryService:
             queries = unique_queries
         
         return queries[:limit]
+    
+    def get_recently_visited(
+        self,
+        user_id: Optional[int] = None,
+        ip_address: Optional[str] = None,
+        limit: int = 10,
+        unique: bool = True
+    ) -> List[Dict[str, Any]]:
+        """
+        Get recently visited items (items that were actually clicked/selected).
+        
+        This filters the search history to only include entries with is_selection=True,
+        providing a clean "Recently Visited" list for users.
+        
+        Args:
+            user_id: User ID (optional)
+            ip_address: IP address (optional)
+            limit: Maximum number of items
+            unique: If True, deduplicate by selected_item_id (default: True)
+            
+        Returns:
+            List of visited item metadata dicts (most recent first)
+        """
+        history = []
+        
+        # Fetch more items than needed to ensure we have enough after filtering
+        fetch_limit = limit * 5
+        
+        if user_id:
+            history.extend(self.get_user_history(user_id, limit=fetch_limit))
+        
+        if ip_address:
+            history.extend(self.get_ip_history(ip_address, limit=fetch_limit))
+        
+        # Sort by timestamp (most recent first) since we may have merged user + IP history
+        history.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+        
+        # Filter to only selections (clicks)
+        visited = [
+            item for item in history 
+            if item.get('is_selection', False) and item.get('selected_item_id')
+        ]
+        
+        # Deduplicate while preserving order (most recent occurrence wins)
+        if unique:
+            seen = set()
+            unique_visited = []
+            for item in visited:
+                # Use entity_type + selected_item_id as unique key
+                item_key = f"{item.get('entity_type', '')}:{item.get('selected_item_id', '')}"
+                if item_key not in seen:
+                    seen.add(item_key)
+                    unique_visited.append(item)
+            visited = unique_visited
+        
+        return visited[:limit]
     
     def clear_user_history(self, user_id: int) -> bool:
         """Clear all search history for a user (privacy feature)."""

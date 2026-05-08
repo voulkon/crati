@@ -15,9 +15,14 @@ from .entity_search import (
     autocomplete_suggestions_api,
     default_suggestions_api,
     entities_fast_search_api,
+)
+
+from .search_history_api import (
     personal_search_history_api,
     recent_search_queries_api,
-    clear_search_history_api
+    clear_search_history_api,
+    recently_visited_api,
+    track_search_selection_api,
 )
 
 from .document_search import (

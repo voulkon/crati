@@ -16,6 +16,7 @@ from contextlib import contextmanager
 from typing import Dict, Any, Optional, Union
 from opentelemetry import trace
 from django.core.serializers.json import DjangoJSONEncoder
+from api.utils.common import get_client_ip
 
 
 class ContextLogger:
@@ -138,7 +139,7 @@ class APILogger(ContextLogger):
             'endpoint': request.path,
             'method': request.method,
             'user_id': getattr(request.user, 'id', None) if hasattr(request, 'user') else None,
-            'ip_address': self._get_client_ip(request),
+            'ip_address': get_client_ip(request),
             'user_agent': request.META.get('HTTP_USER_AGENT', '')[:200],  # Truncate
         }
         
@@ -154,13 +155,8 @@ class APILogger(ContextLogger):
                 self.warning(f"{request.method} {request.path} - {response.status_code}")
             else:
                 self.info(f"{request.method} {request.path}")
-    
-    def _get_client_ip(self, request):
-        """Extract client IP from request"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            return x_forwarded_for.split(',')[0]
-        return request.META.get('REMOTE_ADDR')
+
+# get_client_ip is now imported from api.utils.common
 
 
 class TaskLogger(ContextLogger):

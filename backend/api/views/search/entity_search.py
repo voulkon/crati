@@ -12,6 +12,7 @@ from api.views.search.entity_search_utils import (
     format_company,
     format_company_person
     )
+from api.utils.common import get_client_ip
 from django.conf import settings
 from django.http import StreamingHttpResponse
 from drf_yasg import openapi
@@ -158,13 +159,7 @@ def get_search_data_for_api(query, **kwargs):
         try:
             history_service = SearchHistoryService()
             user_id = request.user.id if request.user.is_authenticated else None
-            
-            # Get IP address
-            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-            if x_forwarded_for:
-                ip_address = x_forwarded_for.split(',')[0]
-            else:
-                ip_address = request.META.get('REMOTE_ADDR')
+            ip_address = get_client_ip(request)
             
             history_service.track_search(
                 query=query,
@@ -266,13 +261,7 @@ def entities_fast_search_api(request):
         try:
             service = SearchHistoryService()
             user_id = request.user.id if request.user.is_authenticated else None
-            
-            # Get IP address
-            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-            if x_forwarded_for:
-                ip_address = x_forwarded_for.split(',')[0]
-            else:
-                ip_address = request.META.get('REMOTE_ADDR')
+            ip_address = get_client_ip(request)
             
             service.track_search(
                 query=query,
@@ -645,120 +634,16 @@ def super_search_api(request):
     ))
 
 
-@swagger_auto_schema(
-    method='get',
-    manual_parameters=[
-        openapi.Parameter('limit', openapi.IN_QUERY, description="Maximum number of history items", type=openapi.TYPE_INTEGER),
-        openapi.Parameter('offset', openapi.IN_QUERY, description="Offset for pagination", type=openapi.TYPE_INTEGER),
-    ]
-)
-@api_view(['GET'])
-@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
-def personal_search_history_api(request):
-    """
-    Get personal search history for the current user or IP.
-    
-    Returns recent searches in chronological order (newest first).
-    For authenticated users, returns their personal history.
-    For anonymous users, returns history associated with their IP.
-    """
-    limit = int(request.GET.get('limit', 20))
-    offset = int(request.GET.get('offset', 0))
-    
-    service = SearchHistoryService()
-    
-    # Get user and IP
-    user_id = request.user.id if request.user.is_authenticated else None
-    ip_address = _get_client_ip(request)
-    
-    # Retrieve history
-    history = []
-    
-    if user_id:
-        # Authenticated user: get their history
-        history = service.get_user_history(user_id, limit=limit, offset=offset)
-    elif ip_address:
-        # Anonymous user: get IP history
-        history = service.get_ip_history(ip_address, limit=limit, offset=offset)
-    
-    # Get statistics
-    stats = service.get_history_stats(user_id=user_id, ip_address=ip_address)
-    
-    return Response({
-        'history': history,
-        'count': len(history),
-        'limit': limit,
-        'offset': offset,
-        'stats': stats,
-        'user_authenticated': request.user.is_authenticated,
-    })
+# ============================================================================
+# Search History Endpoints
+# ============================================================================
+# The following endpoints have been moved to search_history_api.py:
+# - personal_search_history_api
+# - recent_search_queries_api
+# - clear_search_history_api
+# - recently_visited_api
+# - track_search_selection_api
+#
+# Import them from: api.views.search.search_history_api
+# ============================================================================
 
-
-@swagger_auto_schema(
-    method='get',
-    manual_parameters=[
-        openapi.Parameter('limit', openapi.IN_QUERY, description="Maximum number of queries", type=openapi.TYPE_INTEGER),
-    ]
-)
-@api_view(['GET'])
-@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
-def recent_search_queries_api(request):
-    """
-    Get recent search query strings (for autocomplete/suggestions).
-    
-    Returns only the query strings (deduplicated) from the user's history.
-    Useful for "continue where you left off" autocomplete functionality.
-    """
-    limit = int(request.GET.get('limit', 10))
-    
-    service = SearchHistoryService()
-    
-    user_id = request.user.id if request.user.is_authenticated else None
-    ip_address = _get_client_ip(request)
-    
-    queries = service.get_recent_queries(
-        user_id=user_id,
-        ip_address=ip_address,
-        limit=limit,
-        unique=True
-    )
-    
-    return Response({
-        'queries': queries,
-        'count': len(queries),
-    })
-
-
-@swagger_auto_schema(method='post')
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def clear_search_history_api(request):
-    """
-    Clear the current user's search history.
-    Privacy feature - allows users to delete their search history.
-    """
-    service = SearchHistoryService()
-    
-    user_id = request.user.id
-    success = service.clear_user_history(user_id)
-    
-    if success:
-        return Response({
-            'success': True,
-            'message': 'Search history cleared successfully'
-        })
-    else:
-        return Response({
-            'success': False,
-            'message': 'Failed to clear search history'
-        }, status=500)
-
-
-def _get_client_ip(request):
-    """Extract client IP from request"""
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0]
-    else:
-        ip = request.META.get('REMOTE_ADDR')
-    return ip

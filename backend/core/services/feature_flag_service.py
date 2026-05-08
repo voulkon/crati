@@ -159,6 +159,20 @@ class FeatureFlagService:
             'category': 'authentication',
             'requires_restart': True,
         },
+        'SEARCH_HISTORY_RECORDING_MODE': {
+            'name': 'Search History Recording Mode',
+            'description': 'Controls how search queries are recorded in user search history. '
+                          'Options: none (no recording), selections_only (only when user selects a result), '
+                          'filtered (smart filtering - skip short queries and rapid duplicates), '
+                          'all (record everything including partial typing). '
+                          'Default is filtered for optimal UX and storage.',
+            'default': 'filtered',
+            'env_var': 'SEARCH_HISTORY_RECORDING_MODE',
+            'category': 'api',
+            'requires_restart': False,
+            'value_type': 'choice',
+            'choices': ['none', 'selections_only', 'filtered', 'all'],
+        },
     }
     
     def __init__(self):

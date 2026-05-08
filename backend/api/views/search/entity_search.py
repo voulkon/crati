@@ -261,6 +261,32 @@ def entities_fast_search_api(request):
         limit=limit
     )
     
+    # Track search in history (lightweight, non-blocking)
+    if query and query.strip():
+        try:
+            service = SearchHistoryService()
+            user_id = request.user.id if request.user.is_authenticated else None
+            
+            # Get IP address
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                ip_address = x_forwarded_for.split(',')[0]
+            else:
+                ip_address = request.META.get('REMOTE_ADDR')
+            
+            service.track_search(
+                query=query,
+                user_id=user_id,
+                ip_address=ip_address,
+                results_count=results.get('total_count', 0),
+                search_types=entity_types,
+                entity_type=entity_types[0] if entity_types else None,
+            )
+        except Exception as e:
+            # Don't fail the search if history tracking fails
+            from loguru import logger
+            logger.warning(f"Failed to track fast search in history: {e}")
+    
     return Response(results)
 
 

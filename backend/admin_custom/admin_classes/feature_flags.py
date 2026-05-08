@@ -97,6 +97,23 @@ class FeatureFlagForm(forms.ModelForm):
         label="Search Method"
     )
     
+    # Dynamic field for SEARCH_HISTORY_RECORDING_MODE
+    selected_recording_mode = forms.ChoiceField(
+        required=False,
+        choices=[
+            ('none', 'None - Don\'t record any search history'),
+            ('selections_only', 'Selections Only - Only record when user clicks/selects a result'),
+            ('filtered', 'Filtered - Smart filtering (skip short queries & rapid duplicates) [RECOMMENDED]'),
+            ('all', 'All - Record everything including partial typing'),
+        ],
+        widget=forms.Select(attrs={'style': 'width: 100%; max-width: 700px;'}),
+        help_text=(
+            "Controls how search queries are recorded in user search history. "
+            "Filtered mode (default) provides optimal balance between UX and storage."
+        ),
+        label="Recording Mode"
+    )
+    
     # Read-only display of prerequisite status for ENTITY_SEARCH_METHOD
     prerequisite_status_display = forms.CharField(
         required=False,
@@ -245,6 +262,11 @@ class FeatureFlagForm(forms.ModelForm):
             
             self.fields['prerequisite_status_display'].initial = '\n'.join(status_lines)
         
+        # If this is SEARCH_HISTORY_RECORDING_MODE flag and we have string_value, pre-select the mode
+        if self.instance and self.instance.pk and self.instance.key == 'SEARCH_HISTORY_RECORDING_MODE':
+            if self.instance.string_value:
+                self.fields['selected_recording_mode'].initial = self.instance.string_value
+        
         # Show/hide fields based on value_type
         if self.instance and self.instance.pk:
             if self.instance.value_type == 'boolean':
@@ -257,6 +279,7 @@ class FeatureFlagForm(forms.ModelForm):
                 self.fields['additional_emails'].widget = forms.HiddenInput()
                 self.fields['selected_search_method'].widget = forms.HiddenInput()
                 self.fields['prerequisite_status_display'].widget = forms.HiddenInput()
+                self.fields['selected_recording_mode'].widget = forms.HiddenInput()
             elif self.instance.value_type == 'list':
                 self.fields['enabled'].widget = forms.HiddenInput()
                 self.fields['default_value'].widget = forms.HiddenInput()
@@ -290,6 +313,7 @@ class FeatureFlagForm(forms.ModelForm):
                     self.fields['additional_emails'].widget = forms.HiddenInput()
                 self.fields['selected_search_method'].widget = forms.HiddenInput()
                 self.fields['prerequisite_status_display'].widget = forms.HiddenInput()
+                self.fields['selected_recording_mode'].widget = forms.HiddenInput()
             elif self.instance.value_type == 'string':
                 self.fields['enabled'].widget = forms.HiddenInput()
                 self.fields['list_value'].widget = forms.HiddenInput()
@@ -303,10 +327,12 @@ class FeatureFlagForm(forms.ModelForm):
                     # Hide the raw string field, show the dropdown instead
                     self.fields['string_value'].widget = forms.HiddenInput()
                     # Show prerequisite status
+                    self.fields['selected_recording_mode'].widget = forms.HiddenInput()
                 else:
                     # For other string-type flags, hide the dropdown
                     self.fields['selected_search_method'].widget = forms.HiddenInput()
                     self.fields['prerequisite_status_display'].widget = forms.HiddenInput()
+                    self.fields['selected_recording_mode'].widget = forms.HiddenInput()
             elif self.instance.value_type == 'choice':
                 self.fields['enabled'].widget = forms.HiddenInput()
                 self.fields['list_value'].widget = forms.HiddenInput()
@@ -320,10 +346,17 @@ class FeatureFlagForm(forms.ModelForm):
                     # Hide the raw string field, show the dropdown instead
                     self.fields['string_value'].widget = forms.HiddenInput()
                     # Show prerequisite status
-                else:
-                    # For other choice-type flags, hide the dropdown
+                    self.fields['selected_recording_mode'].widget = forms.HiddenInput()
+                elif self.instance.key == 'SEARCH_HISTORY_RECORDING_MODE':
+                    # Hide the raw string field, show the recording mode dropdown
+                    self.fields['string_value'].widget = forms.HiddenInput()
                     self.fields['selected_search_method'].widget = forms.HiddenInput()
                     self.fields['prerequisite_status_display'].widget = forms.HiddenInput()
+                else:
+                    # For other choice-type flags, hide all custom dropdowns
+                    self.fields['selected_search_method'].widget = forms.HiddenInput()
+                    self.fields['prerequisite_status_display'].widget = forms.HiddenInput()
+                    self.fields['selected_recording_mode'].widget = forms.HiddenInput()
     
     def clean(self):
         cleaned_data = super().clean()
@@ -386,6 +419,12 @@ class FeatureFlagForm(forms.ModelForm):
                             f"Cannot set search method to 'postgres_fts': {prereq_status['reason']}"
                         )
         
+        # For SEARCH_HISTORY_RECORDING_MODE, sync selected_recording_mode to string_value
+        if cleaned_data.get('key') == 'SEARCH_HISTORY_RECORDING_MODE' and cleaned_data.get('value_type') in ('string', 'choice'):
+            selected_mode = cleaned_data.get('selected_recording_mode')
+            if selected_mode:
+                cleaned_data['string_value'] = selected_mode
+        
         return cleaned_data
 
 
@@ -447,7 +486,7 @@ class FeatureFlagAdmin(admin.ModelAdmin):
             'fields': ('key', 'name', 'category', 'value_type', 'is_active')
         }),
         ('Value Configuration', {
-            'fields': ('enabled', 'list_value', 'string_value', 'selected_decision_types', 'selected_exempt_prefixes', 'always_exempt_prefixes_display', 'selected_users', 'additional_emails', 'selected_search_method', 'prerequisite_status_display'),
+            'fields': ('enabled', 'list_value', 'string_value', 'selected_decision_types', 'selected_exempt_prefixes', 'always_exempt_prefixes_display', 'selected_users', 'additional_emails', 'selected_search_method', 'prerequisite_status_display', 'selected_recording_mode'),
             'description': 'Configure the value based on the value type selected above.'
         }),
         ('Description', {

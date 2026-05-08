@@ -30,6 +30,7 @@ from api.redis_keys import (
     get_ip_search_history_key,
     SEARCH_HISTORY_EXPIRE
 )
+from core.services.feature_flag_service import feature_flags
 
 
 class SearchHistoryService:
@@ -75,6 +76,7 @@ class SearchHistoryService:
         search_types: Optional[List[str]] = None,
         entity_type: Optional[str] = None,
         filters_applied: Optional[Dict[str, Any]] = None,
+        is_selection: bool = False,
     ) -> bool:
         """
         Track a search in Redis history.
@@ -87,10 +89,24 @@ class SearchHistoryService:
             search_types: Types of entities searched (e.g., ['organization', 'signer'])
             entity_type: Primary entity type searched
             filters_applied: Any filters applied to the search
+            is_selection: Whether this is a user selection/click (vs just typing)
             
         Returns:
             True if successfully tracked, False otherwise
         """
+        # Check recording mode from feature flag
+        recording_mode = feature_flags.get_value('SEARCH_HISTORY_RECORDING_MODE', default='filtered')
+        
+        # Handle 'none' mode - don't record anything
+        if recording_mode == 'none':
+            logger.debug("Search history recording disabled (mode=none)")
+            return False
+        
+        # Handle 'selections_only' mode - only record when user clicks/selects
+        if recording_mode == 'selections_only' and not is_selection:
+            logger.debug("Skipping search recording - selections_only mode requires is_selection=True")
+            return False
+        
         if not query or not query.strip():
             return False
         
@@ -115,13 +131,17 @@ class SearchHistoryService:
         
         success = False
         
+        # Get recording mode to pass to _add_to_history
+        recording_mode = feature_flags.get_value('SEARCH_HISTORY_RECORDING_MODE', default='filtered')
+        
         # Track for authenticated user
         if user_id:
             success = self._add_to_history(
                 key=get_user_search_history_key(user_id),
                 query=normalized_query,
                 metadata=metadata,
-                timestamp=timestamp
+                timestamp=timestamp,
+                recording_mode=recording_mode
             ) or success
         
         # Track for IP (always track, useful for anonymous users)
@@ -130,7 +150,8 @@ class SearchHistoryService:
                 key=get_ip_search_history_key(ip_address),
                 query=normalized_query,
                 metadata=metadata,
-                timestamp=timestamp
+                timestamp=timestamp,
+                recording_mode=recording_mode
             ) or success
         
         return success
@@ -140,30 +161,61 @@ class SearchHistoryService:
         key: str,
         query: str,
         metadata: Dict[str, Any],
-        timestamp: float
+        timestamp: float,
+        recording_mode: str = 'filtered'
     ) -> bool:
         """
-        Add a search to a Redis sorted set.
+        Add a search to a Redis sorted set with configurable filtering.
         
-        Uses normalized query as the member to prevent duplicates.
-        If the same query is searched again, it updates the timestamp.
+        Filtering rules (based on recording_mode):
+        - 'filtered' (default): Don't track queries < 2 characters, skip duplicates within 5 seconds
+        - 'all': Record everything, no filtering
         """
         try:
+            # Apply filters based on recording_mode
+            if recording_mode == 'filtered':
+                # Filter 1: Ignore very short queries (typing noise)
+                if len(query.strip()) < 2:
+                    logger.debug(f"Skipping short query '{query}' (< 2 chars)")
+                    return False
+                
+                # Filter 2: Check for recent duplicate (same query in last 5 seconds)
+                # Get the most recent entry for this normalized query
+                recent_entries = self.redis_client.zrevrangebyscore(
+                    key, 
+                    '+inf', 
+                    timestamp - 5,  # Last 5 seconds
+                    start=0,
+                    num=10
+                )
+                
+                for entry_bytes in recent_entries:
+                    try:
+                        entry_data = json.loads(entry_bytes.decode('utf-8'))
+                        if entry_data.get('normalized_query') == query:
+                            # Same query was searched within last 5 seconds - skip
+                            logger.debug(
+                                f"Skipping duplicate query '{query}' "
+                                f"(searched {timestamp - entry_data.get('timestamp', 0):.1f}s ago)"
+                            )
+                            return False
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        continue
+            # For 'all' mode: no filtering, record everything
+            
             # Serialize metadata
             member = json.dumps(metadata)
             
             # Add to sorted set (score = timestamp)
-            # ZADD automatically updates if member exists
             self.redis_client.zadd(key, {member: timestamp})
             
             # Set expiration on the key
             self.redis_client.expire(key, SEARCH_HISTORY_EXPIRE)
             
             # Trim to keep only last 100 searches per user/IP
-            # (sorted sets keep everything by default)
             self.redis_client.zremrangebyrank(key, 0, -101)
             
-            logger.debug(f"Tracked search '{query}' in {key}")
+            logger.debug(f"✓ Tracked search '{query}' in {key}")
             return True
             
         except Exception as e:

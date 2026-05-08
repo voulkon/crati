@@ -43,6 +43,12 @@ IMPORT_CHUNKS_EXPIRE = 60 * 60 * 24  # 24 hours (decisions should be processed b
 AFM_FETCH_LOCK_PREFIX = "afm_fetch_lock:"
 AFM_FETCH_LOCK_TIMEOUT = 60 * 45  # 45 minutes lock timeout
 
+# Search History (personal search tracking)
+SEARCH_HISTORY_NS = "search_history"
+SEARCH_HISTORY_USER_PREFIX = f"{SEARCH_HISTORY_NS}:user:"  # search_history:user:<user_id>
+SEARCH_HISTORY_IP_PREFIX = f"{SEARCH_HISTORY_NS}:ip:"  # search_history:ip:<ip_address>
+SEARCH_HISTORY_EXPIRE = 60 * 60 * 24 * 90  # 90 days (recent searches)
+
 def get_endpoint_key(endpoint):
     """Get the Redis key for endpoint stats"""
     return f"{ENDPOINT_PREFIX}{endpoint}"
@@ -82,4 +88,15 @@ def get_import_chunk_key(chunk_id: str) -> str:
 def get_import_job_metadata_key(job_id: int) -> str:
     """Generate Redis key for storing import job metadata"""
     return f"{IMPORT_JOB_METADATA_PREFIX}{job_id}"
+
+
+# 🔍 Search history key helpers
+def get_user_search_history_key(user_id: int) -> str:
+    """Generate Redis key for storing user's search history"""
+    return f"{SEARCH_HISTORY_USER_PREFIX}{user_id}"
+
+
+def get_ip_search_history_key(ip_address: str) -> str:
+    """Generate Redis key for storing IP's search history"""
+    return f"{SEARCH_HISTORY_IP_PREFIX}{ip_address}"
 

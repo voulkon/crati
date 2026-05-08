@@ -1,4 +1,5 @@
 from core.services.search_service import SearchService
+from core.services.search_history_service import SearchHistoryService
 from api.views.search.entity_search_utils import (
     get_entities_fast, 
     get_documents_slow, 
@@ -28,6 +29,8 @@ def get_search_data_for_api(query, **kwargs):
     """
     Helper function to get search data for API endpoints.
     Extracts common logic used by multiple endpoints.
+    
+    If 'request' is passed in kwargs, will track the search in history.
     """
     search_service = SearchService()
     
@@ -37,6 +40,7 @@ def get_search_data_for_api(query, **kwargs):
     company_id = kwargs.get('company_id')
     limit = kwargs.get('limit', 20)
     include_documents = kwargs.get('include_documents', False)
+    request = kwargs.get('request')  # Optional: for tracking search history
     
     results = {
         'query': query,
@@ -148,6 +152,32 @@ def get_search_data_for_api(query, **kwargs):
         
         results['results']['documents'] = serialized_docs
         results['total_count'] += doc_results['count']
+    
+    # Track search in history (if request provided)
+    if request and query:
+        try:
+            history_service = SearchHistoryService()
+            user_id = request.user.id if request.user.is_authenticated else None
+            
+            # Get IP address
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                ip_address = x_forwarded_for.split(',')[0]
+            else:
+                ip_address = request.META.get('REMOTE_ADDR')
+            
+            history_service.track_search(
+                query=query,
+                user_id=user_id,
+                ip_address=ip_address,
+                results_count=results['total_count'],
+                search_types=entity_types,
+                entity_type=entity_types[0] if entity_types else None,
+            )
+        except Exception as e:
+            # Don't fail the search if history tracking fails
+            from loguru import logger
+            logger.warning(f"Failed to track search in history: {e}")
     
     return results
 
@@ -412,7 +442,8 @@ def universal_search_api_dev(request):
         organization_id=organization_id,
         company_id=int(company_id) if company_id and company_id.isdigit() else None,
         include_documents=include_documents,
-        limit=limit
+        limit=limit,
+        request=request
     ))
 
 
@@ -428,7 +459,8 @@ def org_signer_search_api(request):
         query,
         entity_types=['organization', 'signer'],
         organization_id=organization_id,
-        limit=limit
+        limit=limit,
+        request=request
     ))
 
 
@@ -445,7 +477,8 @@ def org_signer_unit_search_api(request):
         query,
         entity_types=['organization', 'signer', 'unit'],
         organization_id=organization_id,
-        limit=limit
+        limit=limit,
+        request=request
     ))
 
 
@@ -459,7 +492,8 @@ def organization_only_search_api(request):
     return Response(get_search_data_for_api(
         query,
         entity_types=['organization'],
-        limit=limit
+        limit=limit,
+        request=request
     ))
 
 
@@ -475,7 +509,8 @@ def signer_only_search_api(request):
         query,
         entity_types=['signer'],
         organization_id=organization_id,
-        limit=limit
+        limit=limit,
+        request=request
     ))
 
 
@@ -489,7 +524,8 @@ def company_only_search_api(request):
     return Response(get_search_data_for_api(
         query,
         entity_types=['company'],
-        limit=limit
+        limit=limit,
+        request=request
     ))
 
 
@@ -505,7 +541,8 @@ def company_person_only_search_api(request):
         query,
         entity_types=['company_person'],
         company_id=int(company_id) if company_id and company_id.isdigit() else None,
-        limit=limit
+        limit=limit,
+        request=request
     ))
 
 
@@ -521,7 +558,8 @@ def company_and_persons_search_api(request):
         query,
         entity_types=['company', 'company_person'],
         company_id=int(company_id) if company_id and company_id.isdigit() else None,
-        limit=limit
+        limit=limit,
+        request=request
     ))
 
 
@@ -576,5 +614,125 @@ def super_search_api(request):
         query,
         entity_types=['organization', 'signer', 'unit', 'company', 'company_person'],
         include_documents=include_documents,
-        limit=limit
+        limit=limit,
+        request=request
     ))
+
+
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[
+        openapi.Parameter('limit', openapi.IN_QUERY, description="Maximum number of history items", type=openapi.TYPE_INTEGER),
+        openapi.Parameter('offset', openapi.IN_QUERY, description="Offset for pagination", type=openapi.TYPE_INTEGER),
+    ]
+)
+@api_view(['GET'])
+@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+def personal_search_history_api(request):
+    """
+    Get personal search history for the current user or IP.
+    
+    Returns recent searches in chronological order (newest first).
+    For authenticated users, returns their personal history.
+    For anonymous users, returns history associated with their IP.
+    """
+    limit = int(request.GET.get('limit', 20))
+    offset = int(request.GET.get('offset', 0))
+    
+    service = SearchHistoryService()
+    
+    # Get user and IP
+    user_id = request.user.id if request.user.is_authenticated else None
+    ip_address = _get_client_ip(request)
+    
+    # Retrieve history
+    history = []
+    
+    if user_id:
+        # Authenticated user: get their history
+        history = service.get_user_history(user_id, limit=limit, offset=offset)
+    elif ip_address:
+        # Anonymous user: get IP history
+        history = service.get_ip_history(ip_address, limit=limit, offset=offset)
+    
+    # Get statistics
+    stats = service.get_history_stats(user_id=user_id, ip_address=ip_address)
+    
+    return Response({
+        'history': history,
+        'count': len(history),
+        'limit': limit,
+        'offset': offset,
+        'stats': stats,
+        'user_authenticated': request.user.is_authenticated,
+    })
+
+
+@swagger_auto_schema(
+    method='get',
+    manual_parameters=[
+        openapi.Parameter('limit', openapi.IN_QUERY, description="Maximum number of queries", type=openapi.TYPE_INTEGER),
+    ]
+)
+@api_view(['GET'])
+@permission_classes([AllowAny if settings.DEBUG else IsAuthenticated])
+def recent_search_queries_api(request):
+    """
+    Get recent search query strings (for autocomplete/suggestions).
+    
+    Returns only the query strings (deduplicated) from the user's history.
+    Useful for "continue where you left off" autocomplete functionality.
+    """
+    limit = int(request.GET.get('limit', 10))
+    
+    service = SearchHistoryService()
+    
+    user_id = request.user.id if request.user.is_authenticated else None
+    ip_address = _get_client_ip(request)
+    
+    queries = service.get_recent_queries(
+        user_id=user_id,
+        ip_address=ip_address,
+        limit=limit,
+        unique=True
+    )
+    
+    return Response({
+        'queries': queries,
+        'count': len(queries),
+    })
+
+
+@swagger_auto_schema(method='post')
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def clear_search_history_api(request):
+    """
+    Clear the current user's search history.
+    Privacy feature - allows users to delete their search history.
+    """
+    service = SearchHistoryService()
+    
+    user_id = request.user.id
+    success = service.clear_user_history(user_id)
+    
+    if success:
+        return Response({
+            'success': True,
+            'message': 'Search history cleared successfully'
+        })
+    else:
+        return Response({
+            'success': False,
+            'message': 'Failed to clear search history'
+        }, status=500)
+
+
+def _get_client_ip(request):
+    """Extract client IP from request"""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip

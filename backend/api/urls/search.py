@@ -25,6 +25,11 @@ urlpatterns = [
     path('company-person/', search.company_person_only_search_api, name='company_person_search'),
     path('company-all/', search.company_and_persons_search_api, name='company_and_persons_search'),
     
+    # Search history endpoints
+    path('history/', search.personal_search_history_api, name='personal_search_history'),
+    path('history/recent-queries/', search.recent_search_queries_api, name='recent_search_queries'),
+    path('history/clear/', search.clear_search_history_api, name='clear_search_history'),
+    
     # Document search
     path('documents/', search.document_search_api, name='document_search'),
     path('documents-dev/', search.document_search_api_dev, name='document_search_dev'),

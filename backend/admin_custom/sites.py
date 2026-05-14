@@ -201,6 +201,7 @@ def register_all_models():
         FeatureFlagAdmin, FeatureFlagAuditLogAdmin,
         ClassificationJobAdmin
     )
+    from admin_custom.admin_classes.afm_scoring import AFMScoringConfigAdmin, AFMEntityScoreAdmin
     
     from core.models.decisions import Decision, Attachment
     from core.models.organizations import Organization, Unit, Signer
@@ -266,6 +267,11 @@ def register_all_models():
     
     # Register Classification Job models
     admin_site.register(ClassificationJob, ClassificationJobAdmin)
+    
+    # Register AFM Scoring models
+    from core.models.afm_scoring import AFMScoringConfig, AFMEntityScore
+    admin_site.register(AFMScoringConfig, AFMScoringConfigAdmin)
+    admin_site.register(AFMEntityScore, AFMEntityScoreAdmin)
     
     # Note: SearchSuggestion uses custom manager interface, not default admin
     admin_site.register(NotificationBatchDecision, NotificationBatchDecisionAdmin)

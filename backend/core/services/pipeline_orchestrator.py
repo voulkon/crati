@@ -591,50 +591,25 @@ class DecisionPipelineOrchestrator:
                 # Deduplicate AFMs within this decision
                 unique_afms = list(set(entities_needing_lookup))
                 
-                # Try to acquire Redis locks - only queue AFMs we successfully lock
-                redis_client = get_redis_connection("default")
-                afms_to_queue = []
-                afms_already_locked = []
+                # Add to priority queue instead of dispatching immediately
+                # The queue service will handle rate limiting and priority ordering
+                from core.services.afm_fetch_queue_service import AFMFetchQueueService
+                queue_service = AFMFetchQueueService()
                 
-                # Generate a unique lock owner ID for this orchestrator instance
-                lock_owner = f"orchestrator_{uuid.uuid4().hex[:8]}"
-                
+                queued_count = 0
                 for afm in unique_afms:
-                    # Try to atomically acquire lock (SET with NX + EX)
-                    key = f"{AFM_FETCH_LOCK_PREFIX}{afm}"
-                    acquired = redis_client.set(key, lock_owner, nx=True, ex=AFM_FETCH_LOCK_TIMEOUT)
-                    
-                    if acquired:
-                        afms_to_queue.append(afm)
-                    else:
-                        afms_already_locked.append(afm)
+                    # add_single_afm returns True if added, False if already queued/processed
+                    if queue_service.add_single_afm(afm):
+                        queued_count += 1
                 
-                if afms_already_locked:
+                if queued_count > 0:
                     logger.debug(
-                        f"Skipping {len(afms_already_locked)} AFMs already being processed: "
-                        f"{afms_already_locked[:5]}{'...' if len(afms_already_locked) > 5 else ''}"
-                    )
-                
-                if afms_to_queue:
-                    logger.debug(
-                        f"Queueing company enrichment for {len(afms_to_queue)} unique AFMs "
-                        f"(from {len(entities_needing_lookup)} total, {len(afms_already_locked)} already locked)"
-                    )
-                    
-                    # Extract parent context from logger for tracing child tasks
-                    parent_task_id = logger._core.extra.get('task_id')
-                    parent_ada = decision.ada
-                    
-                    # Queue with lock_owner so task knows these locks belong to it
-                    fetch_company_data_for_entities.delay(
-                        afms_to_queue, 
-                        parent_task_id=parent_task_id, 
-                        parent_ada=parent_ada,
-                        lock_owner=lock_owner
+                        f"Added {queued_count}/{len(unique_afms)} AFMs to fetch queue for {decision.ada}. "
+                        f"Queue will process by priority."
                     )
                 else:
                     logger.debug(
-                        f"All {len(unique_afms)} unique AFMs already being processed - nothing to queue"
+                        f"All {len(unique_afms)} AFMs already queued or processed"
                     )
             else:
                 logger.debug(f"All {relationships.count()} entities for {decision.ada} already have GEMI lookup attempted, skipping")

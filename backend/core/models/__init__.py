@@ -43,3 +43,4 @@ from .backups import Backup
 from .import_thresholds import ImportThreshold
 from .feature_flags import FeatureFlag, FeatureFlagAuditLog
 from .classification_job import ClassificationJob, ClassificationJobLog
+from .afm_scoring import AFMScoringConfig, AFMEntityScore

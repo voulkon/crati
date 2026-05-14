@@ -43,6 +43,16 @@ IMPORT_CHUNKS_EXPIRE = 60 * 60 * 24  # 24 hours (decisions should be processed b
 AFM_FETCH_LOCK_PREFIX = "afm_fetch_lock:"
 AFM_FETCH_LOCK_TIMEOUT = 60 * 45  # 45 minutes lock timeout
 
+# AFM Fetch Queue (priority-based queue for company data fetching)
+AFM_FETCH_QUEUE_NS = "afm_fetch_queue"
+AFM_FETCH_QUEUE_PENDING = f"{AFM_FETCH_QUEUE_NS}:pending"  # Sorted set (score = priority)
+AFM_FETCH_QUEUE_ACTIVE = f"{AFM_FETCH_QUEUE_NS}:active"  # Set of AFMs being processed
+AFM_FETCH_QUEUE_FETCHED = f"{AFM_FETCH_QUEUE_NS}:fetched"  # Set of successfully fetched AFMs
+AFM_FETCH_QUEUE_FAILED = f"{AFM_FETCH_QUEUE_NS}:failed"  # Set of failed AFMs
+AFM_FETCH_QUEUE_IGNORED = f"{AFM_FETCH_QUEUE_NS}:ignored"  # Set of AFMs below threshold
+AFM_FETCH_QUEUE_LOCK = f"{AFM_FETCH_QUEUE_NS}:lock"  # Global queue processing lock
+AFM_FETCH_QUEUE_STATS = f"{AFM_FETCH_QUEUE_NS}:stats"  # Hash of queue statistics
+
 # Search History (personal search tracking)
 SEARCH_HISTORY_NS = "search_history"
 SEARCH_HISTORY_USER_PREFIX = f"{SEARCH_HISTORY_NS}:user:"  # search_history:user:<user_id>

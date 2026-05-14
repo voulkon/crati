@@ -1,7 +1,7 @@
 {% extends "admin/base_site.html" %}
 {% load static %}
 
-{% block title %}AFM Fetch Queue Cockpit{% endblock %}
+{% block title %}AFM Fetch Queue Management{% endblock %}
 
 {% block extrastyle %}
 {{ block.super }}
@@ -56,6 +56,7 @@
     font-size: 2.5em;
     font-weight: bold;
     margin-bottom: 5px;
+    color: var(--primary);
 }
 
 .stat-label {
@@ -64,12 +65,6 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
-
-.stat-number.success { color: #28a745; }
-.stat-number.warning { color: #ffc107; }
-.stat-number.error { color: #dc3545; }
-.stat-number.info { color: #17a2b8; }
-.stat-number.neutral { color: #6c757d; }
 
 /* Control Panel */
 .control-panel {
@@ -190,10 +185,10 @@
     color: white;
 }
 
-.priority-top10 { background: #d32f2f; }
-.priority-top50 { background: #f57c00; }
-.priority-top100 { background: #fbc02d; color: #333; }
-.priority-other { background: #9e9e9e; }
+.priority-top10 { background: #d9534f; }
+.priority-top50 { background: #f0ad4e; }
+.priority-top100 { background: #ffc107; color: #333; }
+.priority-other { background: #6c757d; }
 
 /* Status badges */
 .status-badge {
@@ -204,16 +199,16 @@
     font-weight: 500;
 }
 
-.status-success { background: #d4edda; color: #155724; }
-.status-failed { background: #f8d7da; color: #721c24; }
-.status-pending { background: #fff3cd; color: #856404; }
-.status-processing { background: #d1ecf1; color: #0c5460; }
+.status-success { background: #dff0d8; color: #3c763d; }
+.status-failed { background: #f2dede; color: #a94442; }
+.status-pending { background: #fcf8e3; color: #8a6d3b; }
+.status-processing { background: #d9edf7; color: #31708f; }
 
 /* Progress bar */
 .progress-bar {
     width: 100%;
     height: 20px;
-    background: #e0e0e0;
+    background: var(--darkened-bg);
     border-radius: 10px;
     overflow: hidden;
     margin-top: 10px;
@@ -221,7 +216,7 @@
 
 .progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #28a745, #20c997);
+    background: var(--primary);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -233,15 +228,15 @@
 
 /* Config info box */
 .config-info {
-    background: #f8f9fa;
-    border-left: 4px solid #17a2b8;
+    background: var(--darkened-bg);
+    border-left: 4px solid var(--primary);
     padding: 15px;
     margin-bottom: 20px;
     border-radius: 4px;
 }
 
 .config-info strong {
-    color: #17a2b8;
+    color: var(--primary);
 }
 
 /* Alert messages */
@@ -252,10 +247,10 @@
     border-left: 4px solid;
 }
 
-.alert-info { background: #d1ecf1; border-color: #0c5460; color: #0c5460; }
-.alert-warning { background: #fff3cd; border-color: #856404; color: #856404; }
-.alert-danger { background: #f8d7da; border-color: #721c24; color: #721c24; }
-.alert-success { background: #d4edda; border-color: #155724; color: #155724; }
+.alert-info { background: var(--darkened-bg); border-color: var(--primary); color: var(--primary); }
+.alert-warning { background: var(--body-bg); border-color: #f0ad4e; color: #856404; }
+.alert-danger { background: var(--body-bg); border-color: #d9534f; color: #d9534f; }
+.alert-success { background: var(--body-bg); border-color: #5cb85c; color: #3c763d; }
 
 /* Responsive */
 @media (max-width: 768px) {
@@ -274,7 +269,7 @@
 <div class="afm-cockpit">
     <div class="cockpit-header">
         <div>
-            <h1 class="cockpit-title">🎯 AFM Fetch Queue Cockpit</h1>
+            <h1 class="cockpit-title">AFM Fetch Queue Management</h1>
             <p class="cockpit-subtitle">Monitor and control company data fetching from GEMI registry</p>
         </div>
     </div>
@@ -305,14 +300,14 @@
 
     <!-- Quick Start Guide -->
     {% if total_scored == 0 %}
-    <div style="background: #e3f2fd; border-left: 4px solid #2196f3; padding: 20px; margin-bottom: 30px; border-radius: 4px;">
-        <h3 style="margin-top: 0; color: #1976d2;">🚀 Quick Start Guide</h3>
+    <div class="alert alert-info">
+        <h3 style="margin-top: 0;">Quick Start Guide</h3>
         <p><strong>Follow these 3 steps to get started:</strong></p>
         <ol style="line-height: 1.8; font-size: 15px;">
             <li><strong>Step 1: Create/Edit Configuration</strong><br/>
                 <small style="color: #666;">
                     {% if config %}
-                    ✓ You already have an active config: <strong>{{ config.name }}</strong>. 
+                    You already have an active config: <strong>{{ config.name }}</strong>. 
                     <a href="{% url 'admin:core_afmscoringconfig_change' config.id %}">Edit it</a> to adjust weights and thresholds, or use as-is.
                     {% else %}
                     Go to <a href="{% url 'admin:core_afmscoringconfig_add' %}">AFM Scoring Configurations</a> and create a new config with your desired scoring weights.
@@ -320,10 +315,10 @@
                 </small>
             </li>
             <li><strong>Step 2: Run Scoring Algorithm</strong><br/>
-                <small style="color: #666;">Click the "🔄 Run Scoring Now" button below in the Control Panel to calculate importance scores for all AFM entities.</small>
+                <small style="color: #666;">Click the "Run Scoring Now" button below in the Control Panel to calculate importance scores for all AFM entities.</small>
             </li>
             <li><strong>Step 3: Populate & Process Queue</strong><br/>
-                <small style="color: #666;">After scoring, use "📥 Populate Queue" and "⚡ Process Batch" to start fetching company data in priority order.</small>
+                <small style="color: #666;">After scoring, use "Populate Queue" and "Process Batch" to start fetching company data in priority order.</small>
             </li>
         </ol>
     </div>
@@ -372,30 +367,30 @@
 
     <!-- Control Panel -->
     <div class="control-panel">
-        <h2>⚙️ Queue Controls {% if total_scored > 0 %}<small style="font-weight: normal; color: #6c757d;">({{ total_scored }} entities scored)</small>{% endif %}</h2>
+        <h2>Queue Controls {% if total_scored > 0 %}<small style="font-weight: normal; color: var(--body-quiet-color);">({{ total_scored }} entities scored)</small>{% endif %}</h2>
         <div class="control-actions">
             <!-- Run Scoring -->
             <div class="control-action">
-                <h3>1️⃣ Run Scoring Algorithm</h3>
+                <h3>1. Run Scoring Algorithm</h3>
                 <p>Calculate importance scores for all AFM entities based on active configuration.</p>
                 <form method="POST" action="{% url 'admin:afm_run_scoring' %}">
                     {% csrf_token %}
-                    <button type="submit" class="button" style="background: #28a745; color: white;">
-                        🔄 Run Scoring Now
+                    <button type="submit" class="button">
+                        Run Scoring Now
                     </button>
                 </form>
-                <small style="color: #6c757d; display: block; margin-top: 8px;">
+                <small style="color: var(--body-quiet-color); display: block; margin-top: 8px;">
                     {% if total_scored > 0 %}
-                    ✓ Last scored: {{ total_scored }} entities | {{ eligible_count }} eligible
+                    Last scored: {{ total_scored }} entities | {{ eligible_count }} eligible
                     {% else %}
-                    ⚠️ Not run yet - click above to calculate scores
+                    Not run yet - click above to calculate scores
                     {% endif %}
                 </small>
             </div>
 
             <!-- Populate Queue -->
             <div class="control-action">
-                <h3>2️⃣ Populate Redis Queue</h3>
+                <h3>2. Populate Redis Queue</h3>
                 <p>Load scored entities into the priority queue for processing.</p>
                 <form method="POST" action="{% url 'admin:afm_populate_queue' %}">
                     {% csrf_token %}
@@ -406,29 +401,29 @@
                         <input type="checkbox" name="force_refresh"> Force refresh (clear existing queue)
                     </label>
                     
-                    <button type="submit" class="button" style="background: #17a2b8; color: white;" {% if eligible_count == 0 %}disabled title="Run scoring first"{% endif %}>
-                        📥 Populate Queue
+                    <button type="submit" class="button" {% if eligible_count == 0 %}disabled title="Run scoring first"{% endif %}>
+                        Populate Queue
                     </button>
                 </form>
-                <small style="color: #6c757d; display: block; margin-top: 8px;">
+                <small style="color: var(--body-quiet-color); display: block; margin-top: 8px;">
                     Queue: {{ queue_status.pending|default:0 }} pending
                 </small>
             </div>
 
             <!-- Process Batch -->
             <div class="control-action">
-                <h3>3️⃣ Process Batch</h3>
+                <h3>3. Process Batch</h3>
                 <p>Fetch company data for a batch of entities (respects GEMI rate limits).</p>
                 <form method="POST" action="{% url 'admin:afm_process_batch' %}">
                     {% csrf_token %}
                     <label for="batch_size">Batch size:</label>
                     <input type="number" id="batch_size" name="batch_size" value="50" min="1" max="200">
                     
-                    <button type="submit" class="button" style="background: #ffc107; color: #333;" {% if queue_status.pending == 0 %}disabled title="Populate queue first"{% endif %}>
-                        ⚡ Process Batch
+                    <button type="submit" class="button" {% if queue_status.pending == 0 %}disabled title="Populate queue first"{% endif %}>
+                        Process Batch
                     </button>
                 </form>
-                <small style="color: #6c757d; display: block; margin-top: 8px;">
+                <small style="color: var(--body-quiet-color); display: block; margin-top: 8px;">
                     Rate limit: 6 requests/minute | ~8-10 min per batch of 50
                 </small>
             </div>
@@ -437,7 +432,7 @@
 
     <!-- Top Unfetched Entities -->
     <div class="data-table">
-        <h2>🔝 Top Priority Unfetched Entities</h2>
+        <h2>Top Priority Unfetched Entities</h2>
         <table>
             <thead>
                 <tr>
@@ -492,7 +487,7 @@
 
     <!-- Recently Fetched -->
     <div class="data-table">
-        <h2>✅ Recently Fetched</h2>
+        <h2>Recently Fetched</h2>
         <table>
             <thead>
                 <tr>
@@ -522,17 +517,17 @@
     </div>
 
     <!-- Quick Links -->
-    <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 4px;">
-        <h3>📎 Quick Links</h3>
+    <div style="margin-top: 30px; padding: 20px; background: var(--darkened-bg); border-radius: 4px;">
+        <h3>Quick Links</h3>
         <ul style="list-style: none; padding: 0; margin: 0;">
             <li style="margin-bottom: 10px;">
-                <a href="{% url 'admin:core_afmscoringconfig_changelist' %}">→ Manage Scoring Configurations</a>
+                <a href="{% url 'admin:core_afmscoringconfig_changelist' %}">Manage Scoring Configurations</a>
             </li>
             <li style="margin-bottom: 10px;">
-                <a href="{% url 'admin:core_afmentityscore_changelist' %}">→ Browse All Scored Entities</a>
+                <a href="{% url 'admin:core_afmentityscore_changelist' %}">Browse All Scored Entities</a>
             </li>
             <li style="margin-bottom: 10px;">
-                <a href="{% url 'admin:index' %}">→ Back to Admin Home</a>
+                <a href="{% url 'admin:index' %}">Back to Admin Home</a>
             </li>
         </ul>
     </div>

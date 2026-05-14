@@ -37,7 +37,7 @@ IMPORT_JOB_QUEUE_LOCK = f"{IMPORT_JOB_QUEUE_NS}:lock"
 # Default expiration times (in seconds)
 STATS_EXPIRE = 60 * 60 * 24 * 30  # 30 days
 RATELIMIT_EXPIRE = 60 * 60 * 24  # 24 hours
-IMPORT_CHUNKS_EXPIRE = 60 * 60 * 24  # 24 hours (decisions should be processed before this)
+IMPORT_CHUNKS_EXPIRE = 60 * 60 * 24 * 3  # 72 hours (3 days) - allows for queued jobs and slow processing
 
 # AFM Fetch Locking (distributed lock for company data fetching)
 AFM_FETCH_LOCK_PREFIX = "afm_fetch_lock:"

@@ -262,3 +262,68 @@ class RedisDecisionCache:
             'job_id': job_id,
             'chunks_in_redis': chunk_count,
         }
+    
+    def get_chunk_ttl(self, chunk_id: str) -> Optional[int]:
+        """
+        Get remaining TTL (time to live) for a chunk in seconds.
+        
+        Returns:
+            Seconds until expiration, or None if chunk doesn't exist
+            -1 if chunk has no expiration set (shouldn't happen)
+        """
+        key = get_import_chunk_key(chunk_id)
+        ttl = self.redis_client.ttl(key)
+        
+        if ttl == -2:  # Key doesn't exist
+            return None
+        return ttl
+    
+    def get_job_ttl_stats(self, job_id: int, sample_size: int = 10) -> Dict[str, Any]:
+        """
+        Get TTL statistics for a job's chunks (samples first N chunks).
+        
+        This helps diagnose if chunks are at risk of expiring before processing.
+        
+        Args:
+            job_id: Import job ID
+            sample_size: Number of chunks to sample (default: 10)
+            
+        Returns:
+            Dict with min/max/avg TTL remaining in seconds
+        """
+        base_pattern = get_import_chunk_key(f"{job_id}_chunk_")
+        pattern = f"{base_pattern}*"
+        
+        # Scan for chunk keys
+        cursor, keys = self.redis_client.scan(cursor=0, match=pattern, count=sample_size)
+        
+        if not keys:
+            return {
+                'job_id': job_id,
+                'error': 'No chunks found in Redis'
+            }
+        
+        # Get TTL for each sampled chunk
+        ttls = []
+        for key in keys[:sample_size]:
+            ttl = self.redis_client.ttl(key)
+            if ttl > 0:  # -1 = no expiration, -2 = doesn't exist
+                ttls.append(ttl)
+        
+        if not ttls:
+            return {
+                'job_id': job_id,
+                'chunks_sampled': len(keys),
+                'error': 'No valid TTLs found'
+            }
+        
+        return {
+            'job_id': job_id,
+            'chunks_sampled': len(ttls),
+            'ttl_min_seconds': min(ttls),
+            'ttl_max_seconds': max(ttls),
+            'ttl_avg_seconds': sum(ttls) / len(ttls),
+            'ttl_min_hours': min(ttls) / 3600,
+            'ttl_max_hours': max(ttls) / 3600,
+            'ttl_avg_hours': (sum(ttls) / len(ttls)) / 3600,
+        }

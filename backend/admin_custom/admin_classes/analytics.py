@@ -429,6 +429,7 @@ class ImportJobAdmin(admin.ModelAdmin):
         """Comprehensive diagnostics for stuck jobs"""
         from django.utils import timezone
         from datetime import timedelta
+        from core.services.redis_decision_cache import RedisDecisionCache
         
         html = ["<div style='font-family: monospace; font-size: 12px;'>"]
         
@@ -455,6 +456,28 @@ class ImportJobAdmin(admin.ModelAdmin):
             missing = obj.total_chunks - obj.chunks_completed - obj.chunks_failed
             if missing > 0:
                 html.append(f"  <span style='color: orange;'>Missing/In Progress: {missing}</span><br>")
+        
+        # ⚠️ NEW: Chunk TTL diagnostics (helps diagnose expiration issues)
+        if obj.total_chunks > 0 and obj.status in [ImportJobStatus.PROCESSING, ImportJobStatus.SPLITTING]:
+            try:
+                redis_cache = RedisDecisionCache()
+                ttl_stats = redis_cache.get_job_ttl_stats(obj.id, sample_size=10)
+                
+                if 'error' not in ttl_stats:
+                    html.append(f"<br><strong>Chunk TTL (sampled {ttl_stats['chunks_sampled']}):</strong><br>")
+                    html.append(f"  Min: {ttl_stats['ttl_min_hours']:.1f}h ({ttl_stats['ttl_min_seconds']}s)<br>")
+                    html.append(f"  Avg: {ttl_stats['ttl_avg_hours']:.1f}h ({ttl_stats['ttl_avg_seconds']:.0f}s)<br>")
+                    html.append(f"  Max: {ttl_stats['ttl_max_hours']:.1f}h ({ttl_stats['ttl_max_seconds']}s)<br>")
+                    
+                    # Warn if chunks are close to expiring
+                    if ttl_stats['ttl_min_hours'] < 6:
+                        html.append(f"  <span style='color: red;'>⚠️ WARNING: Chunks expiring soon!</span><br>")
+                    elif ttl_stats['ttl_min_hours'] < 24:
+                        html.append(f"  <span style='color: orange;'>⚠️ CAUTION: Less than 24h remaining</span><br>")
+                else:
+                    html.append(f"<br><span style='color: gray;'>Chunks already processed (not in Redis)</span><br>")
+            except Exception as e:
+                html.append(f"<br><span style='color: gray;'>Could not check TTL: {str(e)}</span><br>")
         
         # Check for stuck state
         if obj.status == ImportJobStatus.PROCESSING:

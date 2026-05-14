@@ -97,7 +97,20 @@ class ImportJobQueue:
             True if under concurrency limit, False otherwise
         """
         active_count = self.get_active_jobs_count()
-        can_start = active_count < self.MAX_CONCURRENT_JOBS
+        
+        # ⚠️ CRITICAL FIX: Also check PROCESSING jobs to prevent chunk explosion
+        # Without this, jobs can create chunks while previous jobs are still processing,
+        # causing worker queue buildup and Redis chunk expiration (24h TTL).
+        # 
+        # Example: 15 jobs × 2,796 chunks = 41,940 tasks queued
+        #          With 2 workers, this takes ~15 days → chunks expire!
+        processing_count = ImportJob.objects.filter(
+            status=ImportJobStatus.PROCESSING
+        ).count()
+        
+        # Only allow new job if BOTH fetching AND processing are below limit
+        can_start = (active_count < self.MAX_CONCURRENT_JOBS and 
+                    processing_count < self.MAX_CONCURRENT_JOBS)
         
         # Check for potentially stale jobs (stuck for >6 hours)
         if active_count > 0:
@@ -124,6 +137,7 @@ class ImportJobQueue:
         
         logger.debug(
             f"ImportJobQueue: Active jobs={active_count}, "
+            f"Processing jobs={processing_count}, "
             f"Max concurrent={self.MAX_CONCURRENT_JOBS}, "
             f"Can start new={can_start}"
         )

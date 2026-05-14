@@ -309,10 +309,38 @@ def store_decisions_from_redis(self, chunk_id: str, job_id: int,
         chunk_data = redis_cache.get_chunk(chunk_id, delete_after_read=True)
         
         if not chunk_data:
-            raise FileNotFoundError(
-                f"Chunk not found in Redis: {chunk_id}. "
-                f"May have expired or been processed already."
+            # Chunk expired from Redis - no point retrying, it's gone forever
+            error_msg = (
+                f"Chunk expired from Redis: {chunk_id}. "
+                f"This typically happens when jobs are queued too long or processing is very slow. "
+                f"Consider increasing IMPORT_CHUNKS_EXPIRE TTL or reducing queue backlog."
             )
+            logger.error(f"Task {self.request.id}: {error_msg}")
+            
+            # Mark chunk as failed without retry
+            try:
+                import_job = ImportJob.objects.get(id=job_id)
+                import_job.mark_chunk_failed(error_msg=error_msg)
+                
+                ImportFailure.objects.create(
+                    import_job=import_job,
+                    task_id=self.request.id,
+                    failure_type=ImportFailure.FailureType.CHUNK,
+                    error_message=error_msg,
+                    error_traceback="Chunk not found in Redis (likely expired)",
+                    data_snapshot={'chunk_id': chunk_id, 'reason': 'redis_expiration'}
+                )
+            except ImportJob.DoesNotExist:
+                logger.warning(f"ImportJob {job_id} not found")
+            
+            # Don't retry - chunk is gone forever
+            return {
+                'status': 'failed',
+                'chunk_id': chunk_id,
+                'job_id': job_id,
+                'reason': 'chunk_expired',
+                'error': error_msg
+            }
         
         # Get decision dicts from Redis
         decision_dicts = chunk_data['decisions']

@@ -327,30 +327,76 @@
     <!-- Stats Overview -->
     <div class="stats-grid">
         <div class="stat-card">
-            <div class="stat-number success">{{ queue_status.pending|default:0 }}</div>
+            <div class="stat-number">{{ queue_status.pending|default:0 }}</div>
             <div class="stat-label">Pending in Queue</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number info">{{ queue_status.active|default:0 }}</div>
+            <div class="stat-number">{{ queue_status.active|default:0 }}</div>
             <div class="stat-label">Currently Processing</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number neutral">{{ queue_status.fetched|default:0 }}</div>
+            <div class="stat-number">{{ queue_status.fetched|default:0 }}</div>
             <div class="stat-label">Successfully Fetched</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number warning">{{ queue_status.failed|default:0 }}</div>
+            <div class="stat-number">{{ queue_status.failed|default:0 }}</div>
             <div class="stat-label">Failed</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number info">{{ eligible_count }}</div>
+            <div class="stat-number">{{ eligible_count }}</div>
             <div class="stat-label">Total Eligible</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number neutral">{{ total_scored }}</div>
+            <div class="stat-number">{{ total_scored }}</div>
             <div class="stat-label">Total Scored</div>
         </div>
     </div>
+
+    <!-- Active Job Status -->
+    {% if active_job %}
+    <div class="data-table" style="border-left: 4px solid var(--primary);">
+        <h2>Active Scoring Job</h2>
+        <div style="padding: 20px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 20px;">
+                <div>
+                    <strong>Job ID:</strong> {{ active_job.job_id|slice:":8" }}...<br/>
+                    <strong>Status:</strong> 
+                    <span class="status-badge status-{{ active_job.status }}">{{ active_job.get_status_display }}</span><br/>
+                    <strong>Config:</strong> {{ active_job.config.name }}
+                </div>
+                <div>
+                    <strong>Progress:</strong> {{ active_job.processed_count }} / {{ active_job.total_entities }}<br/>
+                    <strong>Scored:</strong> {{ active_job.scored_count }}<br/>
+                    <strong>Eligible:</strong> {{ active_job.eligible_count }}
+                </div>
+                <div>
+                    <strong>Rate:</strong> {{ active_job.entities_per_second }} entities/sec<br/>
+                    <strong>Duration:</strong> {{ active_job.duration_seconds|floatformat:0 }}s<br/>
+                    {% if active_job.estimated_completion %}
+                    <strong>ETA:</strong> {{ active_job.estimated_completion|timesince }}
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{ active_job.progress_percentage }}%">
+                    {{ active_job.progress_percentage }}%
+                </div>
+            </div>
+            
+            <div style="margin-top: 15px;">
+                {% if active_job.status == 'running' %}
+                <a href="{% url 'admin:core_afmscoringjob_pause' active_job.id %}" class="button" style="background: #ffc107; color: #333;">Pause Job</a>
+                {% endif %}
+                {% if active_job.status == 'paused' %}
+                <a href="{% url 'admin:core_afmscoringjob_resume' active_job.id %}" class="button">Resume Job</a>
+                {% endif %}
+                <a href="{% url 'admin:core_afmscoringjob_cancel' active_job.id %}" class="button" style="background: #dc3545; color: white;">Cancel Job</a>
+                <a href="{% url 'admin:core_afmscoringjob_change' active_job.id %}" class="button">View Details</a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Progress Bar -->
     <div class="data-table">
@@ -375,12 +421,14 @@
                 <p>Calculate importance scores for all AFM entities based on active configuration.</p>
                 <form method="POST" action="{% url 'admin:afm_run_scoring' %}">
                     {% csrf_token %}
-                    <button type="submit" class="button">
+                    <button type="submit" class="button" {% if active_job %}disabled title="A job is already running"{% endif %}>
                         Run Scoring Now
                     </button>
                 </form>
                 <small style="color: var(--body-quiet-color); display: block; margin-top: 8px;">
-                    {% if total_scored > 0 %}
+                    {% if active_job %}
+                    Job in progress: {{ active_job.get_status_display }} ({{ active_job.progress_percentage }}%)
+                    {% elif total_scored > 0 %}
                     Last scored: {{ total_scored }} entities | {{ eligible_count }} eligible
                     {% else %}
                     Not run yet - click above to calculate scores
@@ -515,6 +563,44 @@
             </tbody>
         </table>
     </div>
+
+    <!-- Recent Scoring Jobs -->
+    {% if recent_jobs %}
+    <div class="data-table">
+        <h2>Recent Scoring Jobs</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Job ID</th>
+                    <th>Config</th>
+                    <th>Status</th>
+                    <th>Progress</th>
+                    <th>Scored</th>
+                    <th>Eligible</th>
+                    <th>Duration</th>
+                    <th>Completed</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for job in recent_jobs %}
+                <tr>
+                    <td><strong>{{ job.job_id|slice:":8" }}...</strong></td>
+                    <td>{{ job.config.name }}</td>
+                    <td><span class="status-badge status-{{ job.status }}">{{ job.get_status_display }}</span></td>
+                    <td>{{ job.progress_percentage }}%</td>
+                    <td>{{ job.scored_count }}</td>
+                    <td>{{ job.eligible_count }}</td>
+                    <td>{{ job.duration_seconds|floatformat:0 }}s</td>
+                    <td>{{ job.completed_at|date:"Y-m-d H:i" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div style="padding: 15px; text-align: center;">
+            <a href="{% url 'admin:core_afmscoringjob_changelist' %}">View All Scoring Jobs</a>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Quick Links -->
     <div style="margin-top: 30px; padding: 20px; background: var(--darkened-bg); border-radius: 4px;">

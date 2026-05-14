@@ -201,7 +201,7 @@ def register_all_models():
         FeatureFlagAdmin, FeatureFlagAuditLogAdmin,
         ClassificationJobAdmin
     )
-    from admin_custom.admin_classes.afm_scoring import AFMScoringConfigAdmin, AFMEntityScoreAdmin
+    from admin_custom.admin_classes.afm_scoring import AFMScoringConfigAdmin, AFMEntityScoreAdmin, AFMEntityAdmin, AFMScoringJobAdmin
     
     from core.models.decisions import Decision, Attachment
     from core.models.organizations import Organization, Unit, Signer
@@ -270,8 +270,12 @@ def register_all_models():
     
     # Register AFM Scoring models
     from core.models.afm_scoring import AFMScoringConfig, AFMEntityScore
+    from core.models.afm_scoring_job import AFMScoringJob
+    from core.models.entities import AFMEntity
+    admin_site.register(AFMEntity, AFMEntityAdmin)
     admin_site.register(AFMScoringConfig, AFMScoringConfigAdmin)
     admin_site.register(AFMEntityScore, AFMEntityScoreAdmin)
+    admin_site.register(AFMScoringJob, AFMScoringJobAdmin)
     
     # Note: SearchSuggestion uses custom manager interface, not default admin
     admin_site.register(NotificationBatchDecision, NotificationBatchDecisionAdmin)

@@ -18,9 +18,81 @@ from django.http import JsonResponse
 from decimal import Decimal
 
 from core.models.afm_scoring import AFMScoringConfig, AFMEntityScore
+from core.models.afm_scoring_job import AFMScoringJob, AFMScoringJobLog
 from core.models.entities import AFMEntity
 from core.services.afm_scoring_service import AFMEntityScoringService
 from core.services.afm_fetch_queue_service import AFMFetchQueueService
+from core.tasks.afm_scoring_tasks import start_afm_scoring_job
+
+
+class AFMEntityAdmin(admin.ModelAdmin):
+    """Read-only admin for viewing AFM entities."""
+    
+    list_display = [
+        'afm',
+        'name',
+        'entity_type',
+        'total_appearances',
+        'gemi_status_badge',
+        'first_seen',
+        'last_seen',
+    ]
+    list_filter = [
+        'entity_type',
+        'gemi_lookup_success',
+    ]
+    search_fields = ['afm', 'name']
+    readonly_fields = [
+        'afm',
+        'entity_type',
+        'name',
+        'first_seen',
+        'last_seen',
+        'total_appearances',
+        'gemi_lookup_attempted',
+        'gemi_lookup_success',
+        'gemi_companies_count',
+        'last_error',
+        'error_count',
+    ]
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('afm', 'name', 'entity_type')
+        }),
+        ('Activity Metadata', {
+            'fields': ('total_appearances', 'first_seen', 'last_seen')
+        }),
+        ('GEMI Lookup Status', {
+            'fields': (
+                'gemi_lookup_attempted',
+                'gemi_lookup_success',
+                'gemi_companies_count',
+                'last_error',
+                'error_count',
+            )
+        }),
+    )
+    
+    def gemi_status_badge(self, obj):
+        if obj.gemi_lookup_success:
+            return format_html(
+                '<span style="color: green;">✓ Success ({} companies)</span>',
+                obj.gemi_companies_count
+            )
+        elif obj.gemi_lookup_attempted:
+            return format_html(
+                '<span style="color: orange;">⚠ Failed ({} errors)</span>',
+                obj.error_count
+            )
+        return format_html('<span style="color: gray;">Not attempted</span>')
+    gemi_status_badge.short_description = 'GEMI Status'
+    
+    def has_add_permission(self, request):
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class AFMScoringConfigForm(forms.ModelForm):
@@ -113,18 +185,18 @@ class AFMScoringConfigAdmin(admin.ModelAdmin):
     
     def weight_summary(self, obj):
         return format_html(
-            '<small>Freq: {:.0%} | Amt: {:.0%} | Org: {:.0%}</small>',
-            obj.frequency_weight,
-            obj.amount_weight,
-            obj.organization_weight
+            '<small>Freq: {} | Amt: {} | Org: {}</small>',
+            f'{obj.frequency_weight:.0%}',
+            f'{obj.amount_weight:.0%}',
+            f'{obj.organization_weight:.0%}'
         )
     weight_summary.short_description = 'Weights'
     
     def threshold_summary(self, obj):
         return format_html(
-            '<small>≥{} apps | ≥€{:,.0f} | ≥{} orgs</small>',
+            '<small>≥{} apps | ≥€{} | ≥{} orgs</small>',
             obj.min_appearances,
-            obj.min_total_amount,
+            f'{obj.min_total_amount:,.0f}',
             obj.min_unique_organizations
         )
     threshold_summary.short_description = 'Thresholds'
@@ -231,11 +303,11 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
         return format_html(
             '<div style="width: 100px; background: #e0e0e0; border-radius: 3px; overflow: hidden;">'
             '<div style="width: {}%; background: {}; color: white; text-align: center; font-size: 11px; font-weight: bold; padding: 2px 0;">'
-            '{:.1f}'
+            '{}'
             '</div></div>',
             width,
             color,
-            obj.total_score
+            f'{obj.total_score:.1f}'
         )
     total_score_bar.short_description = 'Score'
     
@@ -249,11 +321,11 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
         return format_html(
             '<small>'
             '{} apps<br/>'
-            '€{:,.0f}<br/>'
+            '€{}<br/>'
             '{} orgs'
             '</small>',
             obj.total_appearances,
-            obj.total_amount,
+            f'{obj.total_amount:,.0f}',
             obj.unique_organizations
         )
     metrics_summary.short_description = 'Metrics'
@@ -298,6 +370,16 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
         queue_service = AFMFetchQueueService()
         queue_status = queue_service.get_queue_status()
         
+        # Get active scoring job (if any)
+        active_job = AFMScoringJob.objects.filter(
+            status__in=['pending', 'running', 'paused']
+        ).select_related('config', 'created_by').first()
+        
+        # Get recent completed jobs
+        recent_jobs = AFMScoringJob.objects.filter(
+            status='completed'
+        ).select_related('config', 'created_by').order_by('-completed_at')[:5]
+        
         # Get top entities
         top_unfetched = AFMEntityScore.objects.filter(
             is_eligible=True,
@@ -318,9 +400,11 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
         
         context = {
             **self.admin_site.each_context(request),
-            'title': 'AFM Fetch Queue Cockpit',
+            'title': 'AFM Fetch Queue Management',
             'config': config,
             'queue_status': queue_status,
+            'active_job': active_job,
+            'recent_jobs': recent_jobs,
             'top_unfetched': top_unfetched,
             'recently_fetched': recently_fetched,
             'total_entities': total_entities,
@@ -333,24 +417,56 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
         return render(request, 'admin/afm_cockpit.html', context)
     
     def run_scoring_view(self, request):
-        """Trigger scoring algorithm."""
+        """Create and start a scoring job."""
         if request.method == 'POST':
             try:
-                service = AFMEntityScoringService()
-                stats = service.score_all_entities(
+                # Get config
+                config_id = request.POST.get('config_id')
+                if config_id:
+                    config = AFMScoringConfig.objects.get(id=config_id)
+                else:
+                    config = AFMScoringConfig.get_active()
+                
+                if not config:
+                    messages.error(request, "No active scoring configuration found")
+                    return redirect('admin:afm_cockpit')
+                
+                # Check if there's already an active job
+                active_job = AFMScoringJob.objects.filter(
+                    status__in=['pending', 'running', 'paused']
+                ).first()
+                
+                if active_job:
+                    messages.warning(
+                        request,
+                        f"A scoring job is already {active_job.get_status_display()}. "
+                        f"Wait for it to complete or cancel it first."
+                    )
+                    return redirect('admin:afm_cockpit')
+                
+                # Create new job
+                import uuid
+                job = AFMScoringJob.objects.create(
+                    job_id=str(uuid.uuid4()),
+                    created_by=request.user,
+                    config=config,
                     batch_size=1000,
                     exclude_already_fetched=False
                 )
                 
+                # Start the job
+                task = start_afm_scoring_job.delay(job_id=job.job_id)
+                job.celery_task_id = task.id
+                job.save(update_fields=['celery_task_id'])
+                
                 messages.success(
                     request,
-                    f"Scoring completed! "
-                    f"Scored: {stats['total_scored']}, "
-                    f"Eligible: {stats['eligible_for_fetch']}"
+                    f"Scoring job created and started! "
+                    f"Job ID: {job.job_id[:8]}... | Task ID: {task.id}"
                 )
                 
             except Exception as e:
-                messages.error(request, f"Scoring failed: {str(e)}")
+                messages.error(request, f"Failed to create scoring job: {str(e)}")
         
         return redirect('admin:afm_cockpit')
     
@@ -414,3 +530,208 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
             return JsonResponse(status)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)
+
+
+@admin.register(AFMScoringJob)
+class AFMScoringJobAdmin(admin.ModelAdmin):
+    """Admin for managing AFM scoring jobs."""
+    
+    list_display = [
+        'job_id_short',
+        'status_badge',
+        'config_name',
+        'progress_bar',
+        'stats_summary',
+        'created_by',
+        'created_at',
+        'actions_column'
+    ]
+    
+    list_filter = ['status', 'config', 'exclude_already_fetched']
+    search_fields = ['job_id', 'created_by__username']
+    readonly_fields = [
+        'job_id',
+        'created_by',
+        'config',
+        'batch_size',
+        'exclude_already_fetched',
+        'celery_task_id',
+        'total_entities',
+        'processed_count',
+        'scored_count',
+        'eligible_count',
+        'ineligible_count',
+        'error_count',
+        'started_at',
+        'completed_at',
+        'estimated_completion',
+        'last_error',
+        'created_at',
+        'updated_at',
+    ]
+    
+    fieldsets = (
+        ('Job Info', {
+            'fields': ('job_id', 'created_by', 'config', 'status')
+        }),
+        ('Configuration', {
+            'fields': ('batch_size', 'exclude_already_fetched')
+        }),
+        ('Progress', {
+            'fields': (
+                'total_entities',
+                'processed_count',
+                'scored_count',
+                'eligible_count',
+                'ineligible_count',
+                'error_count',
+            )
+        }),
+        ('Timing', {
+            'fields': (
+                'started_at',
+                'completed_at',
+                'estimated_completion',
+            )
+        }),
+        ('Task Info', {
+            'fields': ('celery_task_id', 'last_error'),
+            'classes': ('collapse',),
+        }),
+    )
+    
+    def job_id_short(self, obj):
+        return str(obj.job_id)[:8] + '...'
+    job_id_short.short_description = 'Job ID'
+    
+    def status_badge(self, obj):
+        colors = {
+            'pending': '#6c757d',
+            'running': '#007bff',
+            'paused': '#ffc107',
+            'completed': '#28a745',
+            'failed': '#dc3545',
+            'cancelled': '#6c757d',
+        }
+        color = colors.get(obj.status, '#6c757d')
+        return format_html(
+            '<span style="background: {}; color: white; padding: 3px 10px; border-radius: 3px; font-weight: bold;">{}</span>',
+            color,
+            obj.get_status_display()
+        )
+    status_badge.short_description = 'Status'
+    
+    def config_name(self, obj):
+        return obj.config.name if obj.config else '-'
+    config_name.short_description = 'Config'
+    
+    def progress_bar(self, obj):
+        if obj.total_entities == 0:
+            return '-'
+        
+        percentage = obj.progress_percentage
+        return format_html(
+            '<div style="width: 100px; background: #e0e0e0; border-radius: 3px; overflow: hidden;">'
+            '<div style="width: {}%; background: var(--primary); color: white; text-align: center; font-size: 11px; font-weight: bold; padding: 2px 0;">'
+            '{}%'
+            '</div></div>',
+            percentage,
+            percentage
+        )
+    progress_bar.short_description = 'Progress'
+    
+    def stats_summary(self, obj):
+        return format_html(
+            '<small>Scored: {} | Eligible: {} | Errors: {}</small>',
+            obj.scored_count,
+            obj.eligible_count,
+            obj.error_count
+        )
+    stats_summary.short_description = 'Stats'
+    
+    def actions_column(self, obj):
+        actions = []
+        
+        if obj.status == 'pending':
+            actions.append(format_html(
+                '<a class="button" href="{}">Start</a>',
+                reverse('admin:core_afmscoringjob_start', args=[obj.pk])
+            ))
+        
+        if obj.status == 'running':
+            actions.append(format_html(
+                '<a class="button" href="{}">Pause</a>',
+                reverse('admin:core_afmscoringjob_pause', args=[obj.pk])
+            ))
+        
+        if obj.status == 'paused':
+            actions.append(format_html(
+                '<a class="button" href="{}">Resume</a>',
+                reverse('admin:core_afmscoringjob_resume', args=[obj.pk])
+            ))
+        
+        if obj.status in ['pending', 'running', 'paused']:
+            actions.append(format_html(
+                '<a class="button" href="{}" style="background: #dc3545;">Cancel</a>',
+                reverse('admin:core_afmscoringjob_cancel', args=[obj.pk])
+            ))
+        
+        return format_html(' '.join(actions)) if actions else '-'
+    actions_column.short_description = 'Actions'
+    
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('<path:object_id>/start/', self.admin_site.admin_view(self.start_job_view), name='core_afmscoringjob_start'),
+            path('<path:object_id>/pause/', self.admin_site.admin_view(self.pause_job_view), name='core_afmscoringjob_pause'),
+            path('<path:object_id>/resume/', self.admin_site.admin_view(self.resume_job_view), name='core_afmscoringjob_resume'),
+            path('<path:object_id>/cancel/', self.admin_site.admin_view(self.cancel_job_view), name='core_afmscoringjob_cancel'),
+        ]
+        return custom_urls + urls
+    
+    def start_job_view(self, request, object_id):
+        """Start a pending job."""
+        job = AFMScoringJob.objects.get(pk=object_id)
+        
+        if job.status != 'pending':
+            messages.error(request, f"Cannot start job in {job.status} state")
+        else:
+            task = start_afm_scoring_job.delay(job_id=job.job_id)
+            job.celery_task_id = task.id
+            job.save(update_fields=['celery_task_id'])
+            messages.success(request, f"Job {job.job_id} started with task ID {task.id}")
+        
+        return redirect('admin:core_afmscoringjob_changelist')
+    
+    def pause_job_view(self, request, object_id):
+        """Pause a running job."""
+        job = AFMScoringJob.objects.get(pk=object_id)
+        job.pause()
+        messages.success(request, f"Job {job.job_id} paused")
+        return redirect('admin:core_afmscoringjob_changelist')
+    
+    def resume_job_view(self, request, object_id):
+        """Resume a paused job."""
+        job = AFMScoringJob.objects.get(pk=object_id)
+        
+        if job.status != 'paused':
+            messages.error(request, f"Cannot resume job in {job.status} state")
+        else:
+            from core.tasks.afm_scoring_tasks import resume_paused_scoring_job
+            resume_paused_scoring_job.delay(job_id=job.job_id)
+            messages.success(request, f"Job {job.job_id} resumed")
+        
+        return redirect('admin:core_afmscoringjob_changelist')
+    
+    def cancel_job_view(self, request, object_id):
+        """Cancel a job."""
+        job = AFMScoringJob.objects.get(pk=object_id)
+        job.cancel()
+        messages.success(request, f"Job {job.job_id} cancelled")
+        return redirect('admin:core_afmscoringjob_changelist')
+    
+    def has_add_permission(self, request):
+        return False  # Jobs should be created via management command or cockpit
+    
+    def has_change_permission(self, request, obj=None):
+        return False  # Jobs are read-only once created

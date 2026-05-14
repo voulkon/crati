@@ -25,6 +25,7 @@ Faker = "37.0.0"
 diavgeia-api = {git = "https://github.com/voulkon/diavgeia-api.git"}
 gemi-opendata-client = {path = "./gemi", develop = true}
 django-ses = "^4.7.2"
+numpy = "^2.4.4"
 
 # OpenTelemetry dependencies
 opentelemetry-sdk = "^1.32.1"
@@ -54,8 +55,8 @@ optional = false  # Always install with worker
 # ════════════════════════════════════════════════════════════════════════════
 # These are explicitly imported in analytics/*.py files
 # Installed in ALL worker modes (both light and full)
+# NOTE: numpy is in main dependencies (needed by Django admin)
 pandas="^2.3.0"          # DataFrame operations
-numpy="^2.3.0"           # Numerical computing
 scipy="^1.15.3"          # Scientific computing
 matplotlib="^3.10.3"     # Plotting (analytics/*)
 seaborn="^0.13.2"        # Statistical visualizations

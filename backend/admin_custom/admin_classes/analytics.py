@@ -66,6 +66,7 @@ class ImportJobAdmin(admin.ModelAdmin):
         "end_date",
         "entity_name",
         "status",
+        "stuck_indicator",
         "created_by",
         "created_at",
         "decisions_count",
@@ -85,7 +86,11 @@ class ImportJobAdmin(admin.ModelAdmin):
     search_fields = ("organization__label", "signer__first_name", "signer__last_name", "celery_task_id")
     date_hierarchy = "created_at"
     readonly_fields = [
+        'id',
         'created_at',
+        'chunk_diagnostics_display',
+        'failed_chunks_display',
+        'stuck_job_diagnostics',
     ]
     fieldsets = (
         ('Basic Info', {
@@ -96,7 +101,11 @@ class ImportJobAdmin(admin.ModelAdmin):
             'description': 'Track decisions through the import pipeline: API → Redis → Restored → Pipeline'
         }),
         ('Redis Chunks', {
-            'fields': ('total_chunks', 'chunks_completed', 'chunks_failed', 'chunk_task_ids', 'search_params'),
+            'fields': ('total_chunks', 'chunks_completed', 'chunks_failed', 'chunk_diagnostics_display', 'failed_chunks_display', 'chunk_task_ids', 'search_params'),
+            'description': 'Track chunk-level progress and diagnose stuck chunks'
+        }),
+        ('Diagnostics', {
+            'fields': ('stuck_job_diagnostics',),
             'classes': ('collapse',)
         }),
         ('Entity Filters', {
@@ -112,6 +121,9 @@ class ImportJobAdmin(admin.ModelAdmin):
         "download_batch_health_report",
         "enqueue_backfill_missing_health_checks",
         "enqueue_retry_failed_decisions",
+        "retry_failed_chunks",
+        "retry_missing_chunks",
+        "diagnose_stuck_job",
     )
 
     def get_queryset(self, request):
@@ -148,6 +160,32 @@ class ImportJobAdmin(admin.ModelAdmin):
             return f"Signer: {obj.signer}"
         return "All"
     entity_name.short_description = "Entity"
+
+    def stuck_indicator(self, obj):
+        """Visual indicator for stuck jobs"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Consider a job stuck if:
+        # 1. Status is PROCESSING/FETCHING/SPLITTING for >2 hours
+        # 2. Has missing chunks (total != completed + failed) for >1 hour
+        
+        age = timezone.now() - obj.created_at
+        
+        # Check for long-running active jobs
+        if obj.status in [ImportJobStatus.PROCESSING, ImportJobStatus.FETCHING, ImportJobStatus.SPLITTING]:
+            if age > timedelta(hours=2):
+                return format_html('<span style="color: red; font-size: 18px;" title="Stuck for {:.1f} hours">\u26a0\ufe0f STUCK</span>', age.total_seconds() / 3600)
+        
+        # Check for missing chunks
+        if obj.total_chunks > 0:
+            missing = obj.total_chunks - obj.chunks_completed - obj.chunks_failed
+            if missing > 0 and age > timedelta(hours=1):
+                return format_html('<span style="color: orange; font-size: 16px;" title="{} chunks missing">\u23f3 {}</span>', missing, missing)
+        
+        return "-"
+    stuck_indicator.short_description = "\u26a0\ufe0f"
+    stuck_indicator.admin_order_field = "created_at"
 
     def decisions_count(self, obj):
         return getattr(obj, "decisions_count", 0)
@@ -325,6 +363,269 @@ class ImportJobAdmin(admin.ModelAdmin):
         )
 
     enqueue_retry_failed_decisions.short_description = "Retry ERROR decisions (async)"
+
+    def chunk_diagnostics_display(self, obj):
+        """Display detailed chunk processing diagnostics"""
+        if obj.total_chunks == 0:
+            return "No chunks"
+        
+        completed = obj.chunks_completed
+        failed = obj.chunks_failed
+        total = obj.total_chunks
+        in_progress = total - completed - failed
+        
+        html = [
+            f"<strong>Chunk Status:</strong><br>",
+            f"✅ Completed: {completed}/{total} ({100*completed/total:.1f}%)<br>",
+            f"❌ Failed: {failed}<br>",
+        ]
+        
+        if in_progress > 0:
+            html.append(f"⏳ In Progress/Missing: {in_progress}<br>")
+        
+        # Check for stuck chunks (job in PROCESSING but hasn't updated in 1+ hour)
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        if obj.status == ImportJobStatus.PROCESSING:
+            time_since_update = timezone.now() - obj.created_at
+            if time_since_update > timedelta(hours=1) and in_progress > 0:
+                html.append(f"<br><span style='color: red; font-weight: bold;'>⚠️ WARNING: {in_progress} chunks stuck for {time_since_update.seconds//3600}h</span>")
+        
+        return mark_safe("".join(html))
+    chunk_diagnostics_display.short_description = "Chunk Diagnostics"
+
+    def failed_chunks_display(self, obj):
+        """Display failed chunk task IDs for investigation"""
+        if obj.chunks_failed == 0:
+            return "No failures"
+        
+        # Get failed chunk task IDs from ImportFailure records
+        from core.models.import_jobs import ImportFailure
+        
+        failures = ImportFailure.objects.filter(
+            import_job=obj,
+            task_id__in=obj.chunk_task_ids
+        ).values('task_id', 'error_message')[:10]  # Limit to 10
+        
+        if not failures:
+            return f"{obj.chunks_failed} failures (no details available)"
+        
+        html = ["<strong>Failed Chunks:</strong><br><ul>"]
+        for failure in failures:
+            task_id = failure['task_id'][:8]  # Short ID
+            error = failure['error_message'][:50]  # Truncate
+            html.append(f"<li>{task_id}: {error}...</li>")
+        html.append("</ul>")
+        
+        if obj.chunks_failed > len(failures):
+            html.append(f"<em>...and {obj.chunks_failed - len(failures)} more</em>")
+        
+        return mark_safe("".join(html))
+    failed_chunks_display.short_description = "Failed Chunks"
+
+    def stuck_job_diagnostics(self, obj):
+        """Comprehensive diagnostics for stuck jobs"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        html = ["<div style='font-family: monospace; font-size: 12px;'>"]
+        
+        # Job age
+        age = timezone.now() - obj.created_at
+        html.append(f"<strong>Job Age:</strong> {age.seconds//3600}h {(age.seconds%3600)//60}m<br>")
+        
+        # Status
+        html.append(f"<strong>Status:</strong> {obj.status}<br>")
+        
+        # Pipeline progress
+        if obj.total_decisions > 0:
+            html.append(f"<br><strong>Pipeline Progress:</strong><br>")
+            html.append(f"  API → Redis: {obj.total_decisions}<br>")
+            html.append(f"  Redis → Restored: {obj.decisions_restored_from_redis} ({100*obj.decisions_restored_from_redis/obj.total_decisions:.1f}%)<br>")
+            html.append(f"  Restored → Pipeline: {obj.decisions_assigned_to_pipeline} ({100*obj.decisions_assigned_to_pipeline/obj.total_decisions:.1f}%)<br>")
+        
+        # Chunk progress
+        if obj.total_chunks > 0:
+            html.append(f"<br><strong>Chunk Progress:</strong><br>")
+            html.append(f"  Total: {obj.total_chunks}<br>")
+            html.append(f"  Completed: {obj.chunks_completed} ({100*obj.chunks_completed/obj.total_chunks:.1f}%)<br>")
+            html.append(f"  Failed: {obj.chunks_failed}<br>")
+            missing = obj.total_chunks - obj.chunks_completed - obj.chunks_failed
+            if missing > 0:
+                html.append(f"  <span style='color: orange;'>Missing/In Progress: {missing}</span><br>")
+        
+        # Check for stuck state
+        if obj.status == ImportJobStatus.PROCESSING:
+            if age > timedelta(hours=2):
+                html.append(f"<br><span style='color: red; font-weight: bold;'>⚠️ JOB STUCK: No completion after {age.seconds//3600}h</span><br>")
+                html.append(f"<br><strong>Suggested Actions:</strong><br>")
+                html.append(f"  1. Check Celery worker logs<br>")
+                html.append(f"  2. Verify Redis has chunk data<br>")
+                html.append(f"  3. Use 'Retry Missing Chunks' action<br>")
+                html.append(f"  4. Check if worker is running<br>")
+        
+        # Check task IDs
+        if obj.chunk_task_ids:
+            html.append(f"<br><strong>Task Tracking:</strong><br>")
+            html.append(f"  Total tasks dispatched: {len(obj.chunk_task_ids)}<br>")
+            html.append(f"  Tasks reported complete: {obj.chunks_completed + obj.chunks_failed}<br>")
+            unreported = len(obj.chunk_task_ids) - (obj.chunks_completed + obj.chunks_failed)
+            if unreported > 0:
+                html.append(f"  <span style='color: orange;'>Tasks not reported: {unreported}</span><br>")
+        
+        html.append("</div>")
+        return mark_safe("".join(html))
+    stuck_job_diagnostics.short_description = "Stuck Job Diagnostics"
+
+    def retry_failed_chunks(self, request, queryset):
+        """Retry all failed chunks for selected import jobs"""
+        if queryset.count() != 1:
+            self.message_user(request, "Please select exactly one import job", messages.ERROR)
+            return
+        
+        job = queryset.first()
+        
+        # Get failed chunk task IDs
+        from core.models.import_jobs import ImportFailure
+        from core.tasks.tasks_decisions_import import store_decisions_from_redis
+        
+        failures = ImportFailure.objects.filter(
+            import_job=job,
+            task_id__in=job.chunk_task_ids
+        )
+        
+        if not failures:
+            self.message_user(request, f"No failed chunks found for job {job.id}", messages.WARNING)
+            return
+        
+        # Extract chunk IDs from failures (if stored in error details)
+        retried = 0
+        for failure in failures:
+            # Try to extract chunk_id from error message/details
+            # This assumes chunk_id is stored somewhere in the failure record
+            # You may need to adjust based on your actual error message format
+            if 'chunk_id' in (failure.error_details or {}):
+                chunk_id = failure.error_details['chunk_id']
+                store_decisions_from_redis.delay(
+                    chunk_id=chunk_id,
+                    job_id=job.id,
+                    skip_opensearch=False,
+                    delay_seconds=retried * 0.5  # Stagger retries
+                )
+                retried += 1
+        
+        self.message_user(
+            request,
+            f"Retrying {retried} failed chunks for job {job.id}",
+            messages.SUCCESS
+        )
+    retry_failed_chunks.short_description = "Retry failed chunks"
+
+    def retry_missing_chunks(self, request, queryset):
+        """Retry chunks that haven't reported completion (stuck/lost)"""
+        if queryset.count() != 1:
+            self.message_user(request, "Please select exactly one import job", messages.ERROR)
+            return
+        
+        job = queryset.first()
+        
+        missing_count = job.total_chunks - job.chunks_completed - job.chunks_failed
+        
+        if missing_count <= 0:
+            self.message_user(request, f"No missing chunks for job {job.id}", messages.INFO)
+            return
+        
+        # Check if Redis still has the chunk data
+        from core.services.redis_decision_cache import RedisDecisionCache
+        from core.tasks.tasks_decisions_import import store_decisions_from_redis
+        
+        redis_cache = RedisDecisionCache()
+        
+        # Find chunks that exist in Redis but haven't been processed
+        # This requires listing all Redis keys for this job
+        import re
+        from django_redis import get_redis_connection
+        from diavgeia_project.settings.constants import IMPORT_CHUNKS_REDIS_DB_NAME
+        
+        redis_client = get_redis_connection(IMPORT_CHUNKS_REDIS_DB_NAME)
+        
+        # Get all chunk keys for this job (pattern: decision_chunk:{date}_{chunk_num}_*)
+        date_str = job.start_date.isoformat()
+        pattern = f"decision_chunk:{date_str}_*"
+        
+        existing_chunks = []
+        for key in redis_client.scan_iter(match=pattern):
+            key_str = key.decode('utf-8') if isinstance(key, bytes) else key
+            existing_chunks.append(key_str)
+        
+        self.message_user(
+            request,
+            f"Found {len(existing_chunks)} chunks in Redis. Missing chunks: {missing_count}. "
+            f"Check Celery worker logs for task {job.celery_task_id}. "
+            f"You may need to manually retry specific chunk IDs.",
+            messages.WARNING
+        )
+    retry_missing_chunks.short_description = "Diagnose missing chunks"
+
+    def diagnose_stuck_job(self, request, queryset):
+        """Generate detailed diagnostic report for stuck jobs"""
+        if queryset.count() != 1:
+            self.message_user(request, "Please select exactly one import job", messages.ERROR)
+            return
+        
+        job = queryset.first()
+        
+        from django.utils import timezone
+        from datetime import timedelta
+        import json
+        
+        report = {
+            'job_id': job.id,
+            'status': job.status,
+            'age_hours': (timezone.now() - job.created_at).seconds // 3600,
+            'pipeline': {
+                'total_decisions': job.total_decisions,
+                'restored_from_redis': job.decisions_restored_from_redis,
+                'assigned_to_pipeline': job.decisions_assigned_to_pipeline,
+                'new': job.new_decisions,
+                'updated': job.updated_decisions,
+                'errors': job.error_count,
+            },
+            'chunks': {
+                'total': job.total_chunks,
+                'completed': job.chunks_completed,
+                'failed': job.chunks_failed,
+                'missing': job.total_chunks - job.chunks_completed - job.chunks_failed,
+                'task_count': len(job.chunk_task_ids),
+            },
+            'celery_task_id': job.celery_task_id,
+            'search_params': job.search_params,
+        }
+        
+        # Check Redis for remaining chunks
+        from django_redis import get_redis_connection
+        from diavgeia_project.settings.constants import IMPORT_CHUNKS_REDIS_DB_NAME
+        
+        redis_client = get_redis_connection(IMPORT_CHUNKS_REDIS_DB_NAME)
+        date_str = job.start_date.isoformat()
+        pattern = f"decision_chunk:{date_str}_*"
+        
+        redis_chunks = []
+        for key in redis_client.scan_iter(match=pattern):
+            key_str = key.decode('utf-8') if isinstance(key, bytes) else key
+            redis_chunks.append(key_str)
+        
+        report['redis_chunks_remaining'] = len(redis_chunks)
+        report['redis_chunk_keys'] = redis_chunks[:10]  # Sample
+        
+        # Download as JSON
+        payload = json.dumps(report, ensure_ascii=False, indent=2)
+        filename = f"stuck-job-{job.id}-diagnostic.json"
+        response = HttpResponse(payload, content_type="application/json; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+    diagnose_stuck_job.short_description = "Download diagnostic report (JSON)"
 
     # ========================================================================
     # Queue Monitoring Features

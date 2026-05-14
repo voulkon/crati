@@ -175,7 +175,8 @@ class ImportJobAdmin(admin.ModelAdmin):
         # Check for long-running active jobs
         if obj.status in [ImportJobStatus.PROCESSING, ImportJobStatus.FETCHING, ImportJobStatus.SPLITTING]:
             if age > timedelta(hours=2):
-                return format_html('<span style="color: red; font-size: 18px;" title="Stuck for {:.1f} hours">\u26a0\ufe0f STUCK</span>', age.total_seconds() / 3600)
+                hours = age.total_seconds() / 3600
+                return format_html('<span style="color: red; font-size: 18px;" title="Stuck for {} hours">\u26a0\ufe0f STUCK</span>', f'{hours:.1f}')
         
         # Check for missing chunks
         if obj.total_chunks > 0:

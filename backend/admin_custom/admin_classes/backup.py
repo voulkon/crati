@@ -10,10 +10,10 @@ from core.tasks import create_backup_task, restore_backup_task
 from core.services.database_stats_service import DatabaseStatsService
 
 class BackupAdmin(admin.ModelAdmin):
-    list_display = ('id', 'backup_type', 'created_at', 'status_badge', 'size_display', 's3_location', 'streaming_method')
+    list_display = ('id', 'backup_type', 'created_at', 'status_badge', 'size_display', 's3_location', 'streaming_method', 'cancel_action')
     list_filter = ('backup_type', 'status', 'created_at', 'use_streaming')
-    readonly_fields = ('status', 's3_key', 'size_bytes', 'logs_display', 'snapshot_name', 'created_at', 'updated_at', 's3_full_path')
-    actions = ['restore_backup']
+    readonly_fields = ('status', 's3_key', 'size_bytes', 'logs_display', 'snapshot_name', 'created_at', 'updated_at', 's3_full_path', 'celery_task_id')
+    actions = ['restore_backup', 'cancel_backup_action']
     change_list_template = "admin/backup_change_list.html"
     
     def status_badge(self, obj):
@@ -60,6 +60,17 @@ class BackupAdmin(admin.ModelAdmin):
         return '-'
     streaming_method.short_description = 'Method'
     
+    def cancel_action(self, obj):
+        if obj.status in [Backup.Status.PENDING, Backup.Status.IN_PROGRESS] and obj.celery_task_id:
+            from django.urls import reverse
+            url = reverse('admin:cancel_backup', args=[obj.id])
+            return format_html(
+                '<a href="{}" style="color: #f44336; font-weight: bold;" onclick="return confirm(\'Are you sure you want to cancel this backup?\')">Cancel</a>',
+                url
+            )
+        return '-'
+    cancel_action.short_description = 'Action'
+    
     def s3_full_path(self, obj):
         from django.conf import settings
         bucket = getattr(settings, 'AWS_STORAGE_BUCKET_NAME', 'diavgeia-backups')
@@ -94,6 +105,7 @@ class BackupAdmin(admin.ModelAdmin):
             path('browse-s3/', self.admin_site.admin_view(self.browse_s3), name='browse_s3'),
             path('restore-from-s3-postgres/<path:s3_key>/', self.admin_site.admin_view(self.restore_postgres_from_s3), name='restore_postgres_from_s3'),
             path('restore-from-s3-opensearch/<str:snapshot_name>/', self.admin_site.admin_view(self.restore_opensearch_from_s3), name='restore_opensearch_from_s3'),
+            path('<int:backup_id>/cancel/', self.admin_site.admin_view(self.cancel_backup), name='cancel_backup'),
         ]
         return my_urls + urls
 
@@ -130,7 +142,9 @@ class BackupAdmin(admin.ModelAdmin):
             status=Backup.Status.PENDING,
             use_streaming=use_streaming
         )
-        create_backup_task.delay(backup.id)
+        task = create_backup_task.delay(backup.id)
+        backup.celery_task_id = task.id
+        backup.save()
         method = "streaming" if use_streaming else "file-based"
         self.message_user(request, f"PostgreSQL backup #{backup.id} started ({method}). Monitor progress in the backup list.", messages.SUCCESS)
         return redirect('admin:core_backup_changelist')
@@ -145,9 +159,81 @@ class BackupAdmin(admin.ModelAdmin):
             backup_type=Backup.BackupType.OPENSEARCH,
             status=Backup.Status.PENDING
         )
-        create_backup_task.delay(backup.id)
+        task = create_backup_task.delay(backup.id)
+        backup.celery_task_id = task.id
+        backup.save()
         self.message_user(request, f"OpenSearch backup #{backup.id} started. Monitor progress in the backup list.", messages.SUCCESS)
         return redirect('admin:core_backup_changelist')
+    
+    def cancel_backup(self, request, backup_id):
+        """Cancel a running backup task"""
+        try:
+            backup = Backup.objects.get(id=backup_id)
+            
+            if backup.status not in [Backup.Status.PENDING, Backup.Status.IN_PROGRESS]:
+                self.message_user(request, f"Cannot cancel backup #{backup_id} - status is {backup.get_status_display()}", messages.ERROR)
+                return redirect('admin:core_backup_changelist')
+            
+            if not backup.celery_task_id:
+                self.message_user(request, f"Cannot cancel backup #{backup_id} - no task ID found", messages.ERROR)
+                return redirect('admin:core_backup_changelist')
+            
+            # Revoke the Celery task
+            from celery.result import AsyncResult
+            from diavgeia_project.celery import app
+            
+            result = AsyncResult(backup.celery_task_id, app=app)
+            result.revoke(terminate=True)
+            
+            # Update backup status
+            backup.status = Backup.Status.FAILED
+            backup.logs += f"\n[{timezone.now()}] Backup cancelled by user\n"
+            backup.save()
+            
+            self.message_user(request, f"Backup #{backup_id} has been cancelled", messages.SUCCESS)
+            
+        except Backup.DoesNotExist:
+            self.message_user(request, f"Backup #{backup_id} not found", messages.ERROR)
+        except Exception as e:
+            self.message_user(request, f"Error cancelling backup: {str(e)}", messages.ERROR)
+        
+        return redirect('admin:core_backup_changelist')
+    
+    @admin.action(description='Cancel selected backup(s)')
+    def cancel_backup_action(self, request, queryset):
+        """Admin action to cancel multiple backups"""
+        from celery.result import AsyncResult
+        from diavgeia_project.celery import app
+        
+        cancelled = 0
+        errors = []
+        
+        for backup in queryset:
+            if backup.status not in [Backup.Status.PENDING, Backup.Status.IN_PROGRESS]:
+                errors.append(f"Backup #{backup.id}: Cannot cancel - status is {backup.get_status_display()}")
+                continue
+            
+            if not backup.celery_task_id:
+                errors.append(f"Backup #{backup.id}: No task ID found")
+                continue
+            
+            try:
+                result = AsyncResult(backup.celery_task_id, app=app)
+                result.revoke(terminate=True)
+                
+                backup.status = Backup.Status.FAILED
+                backup.logs += f"\n[{timezone.now()}] Backup cancelled by user via bulk action\n"
+                backup.save()
+                
+                cancelled += 1
+            except Exception as e:
+                errors.append(f"Backup #{backup.id}: {str(e)}")
+        
+        if cancelled:
+            self.message_user(request, f"Successfully cancelled {cancelled} backup(s)", messages.SUCCESS)
+        if errors:
+            for error in errors:
+                self.message_user(request, error, messages.WARNING)
     
     def browse_s3(self, request):
         """Browse S3 backups"""

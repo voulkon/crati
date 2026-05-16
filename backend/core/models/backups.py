@@ -25,6 +25,9 @@ class Backup(models.Model):
     
     # For PostgreSQL backups - streaming vs file-based
     use_streaming = models.BooleanField(default=True, help_text=_('Use streaming backup to avoid disk space issues'))
+    
+    # Celery task tracking
+    celery_task_id = models.CharField(max_length=255, blank=True, null=True, help_text=_('Celery task ID for tracking/cancellation'))
 
     class Meta:
         ordering = ['-created_at']

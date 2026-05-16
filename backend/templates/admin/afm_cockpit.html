@@ -475,6 +475,25 @@
                     Rate limit: 6 req/min (~10 sec per entity)
                 </small>
             </div>
+            
+            <!-- Recover Stuck Items -->
+            <div class="control-action">
+                <h3>⚠️ Recover Stuck Items</h3>
+                <p>Move items stuck in ACTIVE set back to queue (use if processing appears hung).</p>
+                <form method="POST" action="{% url 'admin:afm_recover_stuck' %}">
+                    {% csrf_token %}
+                    
+                    <button type="submit" class="button" style="background-color: #f0ad4e; border-color: #eea236;" {% if queue_status.active == 0 %}disabled title="No items in ACTIVE set"{% endif %}>
+                        Recover Stuck Items
+                    </button>
+                </form>
+                <small style="color: var(--body-quiet-color); display: block; margin-top: 8px;">
+                    Active: {{ queue_status.active|default:0 }} items
+                    {% if queue_status.active > 0 %}
+                    <br/><span style="color: #f0ad4e;">⚠️ Items might be processing or stuck</span>
+                    {% endif %}
+                </small>
+            </div>
         </div>
     </div>
 

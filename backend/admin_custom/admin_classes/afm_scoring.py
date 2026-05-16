@@ -23,6 +23,7 @@ from core.models.entities import AFMEntity
 from core.services.afm_scoring_service import AFMEntityScoringService
 from core.services.afm_fetch_queue_service import AFMFetchQueueService
 from core.tasks.afm_scoring_tasks import start_afm_scoring_job
+from loguru import logger
 
 
 class AFMEntityAdmin(admin.ModelAdmin):
@@ -403,6 +404,7 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
             path('cockpit/boost-priority/', self.admin_site.admin_view(self.boost_priority_view), name='afm_boost_priority'),
             path('cockpit/mark-excluded/', self.admin_site.admin_view(self.mark_excluded_view), name='afm_mark_excluded'),
             path('cockpit/bulk-mark-excluded/', self.admin_site.admin_view(self.bulk_mark_excluded_view), name='afm_bulk_mark_excluded'),
+            path('cockpit/recover-stuck/', self.admin_site.admin_view(self.recover_stuck_view), name='afm_recover_stuck'),
             path('cockpit/status/', self.admin_site.admin_view(self.queue_status_api), name='afm_queue_status_api'),
         ]
         return custom_urls + urls
@@ -756,12 +758,19 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
                 added_count = 0
                 already_exists_count = 0
                 
+                # Add all AFMs WITHOUT auto-triggering on each one
                 for afm in afms:
-                    added = queue_service.add_single_afm(afm=afm, jump_queue=jump_queue)
+                    added = queue_service.add_single_afm(afm=afm, jump_queue=jump_queue, auto_trigger=False)
                     if added:
                         added_count += 1
                     else:
                         already_exists_count += 1
+                
+                # Trigger processing ONCE after all AFMs are added
+                if added_count > 0:
+                    from core.tasks.tasks_entities import process_afm_fetch_queue
+                    task = process_afm_fetch_queue.delay()
+                    logger.info(f"Triggered queue processing for {added_count} AFMs, task: {task.id}")
                 
                 priority_msg = " with PRIORITY" if jump_queue else ""
                 msg = f"Added {added_count} AFM(s) to queue{priority_msg}."
@@ -807,6 +816,28 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
                 
             except Exception as e:
                 messages.error(request, f"Failed to mark as excluded: {str(e)}")
+        
+        return redirect('admin:afm_cockpit')
+    
+    def recover_stuck_view(self, request):
+        """Recover AFMs stuck in ACTIVE set."""
+        if request.method == 'POST':
+            try:
+                queue_service = AFMFetchQueueService()
+                result = queue_service.recover_stuck_active()
+                
+                recovered_count = result.get('recovered', 0)
+                
+                if recovered_count > 0:
+                    messages.success(
+                        request,
+                        f"Recovered {recovered_count} stuck AFM(s) from ACTIVE set and moved back to queue."
+                    )
+                else:
+                    messages.info(request, "No stuck items found in ACTIVE set.")
+                
+            except Exception as e:
+                messages.error(request, f"Failed to recover stuck items: {str(e)}")
         
         return redirect('admin:afm_cockpit')
     

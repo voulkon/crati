@@ -202,15 +202,17 @@ def process_entities_needing_company_data(limit: int = 50):
 
 
 @shared_task(bind=True, max_retries=3)
-def process_afm_fetch_queue(self, max_items: int = None):
+def process_afm_fetch_queue(self, max_items: int = None, batch_size: int = 50):
     """
     Celery task to process the AFM fetch queue.
     
     Processes all pending items in the priority queue, respecting GEMI rate limits.
     Rate limiting is handled by the service itself (6 req/min).
+    Continues processing until queue is empty or max_items is reached.
     
     Args:
-        max_items: Optional limit on items to process (None = process entire queue)
+        max_items: Optional limit on total items to process (None = process entire queue)
+        batch_size: Number of items to process in each batch (default: 50)
         
     Returns:
         Processing statistics
@@ -222,30 +224,82 @@ def process_afm_fetch_queue(self, max_items: int = None):
     with logger.contextualize(
         task_id=task_id,
         task_name="process_afm_fetch_queue",
-        max_items=max_items
+        max_items=max_items,
+        batch_size=batch_size
     ):
         try:
             queue_service = AFMFetchQueueService()
             
-            # Get pending count
+            # Get initial pending count
             pending_count = queue_service.get_pending_count()
             
             if pending_count == 0:
                 logger.info("Queue is empty, nothing to process")
                 return {'status': 'empty_queue', 'pending': 0}
             
-            # Determine batch size (process all or limited)
-            items_to_process = min(pending_count, max_items) if max_items else pending_count
+            logger.info(f"Starting queue processing: {pending_count} items pending")
             
-            logger.info(
-                f"Starting queue processing: {items_to_process} items from {pending_count} pending"
-            )
+            total_processed = 0
+            total_successful = 0
+            total_failed = 0
+            total_not_found = 0
+            batches_processed = 0
             
-            # Process batch (rate limiting is handled by GemiService)
-            stats = queue_service.process_batch(batch_size=items_to_process)
+            # Process in batches until queue is empty or max_items reached
+            while True:
+                # Check if we've hit the max_items limit
+                if max_items and total_processed >= max_items:
+                    logger.info(f"Reached max_items limit ({max_items}), stopping")
+                    break
+                
+                # Check how many items are left
+                pending_count = queue_service.get_pending_count()
+                if pending_count == 0:
+                    logger.info("Queue is empty, processing complete")
+                    break
+                
+                # Determine batch size for this iteration
+                items_in_batch = batch_size
+                if max_items:
+                    items_in_batch = min(batch_size, max_items - total_processed)
+                items_in_batch = min(items_in_batch, pending_count)
+                
+                logger.info(f"Processing batch {batches_processed + 1}: {items_in_batch} items")
+                
+                # Process batch (rate limiting is handled by GemiService)
+                batch_stats = queue_service.process_batch(batch_size=items_in_batch)
+                
+                # Check if we got locked out
+                if batch_stats.get('status') == 'locked':
+                    logger.warning("Queue is locked by another worker, stopping")
+                    break
+                
+                # Aggregate stats
+                batches_processed += 1
+                total_processed += batch_stats.get('processed', 0)
+                total_successful += batch_stats.get('successful', 0)
+                total_failed += batch_stats.get('failed', 0)
+                total_not_found += batch_stats.get('not_found', 0)
+                
+                logger.info(
+                    f"Batch {batches_processed} complete: "
+                    f"{batch_stats.get('processed', 0)} processed, "
+                    f"{batch_stats.get('successful', 0)} successful, "
+                    f"{batch_stats.get('failed', 0)} failed"
+                )
             
-            logger.info(f"Queue processing completed", extra=stats)
-            return stats
+            final_stats = {
+                'status': 'completed',
+                'batches_processed': batches_processed,
+                'total_processed': total_processed,
+                'total_successful': total_successful,
+                'total_failed': total_failed,
+                'total_not_found': total_not_found,
+                'remaining_in_queue': queue_service.get_pending_count()
+            }
+            
+            logger.info(f"Queue processing completed", extra=final_stats)
+            return final_stats
             
         except Exception as e:
             logger.error(f"Error in queue processing task: {e}")

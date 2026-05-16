@@ -393,6 +393,59 @@ class AFMFetchQueueService:
         logger.info(f"Retried {retried} failed AFMs")
         return {'retried': retried}
     
+    def recover_stuck_active(self) -> Dict[str, Any]:
+        """
+        Recover AFMs stuck in ACTIVE set (processing never completed).
+        
+        This can happen if:
+        - Worker crashes during processing
+        - Task times out
+        - Network issues cause hanging
+        
+        Moves stuck items back to PENDING queue for retry.
+        
+        Returns:
+            Statistics about recovery operation
+        """
+        active_afms = self.redis_client.smembers(self.ACTIVE_KEY)
+        
+        if not active_afms:
+            logger.info("No stuck items in ACTIVE set")
+            return {'recovered': 0}
+        
+        recovered = 0
+        for afm in active_afms:
+            if isinstance(afm, bytes):
+                afm = afm.decode('utf-8')
+            
+            # Get entity score to restore priority
+            try:
+                entity = AFMEntity.objects.get(afm=afm)
+                score = AFMEntityScore.objects.get(entity=entity)
+                
+                # Add back to pending with original score
+                self.redis_client.zadd(
+                    self.PENDING_KEY,
+                    {afm: float(score.total_score)}
+                )
+                
+                # Remove from active
+                self.redis_client.srem(self.ACTIVE_KEY, afm)
+                recovered += 1
+                
+            except (AFMEntity.DoesNotExist, AFMEntityScore.DoesNotExist):
+                # No score found, use default priority
+                self.redis_client.zadd(
+                    self.PENDING_KEY,
+                    {afm: 1.0}
+                )
+                self.redis_client.srem(self.ACTIVE_KEY, afm)
+                recovered += 1
+                logger.warning(f"Recovered {afm} with default priority (no score found)")
+        
+        logger.warning(f"Recovered {recovered} stuck AFMs from ACTIVE set")
+        return {'recovered': recovered}
+    
     def _is_processed(self, afm: str) -> bool:
         """Check if AFM is in any processed set (fetched/failed/ignored)."""
         return (

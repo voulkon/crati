@@ -235,80 +235,39 @@ def process_in_batches(job: AFMScoringJob, entities_qs, config: AFMScoringConfig
 
 def score_batch(entities_batch, config: AFMScoringConfig) -> Dict[str, int]:
     """
-    Score a batch of entities.
+    Score a batch of entities using the AFMEntityScoringService.
     
-    This is a simplified version that calculates scores based on:
+    This ensures consistency with the scoring algorithm and uses all configured features:
     - Frequency (appearances in decisions)
     - Amount (total monetary value)
     - Organization diversity
+    - Direct assignment count
+    - Direct assignment percentage
     
     Returns:
         Dict with scored, eligible, ineligible, errors counts
     """
-    from django.db.models import Count, Sum
-    from core.models.decisions import Decision
+    from core.services.afm_scoring_service import AFMEntityScoringService
     
     scored = 0
     eligible = 0
     ineligible = 0
     errors = 0
     
+    # Initialize scoring service
+    service = AFMEntityScoringService(config=config)
+    
+    # Compute global statistics once for the batch
+    # This is more efficient than recomputing for each entity
+    global_stats = service._compute_global_statistics()
+    
     for entity in entities_batch:
         try:
-            # Calculate metrics from decisions
-            decisions_qs = Decision.objects.filter(
-                entity_relationships__entity__afm=entity.afm
-            ).distinct()
-            
-            total_appearances = decisions_qs.count()
-            
-            # Calculate total amount
-            amount_agg = decisions_qs.aggregate(
-                total=Sum('amount')
-            )
-            total_amount = amount_agg['total'] or Decimal('0')
-            
-            # Calculate unique organizations
-            unique_orgs = decisions_qs.values('organization').distinct().count()
-            
-            # Calculate scores
-            frequency_score = min(total_appearances / 100, 1.0) * 100
-            amount_score = min(float(total_amount) / 1000000, 1.0) * 100
-            org_score = min(unique_orgs / 50, 1.0) * 100
-            
-            # Calculate total score
-            total_score = (
-                frequency_score * config.frequency_weight +
-                amount_score * config.amount_weight +
-                org_score * config.organization_weight
-            )
-            
-            # Check eligibility
-            is_eligible = (
-                total_appearances >= config.min_appearances and
-                total_amount >= config.min_total_amount and
-                unique_orgs >= config.min_unique_organizations
-            )
-            
-            # Create or update score
-            AFMEntityScore.objects.update_or_create(
-                entity=entity,
-                defaults={
-                    'total_score': total_score,
-                    'frequency_score': frequency_score,
-                    'amount_score': amount_score,
-                    'organization_score': org_score,
-                    'total_appearances': total_appearances,
-                    'total_amount': total_amount,
-                    'unique_organizations': unique_orgs,
-                    'is_eligible': is_eligible,
-                    'config_used': config,
-                    'scored_at': timezone.now(),
-                }
-            )
+            # Use the service to score the entity
+            score_data = service.score_entity(entity, global_stats)
             
             scored += 1
-            if is_eligible:
+            if score_data['is_eligible']:
                 eligible += 1
             else:
                 ineligible += 1

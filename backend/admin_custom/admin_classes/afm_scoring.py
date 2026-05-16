@@ -108,16 +108,19 @@ class AFMScoringConfigForm(forms.ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         
-        # Validate weights sum to 1.0
+        # Validate weights sum to 1.0 (now 5 weights)
         freq_weight = cleaned_data.get('frequency_weight', 0)
         amount_weight = cleaned_data.get('amount_weight', 0)
         org_weight = cleaned_data.get('organization_weight', 0)
+        direct_count_weight = cleaned_data.get('direct_assignment_count_weight', 0)
+        direct_pct_weight = cleaned_data.get('direct_assignment_percentage_weight', 0)
         
-        total = freq_weight + amount_weight + org_weight
+        total = freq_weight + amount_weight + org_weight + direct_count_weight + direct_pct_weight
         if not (0.99 <= total <= 1.01):
             raise forms.ValidationError(
-                f'Weights must sum to 1.0, got {total:.2f}. '
-                f'Adjust: Frequency={freq_weight}, Amount={amount_weight}, Organization={org_weight}'
+                f'Weights must sum to 1.0, got {total:.3f}. '
+                f'Frequency={freq_weight}, Amount={amount_weight}, Organization={org_weight}, '
+                f'DirectCount={direct_count_weight}, DirectPct={direct_pct_weight}'
             )
         
         return cleaned_data
@@ -145,19 +148,26 @@ class AFMScoringConfigAdmin(admin.ModelAdmin):
         ('Basic Info', {
             'fields': ('name', 'is_active', 'notes')
         }),
+        ('Normalization Strategy', {
+            'fields': ('normalization_strategy',),
+            'description': 'How to normalize features before weighting. ROBUST is recommended for data with outliers.'
+        }),
         ('Scoring Weights (must sum to 1.0)', {
             'fields': (
-                'frequency_weight',
-                'amount_weight',
-                'organization_weight',
+                ('frequency_weight', 'frequency_impact'),
+                ('amount_weight', 'amount_impact'),
+                ('organization_weight', 'organization_impact'),
+                ('direct_assignment_count_weight', 'direct_assignment_count_impact'),
+                ('direct_assignment_percentage_weight', 'direct_assignment_percentage_impact'),
             ),
-            'description': 'These weights determine how much each factor contributes to the total score.'
+            'description': 'Weights determine contribution to total score. Impact determines if higher values are better (POSITIVE) or worse (NEGATIVE).'
         }),
         ('Filtering Thresholds', {
             'fields': (
                 'min_appearances',
                 'min_total_amount',
                 'min_unique_organizations',
+                'min_direct_assignments',
             ),
             'description': 'Minimum requirements for an entity to be eligible for fetching.'
         }),
@@ -185,19 +195,28 @@ class AFMScoringConfigAdmin(admin.ModelAdmin):
     
     def weight_summary(self, obj):
         return format_html(
-            '<small>Freq: {} | Amt: {} | Org: {}</small>',
+            '<small style="line-height: 1.6;">'
+            'F:{} A:{} O:{}<br/>'
+            'DC:{} DP:{}'
+            '</small>',
             f'{obj.frequency_weight:.0%}',
             f'{obj.amount_weight:.0%}',
-            f'{obj.organization_weight:.0%}'
+            f'{obj.organization_weight:.0%}',
+            f'{obj.direct_assignment_count_weight:.0%}',
+            f'{obj.direct_assignment_percentage_weight:.0%}'
         )
-    weight_summary.short_description = 'Weights'
+    weight_summary.short_description = 'Weights (F/A/O/DC/DP)'
     
     def threshold_summary(self, obj):
         return format_html(
-            '<small>≥{} apps | ≥€{} | ≥{} orgs</small>',
+            '<small style="line-height: 1.6;">'
+            '≥{} apps | ≥€{}<br/>'
+            '≥{} orgs | ≥{} direct'
+            '</small>',
             obj.min_appearances,
             f'{obj.min_total_amount:,.0f}',
-            obj.min_unique_organizations
+            obj.min_unique_organizations,
+            obj.min_direct_assignments
         )
     threshold_summary.short_description = 'Thresholds'
     
@@ -221,6 +240,7 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
         'afm_link',
         'priority_badge',
         'total_score_bar',
+        'score_breakdown_display',
         'eligibility_badge',
         'metrics_summary',
         'gemi_status',
@@ -239,12 +259,17 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
         'frequency_score',
         'amount_score',
         'organization_score',
+        'direct_assignment_count_score',
+        'direct_assignment_percentage_score',
         'total_appearances',
         'total_amount',
         'unique_organizations',
+        'direct_assignment_count',
+        'direct_assignment_percentage',
         'is_eligible',
         'fetch_priority',
         'config_used',
+        'normalization_stats',
         'scored_at',
     ]
     
@@ -317,18 +342,34 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
         return format_html('<span style="color: #999;">✗ Ineligible</span>')
     eligibility_badge.short_description = 'Eligible'
     
+    def score_breakdown_display(self, obj):
+        """Show normalized scores for each component."""
+        return format_html(
+            '<small style="line-height: 1.4; font-family: monospace;">'
+            'F:{} A:{} O:{}<br/>'
+            'DC:{} DP:{}'
+            '</small>',
+            f'{obj.frequency_score:.2f}',
+            f'{obj.amount_score:.2f}',
+            f'{obj.organization_score:.2f}',
+            f'{obj.direct_assignment_count_score:.2f}',
+            f'{obj.direct_assignment_percentage_score:.2f}'
+        )
+    score_breakdown_display.short_description = 'Component Scores'
+    
     def metrics_summary(self, obj):
         return format_html(
-            '<small>'
-            '{} apps<br/>'
-            '€{}<br/>'
-            '{} orgs'
+            '<small style="line-height: 1.4;">'
+            '{} apps | €{}<br/>'
+            '{} orgs | {} direct ({}%)'
             '</small>',
             obj.total_appearances,
             f'{obj.total_amount:,.0f}',
-            obj.unique_organizations
+            obj.unique_organizations,
+            obj.direct_assignment_count,
+            f'{obj.direct_assignment_percentage:.0f}'
         )
-    metrics_summary.short_description = 'Metrics'
+    metrics_summary.short_description = 'Raw Metrics'
     
     def gemi_status(self, obj):
         entity = obj.entity

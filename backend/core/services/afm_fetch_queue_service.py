@@ -97,10 +97,10 @@ class AFMFetchQueueService:
         if force_refresh:
             self.clear_queue()
         
-        # Get eligible entities ordered by priority
+        # Get eligible entities ordered by score (highest first)
         queryset = AFMEntityScore.objects.filter(
             is_eligible=True
-        ).select_related('entity').order_by('fetch_priority')  # Lower rank = higher priority
+        ).select_related('entity').order_by('-total_score')  # Higher score = higher priority
         
         if limit:
             queryset = queryset[:limit]
@@ -123,10 +123,10 @@ class AFMFetchQueueService:
                 continue
             
             # Add to pending queue (score determines sort order)
-            # Use negative priority rank so highest priority (rank 1) sorts first
+            # Use score directly - higher scores processed first
             self.redis_client.zadd(
                 self.PENDING_KEY, 
-                {afm: -score.fetch_priority}  # Negative for descending order
+                {afm: float(score.total_score)}  # Higher score = higher priority
             )
             added += 1
         
@@ -189,7 +189,6 @@ class AFMFetchQueueService:
             
             # Get top batch_size AFMs from pending queue
             # ZPOPMAX returns items in descending order (highest score first)
-            # Since we used negative priority ranks, this gives us priority 1, 2, 3...
             batch_afms = []
             for _ in range(batch_size):
                 result = self.redis_client.zpopmax(self.PENDING_KEY, 1)
@@ -290,9 +289,8 @@ class AFMFetchQueueService:
         for afm, score in pending_afms:
             if isinstance(afm, bytes):
                 afm = afm.decode('utf-8')
-            # Convert back to positive priority rank
-            priority = int(-score)
-            top_pending.append({'afm': afm, 'priority_rank': priority})
+            # score is the total_score value
+            top_pending.append({'afm': afm, 'score': float(score)})
         
         # Get recent stats
         stats_hash = self.redis_client.hgetall(self.STATS_KEY)
@@ -367,10 +365,10 @@ class AFMFetchQueueService:
                 entity = AFMEntity.objects.get(afm=afm)
                 score = AFMEntityScore.objects.get(entity=entity)
                 
-                # Add back to pending with original priority
+                # Add back to pending with original score
                 self.redis_client.zadd(
                     self.PENDING_KEY,
-                    {afm: -score.fetch_priority}
+                    {afm: float(score.total_score)}
                 )
                 
                 # Remove from failed
@@ -397,13 +395,14 @@ class AFMFetchQueueService:
         if kwargs:
             self.redis_client.hset(self.STATS_KEY, mapping=kwargs)
     
-    def add_single_afm(self, afm: str, priority: Optional[int] = None) -> bool:
+    def add_single_afm(self, afm: str, priority_score: Optional[float] = None, jump_queue: bool = False) -> bool:
         """
         Manually add a single AFM to the queue.
         
         Args:
             afm: AFM to add
-            priority: Optional priority rank (defaults to entity's score rank)
+            priority_score: Optional score value (defaults to entity's total_score)
+            jump_queue: If True, assign maximum score to process first
             
         Returns:
             True if added, False if already queued/processed
@@ -418,21 +417,24 @@ class AFMFetchQueueService:
             logger.info(f"AFM {afm} already in pending queue")
             return False
         
-        # Get priority from score if not provided
-        if priority is None:
+        # Determine priority score
+        if jump_queue:
+            # Use a very high score to ensure it's processed first
+            priority_score = 999999.0
+        elif priority_score is None:
             try:
                 entity = AFMEntity.objects.get(afm=afm)
                 score = AFMEntityScore.objects.get(entity=entity)
-                priority = score.fetch_priority
+                priority_score = float(score.total_score)
             except (AFMEntity.DoesNotExist, AFMEntityScore.DoesNotExist):
                 logger.warning(f"No score for {afm}, using default priority")
-                priority = 99999  # Low priority
+                priority_score = 1.0  # Low priority
         
         # Add to queue
         self.redis_client.zadd(
             self.PENDING_KEY,
-            {afm: -priority}  # Negative for descending order
+            {afm: priority_score}
         )
         
-        logger.info(f"Added {afm} to queue with priority {priority}")
+        logger.info(f"Added {afm} to queue with score {priority_score}" + (" (PRIORITY JUMP)" if jump_queue else ""))
         return True

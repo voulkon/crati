@@ -478,42 +478,143 @@
         </div>
     </div>
 
-    <!-- Top Unfetched Entities -->
-    <div class="data-table">
-        <h2>Top Priority Unfetched Entities</h2>
+    <!-- Currently Processing (Active) -->
+    {% if active_processing %}
+    <div class="data-table" style="border-left: 4px solid #007bff;">
+        <h2>⚡ Currently Being Processed ({{ queue_status.active }} active)</h2>
         <table>
             <thead>
                 <tr>
-                    <th>Priority</th>
                     <th>AFM</th>
                     <th>Name</th>
                     <th>Score</th>
                     <th>Appearances</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for score in active_processing %}
+                <tr style="background: #e3f2fd;">
+                    <td><strong>{{ score.entity.afm }}</strong></td>
+                    <td>{{ score.entity.name|default:"—"|truncatewords:8 }}</td>
+                    <td><strong>{{ score.total_score|floatformat:1 }}</strong></td>
+                    <td>{{ score.total_appearances }}</td>
+                    <td><span class="status-badge status-processing">Fetching from GEMI...</span></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div style="padding: 15px; background: var(--darkened-bg); text-align: center;">
+            <small style="color: var(--body-quiet-color);">
+                These entities are currently being fetched. They will move to "Successfully Fetched" or "Failed" when complete.
+            </small>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Current Queue Contents (Redis) -->
+    {% if queue_contents %}
+    <div class="data-table" style="border-left: 4px solid var(--primary);">
+        <h2>Current Queue Contents ({{ queue_status.pending }} in Redis)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Position</th>
+                    <th>AFM</th>
+                    <th>Name</th>
+                    <th>Queue Score</th>
+                    <th>Appearances</th>
                     <th>Total Amount</th>
                     <th>Orgs</th>
+                    <th>Direct Assign</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for score in queue_contents %}
+                <tr>
+                    <td><span class="priority-badge priority-top10">#{{ forloop.counter }}</span></td>
+                    <td><strong>{{ score.entity.afm }}</strong></td>
+                    <td>{{ score.entity.name|default:"—"|truncatewords:8 }}</td>
+                    <td><strong>{{ score.redis_score|floatformat:1 }}</strong></td>
+                    <td>{{ score.total_appearances }}</td>
+                    <td>€{{ score.total_amount|floatformat:0 }}</td>
+                    <td>{{ score.unique_organizations }}</td>
+                    <td>
+                        <small>
+                            {{ score.direct_assignment_count }} ({{ score.direct_assignment_percentage|floatformat:0 }}%)
+                        </small>
+                    </td>
+                    <td style="white-space: nowrap;">
+                        <form method="POST" action="{% url 'admin:afm_boost_priority' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="afm" value="{{ score.entity.afm }}">
+                            <button type="submit" class="button" style="font-size: 11px; padding: 3px 8px; background: #ffc107; color: #333;" 
+                                    title="Move to front of queue">
+                                Boost
+                            </button>
+                        </form>
+                        <form method="POST" action="{% url 'admin:afm_remove_from_queue' %}" style="display: inline;" 
+                              onsubmit="return confirm('Remove {{ score.entity.afm }} from queue?');">
+                            {% csrf_token %}
+                            <input type="hidden" name="afm" value="{{ score.entity.afm }}">
+                            <button type="submit" class="button" style="font-size: 11px; padding: 3px 8px; background: #dc3545; color: white;" 
+                                    title="Remove from queue">
+                                Remove
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div style="padding: 15px; background: var(--darkened-bg); text-align: center;">
+            <small style="color: var(--body-quiet-color);">
+                These {{ queue_contents|length }} entities are currently in the Redis queue and will be processed in this order.
+                Click "Process Batch" above to start fetching them.
+            </small>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Top Unfetched Entities -->
+    <div class="data-table">
+        <h2>
+            All Eligible Entities ({{ eligible_count }} total)
+            <span style="float: right; font-size: 14px; font-weight: normal;">
+                <input type="text" id="searchInput" placeholder="Search by AFM or Name..." 
+                       style="padding: 6px 10px; border: 1px solid var(--border-color, #ccc); border-radius: 4px; width: 300px;">
+            </span>
+        </h2>
+        <table id="unfetchedTable">
+            <thead>
+                <tr>
+                    <th>Score</th>
+                    <th>AFM</th>
+                    <th>Name</th>
+                    <th>Appearances</th>
+                    <th>Total Amount</th>
+                    <th>Orgs</th>
+                    <th>Direct Assign</th>
                     <th>GEMI Status</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for score in top_unfetched %}
                 <tr>
-                    <td>
-                        {% if score.fetch_priority <= 10 %}
-                            <span class="priority-badge priority-top10">#{{ score.fetch_priority }}</span>
-                        {% elif score.fetch_priority <= 50 %}
-                            <span class="priority-badge priority-top50">#{{ score.fetch_priority }}</span>
-                        {% elif score.fetch_priority <= 100 %}
-                            <span class="priority-badge priority-top100">#{{ score.fetch_priority }}</span>
-                        {% else %}
-                            <span class="priority-badge priority-other">#{{ score.fetch_priority }}</span>
-                        {% endif %}
-                    </td>
-                    <td><strong>{{ score.entity.afm }}</strong></td>
-                    <td>{{ score.entity.name|default:"—"|truncatewords:8 }}</td>
                     <td><strong>{{ score.total_score|floatformat:1 }}</strong></td>
+                    <td><strong class="afm-cell">{{ score.entity.afm }}</strong></td>
+                    <td class="name-cell">{{ score.entity.name|default:"—"|truncatewords:8 }}</td>
                     <td>{{ score.total_appearances }}</td>
                     <td>€{{ score.total_amount|floatformat:0 }}</td>
                     <td>{{ score.unique_organizations }}</td>
+                    <td>
+                        <small>
+                            {{ score.direct_assignment_count }} assignments<br/>
+                            ({{ score.direct_assignment_percentage|floatformat:0 }}% of total)
+                        </small>
+                    </td>
                     <td>
                         {% if score.entity.gemi_lookup_attempted %}
                             <span class="status-badge status-failed">⚠ Failed ({{ score.entity.error_count }}x)</span>
@@ -521,10 +622,24 @@
                             <span class="status-badge status-pending">Not attempted</span>
                         {% endif %}
                     </td>
+                    <td>
+                        <form method="POST" action="{% url 'admin:afm_add_to_queue' %}" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="afm" value="{{ score.entity.afm }}">
+                            <button type="submit" class="button" style="font-size: 11px; padding: 3px 8px;" 
+                                    title="Add to queue with normal priority">
+                                Add
+                            </button>
+                            <label style="font-size: 11px; margin-left: 5px;">
+                                <input type="checkbox" name="jump_queue" style="vertical-align: middle;">
+                                Priority
+                            </label>
+                        </form>
+                    </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="8" style="text-align: center; color: #6c757d;">
+                    <td colspan="9" style="text-align: center; color: #6c757d;">
                         No eligible unfetched entities. Run scoring first!
                     </td>
                 </tr>
@@ -532,6 +647,32 @@
             </tbody>
         </table>
     </div>
+    
+    <script>
+    // Search functionality for the table
+    document.getElementById('searchInput').addEventListener('keyup', function() {
+        const searchTerm = this.value.toLowerCase();
+        const table = document.getElementById('unfetchedTable');
+        const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+        
+        for (let i = 0; i < rows.length; i++) {
+            const afmCell = rows[i].querySelector('.afm-cell');
+            const nameCell = rows[i].querySelector('.name-cell');
+            
+            if (afmCell && nameCell) {
+                const afmText = afmCell.textContent || afmCell.innerText;
+                const nameText = nameCell.textContent || nameCell.innerText;
+                
+                if (afmText.toLowerCase().indexOf(searchTerm) > -1 || 
+                    nameText.toLowerCase().indexOf(searchTerm) > -1) {
+                    rows[i].style.display = '';
+                } else {
+                    rows[i].style.display = 'none';
+                }
+            }
+        }
+    });
+    </script>
 
     <!-- Recently Fetched -->
     <div class="data-table">

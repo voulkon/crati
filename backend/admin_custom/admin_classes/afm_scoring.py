@@ -397,6 +397,9 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
             path('cockpit/score/', self.admin_site.admin_view(self.run_scoring_view), name='afm_run_scoring'),
             path('cockpit/populate/', self.admin_site.admin_view(self.populate_queue_view), name='afm_populate_queue'),
             path('cockpit/process/', self.admin_site.admin_view(self.process_batch_view), name='afm_process_batch'),
+            path('cockpit/add-to-queue/', self.admin_site.admin_view(self.add_to_queue_view), name='afm_add_to_queue'),
+            path('cockpit/remove-from-queue/', self.admin_site.admin_view(self.remove_from_queue_view), name='afm_remove_from_queue'),
+            path('cockpit/boost-priority/', self.admin_site.admin_view(self.boost_priority_view), name='afm_boost_priority'),
             path('cockpit/status/', self.admin_site.admin_view(self.queue_status_api), name='afm_queue_status_api'),
         ]
         return custom_urls + urls
@@ -421,11 +424,41 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
             status='completed'
         ).select_related('config', 'created_by').order_by('-completed_at')[:5]
         
-        # Get top entities
+        # Get top entities (from database - all eligible)
         top_unfetched = AFMEntityScore.objects.filter(
             is_eligible=True,
             entity__gemi_lookup_success=False
-        ).select_related('entity').order_by('fetch_priority')[:20]
+        ).select_related('entity').order_by('-total_score')[:20]  # Highest scores first
+        
+        # Get current queue contents (from Redis)
+        queue_contents = []
+        if queue_status.get('top_pending'):
+            afms_in_queue = [item['afm'] for item in queue_status['top_pending']]
+            queue_scores = AFMEntityScore.objects.filter(
+                entity__afm__in=afms_in_queue
+            ).select_related('entity')
+            
+            # Create a dict for quick lookup
+            score_dict = {score.entity.afm: score for score in queue_scores}
+            
+            # Maintain Redis queue order
+            for item in queue_status['top_pending']:
+                if item['afm'] in score_dict:
+                    score_obj = score_dict[item['afm']]
+                    score_obj.redis_score = item['score']  # Add Redis score for display
+                    queue_contents.append(score_obj)
+        
+        # Get currently processing AFMs (from ACTIVE set in Redis)
+        active_processing = []
+        if queue_status.get('active', 0) > 0:
+            active_afms = queue_service.redis_client.smembers(queue_service.ACTIVE_KEY)
+            active_afm_list = [afm.decode('utf-8') if isinstance(afm, bytes) else afm for afm in active_afms]
+            
+            if active_afm_list:
+                active_scores = AFMEntityScore.objects.filter(
+                    entity__afm__in=active_afm_list
+                ).select_related('entity')
+                active_processing = list(active_scores)
         
         # Get recently fetched
         recently_fetched = AFMEntity.objects.filter(
@@ -447,6 +480,8 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
             'active_job': active_job,
             'recent_jobs': recent_jobs,
             'top_unfetched': top_unfetched,
+            'queue_contents': queue_contents,
+            'active_processing': active_processing,
             'recently_fetched': recently_fetched,
             'total_entities': total_entities,
             'total_scored': total_scored,
@@ -560,6 +595,96 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
                 
             except Exception as e:
                 messages.error(request, f"Batch processing failed: {str(e)}")
+        
+        return redirect('admin:afm_cockpit')
+    
+    def add_to_queue_view(self, request):
+        """Add a single AFM to the queue (with optional priority jump)."""
+        if request.method == 'POST':
+            try:
+                afm = request.POST.get('afm')
+                jump_queue = request.POST.get('jump_queue') == 'on'
+                
+                if not afm:
+                    messages.error(request, "AFM is required")
+                    return redirect('admin:afm_cockpit')
+                
+                queue_service = AFMFetchQueueService()
+                added = queue_service.add_single_afm(afm=afm, jump_queue=jump_queue)
+                
+                if added:
+                    if jump_queue:
+                        messages.success(
+                            request,
+                            f"AFM {afm} added to queue with PRIORITY (will be processed first)!"
+                        )
+                    else:
+                        messages.success(
+                            request,
+                            f"AFM {afm} added to queue!"
+                        )
+                else:
+                    messages.warning(
+                        request,
+                        f"AFM {afm} is already in queue or has been processed"
+                    )
+                
+            except Exception as e:
+                messages.error(request, f"Failed to add AFM: {str(e)}")
+        
+        return redirect('admin:afm_cockpit')
+    
+    def remove_from_queue_view(self, request):
+        """Remove an AFM from the queue."""
+        if request.method == 'POST':
+            try:
+                afm = request.POST.get('afm')
+                
+                if not afm:
+                    messages.error(request, "AFM is required")
+                    return redirect('admin:afm_cockpit')
+                
+                queue_service = AFMFetchQueueService()
+                removed = queue_service.redis_client.zrem(queue_service.PENDING_KEY, afm)
+                
+                if removed:
+                    messages.success(request, f"AFM {afm} removed from queue")
+                else:
+                    messages.warning(request, f"AFM {afm} was not in queue")
+                
+            except Exception as e:
+                messages.error(request, f"Failed to remove AFM: {str(e)}")
+        
+        return redirect('admin:afm_cockpit')
+    
+    def boost_priority_view(self, request):
+        """Boost an AFM's priority to process it sooner."""
+        if request.method == 'POST':
+            try:
+                afm = request.POST.get('afm')
+                
+                if not afm:
+                    messages.error(request, "AFM is required")
+                    return redirect('admin:afm_cockpit')
+                
+                queue_service = AFMFetchQueueService()
+                
+                # Get current score
+                current_score = queue_service.redis_client.zscore(queue_service.PENDING_KEY, afm)
+                
+                if current_score is None:
+                    messages.warning(request, f"AFM {afm} is not in queue")
+                else:
+                    # Boost score significantly to move it to front
+                    new_score = 999999.0
+                    queue_service.redis_client.zadd(queue_service.PENDING_KEY, {afm: new_score})
+                    messages.success(
+                        request,
+                        f"AFM {afm} priority boosted! Moved to front of queue (score: {current_score:.1f} → {new_score:.0f})"
+                    )
+                
+            except Exception as e:
+                messages.error(request, f"Failed to boost priority: {str(e)}")
         
         return redirect('admin:afm_cockpit')
     

@@ -458,21 +458,21 @@
                 </small>
             </div>
 
-            <!-- Process Batch -->
+            <!-- Process Queue -->
             <div class="control-action">
-                <h3>3. Process Batch</h3>
-                <p>Fetch company data for a batch of entities (respects GEMI rate limits).</p>
+                <h3>3. Process Queue (Worker)</h3>
+                <p>Start background worker to process the entire queue (respects GEMI rate limits).</p>
                 <form method="POST" action="{% url 'admin:afm_process_batch' %}">
                     {% csrf_token %}
-                    <label for="batch_size">Batch size:</label>
-                    <input type="number" id="batch_size" name="batch_size" value="50" min="1" max="200">
+                    <input type="hidden" name="max_items" value="">
                     
                     <button type="submit" class="button" {% if queue_status.pending == 0 %}disabled title="Populate queue first"{% endif %}>
-                        Process Batch
+                        🚀 Start Processing
                     </button>
                 </form>
                 <small style="color: var(--body-quiet-color); display: block; margin-top: 8px;">
-                    Rate limit: 6 requests/minute | ~8-10 min per batch of 50
+                    Processes all {{ queue_status.pending|default:0 }} pending items via Celery worker<br/>
+                    Rate limit: 6 req/min (~10 sec per entity)
                 </small>
             </div>
         </div>

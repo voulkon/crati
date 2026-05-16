@@ -572,29 +572,35 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
         return redirect('admin:afm_cockpit')
     
     def process_batch_view(self, request):
-        """Process a batch from the queue."""
+        """Dispatch Celery task to process the queue."""
         if request.method == 'POST':
             try:
-                batch_size = int(request.POST.get('batch_size', 50))
+                from core.tasks.tasks_entities import process_afm_fetch_queue
                 
+                # Get optional limit (None = process entire queue)
+                max_items = request.POST.get('max_items')
+                max_items = int(max_items) if max_items else None
+                
+                # Check queue status
                 queue_service = AFMFetchQueueService()
-                stats = queue_service.process_batch(batch_size=batch_size)
+                pending = queue_service.get_pending_count()
                 
-                if stats.get('status') == 'locked':
-                    messages.warning(request, stats['message'])
-                elif stats.get('status') == 'empty_queue':
-                    messages.info(request, "Queue is empty")
-                else:
-                    messages.success(
-                        request,
-                        f"Batch processed! "
-                        f"Successful: {stats['successful']}, "
-                        f"Failed: {stats['failed']}, "
-                        f"Not found: {stats['not_found']}"
-                    )
+                if pending == 0:
+                    messages.info(request, "Queue is empty - nothing to process")
+                    return redirect('admin:afm_cockpit')
+                
+                # Dispatch Celery task (non-blocking)
+                task = process_afm_fetch_queue.delay(max_items=max_items)
+                
+                items_msg = f"{max_items} items" if max_items else "all items"
+                messages.success(
+                    request,
+                    f"✅ Queue processing started in background! Processing {items_msg} from {pending} pending. "
+                    f"Task ID: {task.id[:8]}... (This will take time due to rate limiting)"
+                )
                 
             except Exception as e:
-                messages.error(request, f"Batch processing failed: {str(e)}")
+                messages.error(request, f"Failed to start queue processing: {str(e)}")
         
         return redirect('admin:afm_cockpit')
     

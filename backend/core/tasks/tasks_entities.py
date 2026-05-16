@@ -199,3 +199,54 @@ def process_entities_needing_company_data(limit: int = 50):
     except Exception as e:
         logger.error(f"Error in periodic company data fetch: {e}")
         raise
+
+
+@shared_task(bind=True, max_retries=3)
+def process_afm_fetch_queue(self, max_items: int = None):
+    """
+    Celery task to process the AFM fetch queue.
+    
+    Processes all pending items in the priority queue, respecting GEMI rate limits.
+    Rate limiting is handled by the service itself (6 req/min).
+    
+    Args:
+        max_items: Optional limit on items to process (None = process entire queue)
+        
+    Returns:
+        Processing statistics
+    """
+    from core.services.afm_fetch_queue_service import AFMFetchQueueService
+    
+    task_id = self.request.id if hasattr(self, 'request') else 'sync'
+    
+    with logger.contextualize(
+        task_id=task_id,
+        task_name="process_afm_fetch_queue",
+        max_items=max_items
+    ):
+        try:
+            queue_service = AFMFetchQueueService()
+            
+            # Get pending count
+            pending_count = queue_service.get_pending_count()
+            
+            if pending_count == 0:
+                logger.info("Queue is empty, nothing to process")
+                return {'status': 'empty_queue', 'pending': 0}
+            
+            # Determine batch size (process all or limited)
+            items_to_process = min(pending_count, max_items) if max_items else pending_count
+            
+            logger.info(
+                f"Starting queue processing: {items_to_process} items from {pending_count} pending"
+            )
+            
+            # Process batch (rate limiting is handled by GemiService)
+            stats = queue_service.process_batch(batch_size=items_to_process)
+            
+            logger.info(f"Queue processing completed", extra=stats)
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Error in queue processing task: {e}")
+            raise self.retry(countdown=300)  # Retry after 5 minutes

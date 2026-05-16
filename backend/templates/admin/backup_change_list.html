@@ -2,23 +2,28 @@
 
 {% block object-tools-items %}
     <li>
-        <a href="trigger-postgres/" class="addlink" style="background-color: #4CAF50;">
-            🔄 Create PostgreSQL Backup
+        <a href="trigger-postgres/?streaming=true" class="addlink" style="background-color: #4CAF50;">
+            Create PostgreSQL Backup (Streaming)
+        </a>
+    </li>
+    <li>
+        <a href="trigger-postgres/?streaming=false" class="addlink" style="background-color: #66BB6A;">
+            Create PostgreSQL Backup (File-based)
         </a>
     </li>
     <li>
         <a href="trigger-opensearch/" class="addlink" style="background-color: #2196F3;">
-            🔄 Create OpenSearch Backup
+            Create OpenSearch Backup
         </a>
     </li>
     <li>
         <a href="browse-s3/" class="viewlink">
-            📁 Browse S3 Backups
+            Browse S3 Backups
         </a>
     </li>
     <li>
         <a href="stats/" class="viewlink">
-            📊 View Database Stats
+            View Database Stats
         </a>
     </li>
     {{ block.super }}

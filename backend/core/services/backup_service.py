@@ -133,7 +133,13 @@ class BackupService:
             else:
                 logger.warning(f"⚠️ Could not verify bucket: {e}. Will attempt backup anyway.")
 
-    def create_postgres_backup(self, backup_id):
+    def create_postgres_backup(self, backup_id, use_streaming=False):
+        """Create PostgreSQL backup.
+        
+        Args:
+            backup_id: The ID of the Backup model instance
+            use_streaming: If True, stream directly to S3 without saving to disk (recommended for low disk space)
+        """
         backup = Backup.objects.get(id=backup_id)
         backup.status = Backup.Status.IN_PROGRESS
         backup.logs += "Starting PostgreSQL backup...\n"
@@ -143,7 +149,6 @@ class BackupService:
         try:
             timestamp = timezone.now().strftime('%Y%m%d_%H%M%S')
             filename = f"postgres_backup_{timestamp}.dump"
-            local_path = f"/tmp/{filename}"
             s3_key = f"backups/postgres/{filename}"
 
             # PG Dump
@@ -159,38 +164,98 @@ class BackupService:
                 '-U', db_settings['USER'],
                 '-d', db_settings['NAME'],
                 '-F', 'c', # Custom format
-                '-f', local_path
             ]
             
-            logger.info(f"Starting pg_dump to {local_path}")
-            backup.logs += f"Running pg_dump to {local_path}...\n"
-            backup.save()
-            
-            result = subprocess.run(cmd, env=env, check=True, capture_output=True, text=True)
-            
-            if result.stderr:
-                backup.logs += f"pg_dump warnings: {result.stderr}\n"
+            if use_streaming:
+                # STREAMING METHOD: Pipe directly to S3 without saving to disk
+                logger.info(f"Starting streaming pg_dump to S3: {s3_key}")
+                backup.logs += f"Starting streaming pg_dump to S3 (no local disk usage)...\n"
+                backup.save()
+                
+                import sys
+                from io import BytesIO
+                
+                # Run pg_dump and capture stdout
+                process = subprocess.Popen(
+                    cmd,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                
+                # Stream to S3 using upload_fileobj
+                # We need to wrap the PIPE in a file-like object
+                try:
+                    self.s3_client.upload_fileobj(
+                        process.stdout,
+                        self.bucket_name,
+                        s3_key,
+                        Callback=lambda bytes_transferred: None  # Could add progress tracking here
+                    )
+                    
+                    # Wait for process to complete and check for errors
+                    _, stderr = process.communicate()
+                    
+                    if process.returncode != 0:
+                        error_msg = f"pg_dump failed with exit code {process.returncode}"
+                        if stderr:
+                            error_msg += f": {stderr.decode('utf-8', errors='replace')}"
+                        raise subprocess.CalledProcessError(process.returncode, cmd, stderr=stderr)
+                    
+                    if stderr:
+                        backup.logs += f"pg_dump warnings: {stderr.decode('utf-8', errors='replace')}\n"
+                        backup.save()
+                    
+                    # Get file size from S3
+                    response = self.s3_client.head_object(Bucket=self.bucket_name, Key=s3_key)
+                    file_size = response['ContentLength']
+                    
+                    backup.s3_key = s3_key
+                    backup.size_bytes = file_size
+                    backup.status = Backup.Status.SUCCESS
+                    backup.logs += f"✅ Streaming backup successful! Size: {file_size} bytes\n"
+                    backup.save()
+                    
+                    logger.info(f"✅ PostgreSQL streaming backup {backup_id} completed successfully")
+                    
+                except Exception as e:
+                    # Kill the process if upload fails
+                    process.kill()
+                    raise
+            else:
+                # TRADITIONAL METHOD: Save to /tmp then upload
+                local_path = f"/tmp/{filename}"
+                cmd.extend(['-f', local_path])
+                
+                logger.info(f"Starting pg_dump to {local_path}")
+                backup.logs += f"Running pg_dump to {local_path}...\n"
+                backup.save()
+                
+                result = subprocess.run(cmd, env=env, check=True, capture_output=True, text=True)
+                
+                if result.stderr:
+                    backup.logs += f"pg_dump warnings: {result.stderr}\n"
+                    backup.save()
+
+                file_size = os.path.getsize(local_path)
+                backup.logs += f"✅ Dump completed. Size: {file_size} bytes\n"
                 backup.save()
 
-            file_size = os.path.getsize(local_path)
-            backup.logs += f"✅ Dump completed. Size: {file_size} bytes\n"
-            backup.save()
-
-            # Upload to S3
-            logger.info(f"Uploading to S3: {s3_key}")
-            backup.logs += f"Uploading to S3: s3://{self.bucket_name}/{s3_key}...\n"
-            backup.save()
-            
-            self.s3_client.upload_file(local_path, self.bucket_name, s3_key)
-            
-            # Update backup record
-            backup.s3_key = s3_key
-            backup.size_bytes = file_size
-            backup.status = Backup.Status.SUCCESS
-            backup.logs += f"✅ Backup successful! Uploaded to S3.\n"
-            backup.save()
-            
-            logger.info(f"✅ PostgreSQL backup {backup_id} completed successfully")
+                # Upload to S3
+                logger.info(f"Uploading to S3: {s3_key}")
+                backup.logs += f"Uploading to S3: s3://{self.bucket_name}/{s3_key}...\n"
+                backup.save()
+                
+                self.s3_client.upload_file(local_path, self.bucket_name, s3_key)
+                
+                # Update backup record
+                backup.s3_key = s3_key
+                backup.size_bytes = file_size
+                backup.status = Backup.Status.SUCCESS
+                backup.logs += f"✅ Backup successful! Uploaded to S3.\n"
+                backup.save()
+                
+                logger.info(f"✅ PostgreSQL backup {backup_id} completed successfully")
 
         except subprocess.CalledProcessError as e:
             error_msg = f"pg_dump failed with exit code {e.returncode}"

@@ -10,8 +10,8 @@ from core.tasks import create_backup_task, restore_backup_task
 from core.services.database_stats_service import DatabaseStatsService
 
 class BackupAdmin(admin.ModelAdmin):
-    list_display = ('id', 'backup_type', 'created_at', 'status_badge', 'size_display', 's3_location')
-    list_filter = ('backup_type', 'status', 'created_at')
+    list_display = ('id', 'backup_type', 'created_at', 'status_badge', 'size_display', 's3_location', 'streaming_method')
+    list_filter = ('backup_type', 'status', 'created_at', 'use_streaming')
     readonly_fields = ('status', 's3_key', 'size_bytes', 'logs_display', 'snapshot_name', 'created_at', 'updated_at', 's3_full_path')
     actions = ['restore_backup']
     change_list_template = "admin/backup_change_list.html"
@@ -49,6 +49,16 @@ class BackupAdmin(admin.ModelAdmin):
             return format_html('<code style="font-size: 11px;">{}</code>', obj.snapshot_name)
         return '-'
     s3_location.short_description = 'S3/Snapshot Name'
+    
+    def streaming_method(self, obj):
+        if obj.backup_type == Backup.BackupType.POSTGRES:
+            return format_html(
+                '<span style="background-color: {}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">{}</span>',
+                '#2196F3' if obj.use_streaming else '#FF9800',
+                'Streaming' if obj.use_streaming else 'File-based'
+            )
+        return '-'
+    streaming_method.short_description = 'Method'
     
     def s3_full_path(self, obj):
         from django.conf import settings
@@ -114,12 +124,15 @@ class BackupAdmin(admin.ModelAdmin):
             super().save_model(request, obj, form, change)
 
     def trigger_postgres_backup(self, request):
+        use_streaming = request.GET.get('streaming', 'true').lower() == 'true'
         backup = Backup.objects.create(
             backup_type=Backup.BackupType.POSTGRES,
-            status=Backup.Status.PENDING
+            status=Backup.Status.PENDING,
+            use_streaming=use_streaming
         )
         create_backup_task.delay(backup.id)
-        self.message_user(request, f"PostgreSQL backup #{backup.id} started. Monitor progress in the backup list.", messages.SUCCESS)
+        method = "streaming" if use_streaming else "file-based"
+        self.message_user(request, f"PostgreSQL backup #{backup.id} started ({method}). Monitor progress in the backup list.", messages.SUCCESS)
         return redirect('admin:core_backup_changelist')
     
     def trigger_opensearch_backup(self, request):

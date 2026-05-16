@@ -22,6 +22,9 @@ class Backup(models.Model):
     
     # For OpenSearch snapshots
     snapshot_name = models.CharField(max_length=255, blank=True, null=True)
+    
+    # For PostgreSQL backups - streaming vs file-based
+    use_streaming = models.BooleanField(default=True, help_text=_('Use streaming backup to avoid disk space issues'))
 
     class Meta:
         ordering = ['-created_at']

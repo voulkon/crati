@@ -23,28 +23,29 @@ def create_backup_task(self, backup_id):
             service = BackupService()
         except ValueError as e:
             # Credential or configuration error - update backup status
-            logger.error(f"❌ Failed to initialize BackupService: {e}")
+            logger.error(f"Failed to initialize BackupService: {e}")
             backup.status = Backup.Status.FAILED
-            backup.logs += f"❌ Configuration Error: {str(e)}\n"
+            backup.logs += f"Configuration Error: {str(e)}\n"
             backup.save()
             raise
         
         if backup.backup_type == Backup.BackupType.POSTGRES:
             logger.info(f"Starting PostgreSQL backup {backup_id}")
-            service.create_postgres_backup(backup_id)
+            # Use streaming setting from the backup instance
+            service.create_postgres_backup(backup_id, use_streaming=backup.use_streaming)
         elif backup.backup_type == Backup.BackupType.OPENSEARCH:
             logger.info(f"Starting OpenSearch backup {backup_id}")
             service.create_opensearch_snapshot(backup_id)
         else:
             raise ValueError(f"Unknown backup type: {backup.backup_type}")
             
-        logger.info(f"✅ Backup {backup_id} completed successfully")
+        logger.info(f"Backup {backup_id} completed successfully")
         
     except Backup.DoesNotExist:
-        logger.error(f"❌ Backup {backup_id} does not exist")
+        logger.error(f"Backup {backup_id} does not exist")
         raise
     except Exception as e:
-        logger.error(f"❌ Backup task {backup_id} failed: {e}")
+        logger.error(f"Backup task {backup_id} failed: {e}")
         # Exception is already logged in the Backup model by the service
         # Re-raise to mark Celery task as failed
         raise
@@ -84,14 +85,14 @@ def restore_backup_task(self, backup_id):
         backup.save()
         
         if not success:
-            logger.error(f"❌ Restore {backup_id} failed: {message}")
+            logger.error(f"Restore {backup_id} failed: {message}")
             raise Exception(f"Restore failed: {message}")
         else:
-            logger.info(f"✅ Restore {backup_id} completed successfully")
+            logger.info(f"Restore {backup_id} completed successfully")
             
     except Backup.DoesNotExist:
-        logger.error(f"❌ Backup {backup_id} does not exist")
+        logger.error(f"Backup {backup_id} does not exist")
         raise
     except Exception as e:
-        logger.error(f"❌ Restore task {backup_id} failed: {e}")
+        logger.error(f"Restore task {backup_id} failed: {e}")
         raise

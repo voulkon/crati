@@ -232,26 +232,38 @@ class AFMEntityScoringService:
         logger.info(f"Scoring {total_entities} entities")
         
         # Compute global statistics for normalization
+        logger.info("Computing global statistics...")
         global_stats = self._compute_global_statistics()
+        
+        # Pre-compute ALL entity metrics in bulk (this is the key optimization)
+        logger.info("Pre-computing entity metrics in bulk...")
+        all_metrics = self._compute_all_metrics_bulk()
+        logger.info(f"Pre-computed metrics for {len(all_metrics)} entities")
         
         scored_count = 0
         eligible_count = 0
         
         # Process in batches
-        for offset in range(0, total_entities, batch_size):
-            batch = queryset[offset:offset + batch_size]
+        entity_ids = list(queryset.values_list('id', flat=True))
+        
+        for i in range(0, len(entity_ids), batch_size):
+            batch_ids = entity_ids[i:i + batch_size]
+            batch_entities = {e.id: e for e in AFMEntity.objects.filter(id__in=batch_ids)}
             
             with transaction.atomic():
-                for entity in batch:
-                    score_data = self.score_entity(entity, global_stats)
+                for entity_id in batch_ids:
+                    entity = batch_entities[entity_id]
+                    metrics = all_metrics.get(entity_id, self._get_empty_metrics())
+                    score_data = self.score_entity(entity, global_stats, metrics)
                     if score_data['is_eligible']:
                         eligible_count += 1
                     scored_count += 1
             
-            if scored_count % 1000 == 0:
+            if scored_count % 10000 == 0:
                 logger.info(f"Scored {scored_count}/{total_entities} entities")
         
         # Assign priority ranks (1 = highest priority)
+        logger.info("Assigning priority ranks...")
         self._assign_priority_ranks()
         
         stats = {
@@ -268,7 +280,8 @@ class AFMEntityScoringService:
     def score_entity(
         self, 
         entity: AFMEntity,
-        global_stats: Optional[Dict[str, Any]] = None
+        global_stats: Optional[Dict[str, Any]] = None,
+        metrics: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Calculate score for a single AFM entity using configured normalization and weights.
@@ -276,6 +289,7 @@ class AFMEntityScoringService:
         Args:
             entity: AFMEntity to score
             global_stats: Pre-computed global statistics (for normalization)
+            metrics: Pre-computed entity metrics (avoids database query)
             
         Returns:
             Dictionary with score components and metadata
@@ -284,7 +298,8 @@ class AFMEntityScoringService:
             global_stats = self._compute_global_statistics()
         
         # Gather raw metrics for this entity
-        metrics = self._gather_entity_metrics(entity)
+        if metrics is None:
+            metrics = self._gather_entity_metrics(entity)
         
         # Check eligibility (minimum thresholds)
         is_eligible = self._check_eligibility(entity, metrics)
@@ -378,8 +393,85 @@ class AFMEntityScoringService:
             'created': created,
         }
     
+    def _get_empty_metrics(self) -> Dict[str, Any]:
+        """Return empty metrics dict for entities with no data."""
+        return {
+            'appearances': 0,
+            'unique_orgs': 0,
+            'total_amount': Decimal('0.00'),
+            'direct_assignment_count': 0,
+            'direct_assignment_percentage': 0.0,
+        }
+    
+    def _compute_all_metrics_bulk(self) -> Dict[int, Dict[str, Any]]:
+        """
+        Compute metrics for ALL entities in bulk using efficient aggregation queries.
+        
+        This is the KEY PERFORMANCE OPTIMIZATION - instead of making 3 queries per entity
+        (1.5M queries for 500K entities), we make ~5 queries total.
+        
+        Returns:
+            Dict mapping entity_id -> metrics dict
+        """
+        from collections import defaultdict
+        
+        metrics_by_entity = defaultdict(lambda: {
+            'appearances': 0,
+            'unique_orgs': 0,
+            'total_amount': Decimal('0.00'),
+            'direct_assignment_count': 0,
+            'direct_assignment_percentage': 0.0,
+        })
+        
+        # 1. Get appearances from AFMEntity.total_appearances (already cached)
+        entities_data = AFMEntity.objects.values_list('id', 'total_appearances')
+        for entity_id, appearances in entities_data:
+            metrics_by_entity[entity_id]['appearances'] = appearances or 0
+        
+        # 2. Get unique organizations per entity (single query with aggregation)
+        org_counts = DecisionEntityRelationship.objects.values('entity_id').annotate(
+            org_count=Count('decision__organization', distinct=True)
+        ).values_list('entity_id', 'org_count')
+        
+        for entity_id, org_count in org_counts:
+            metrics_by_entity[entity_id]['unique_orgs'] = org_count
+        
+        # 3. Get total amounts per entity (single query with aggregation)
+        amount_sums = DecisionAmountField.objects.filter(
+            amount__isnull=False
+        ).values('associated_relationship__entity_id').annotate(
+            total=Sum('amount')
+        ).values_list('associated_relationship__entity_id', 'total')
+        
+        for entity_id, total in amount_sums:
+            metrics_by_entity[entity_id]['total_amount'] = total or Decimal('0.00')
+        
+        # 4. Get direct assignment counts per entity (single query with aggregation)
+        direct_counts = DecisionEntityRelationship.objects.filter(
+            decision__classification__is_direct_assignment=True
+        ).values('entity_id').annotate(
+            count=Count('decision', distinct=True)
+        ).values_list('entity_id', 'count')
+        
+        for entity_id, count in direct_counts:
+            metrics_by_entity[entity_id]['direct_assignment_count'] = count
+        
+        # 5. Calculate percentages
+        for entity_id, metrics in metrics_by_entity.items():
+            if metrics['appearances'] > 0:
+                metrics['direct_assignment_percentage'] = (
+                    metrics['direct_assignment_count'] / metrics['appearances']
+                ) * 100.0
+        
+        return dict(metrics_by_entity)
+    
     def _gather_entity_metrics(self, entity: AFMEntity) -> Dict[str, Any]:
-        """Gather raw metrics for an entity."""
+        """
+        Gather raw metrics for an entity.
+        
+        DEPRECATED: Use _compute_all_metrics_bulk() for bulk operations.
+        This method is kept for single-entity scoring only.
+        """
         
         # Total appearances (use cached value from AFMEntity if available)
         appearances = entity.total_appearances or 0
@@ -424,25 +516,19 @@ class AFMEntityScoringService:
         - Z_SCORE: mean, std
         - ROBUST: median, iqr (interquartile range)
         - LOG: min_log, max_log (log-transformed values)
+        
+        OPTIMIZED: Uses bulk aggregation instead of subqueries.
         """
         logger.info(f"Computing global statistics for {self.config.normalization_strategy} normalization")
         
-        from django.db.models import OuterRef, Subquery
-        
         strategy = self.config.normalization_strategy
-        
-        # We need to gather metrics for all entities to compute statistics
-        # This is expensive but necessary for proper normalization
-        
-        # For efficiency, we'll use aggregation queries where possible
-        # and fall back to list comprehension for complex metrics
-        
         stats = {
             'strategy': strategy,
             'features': {}
         }
         
         # === Frequency (appearances) ===
+        # Direct aggregation on AFMEntity (fast, uses cached total_appearances)
         freq_agg = AFMEntity.objects.aggregate(
             min_val=Min('total_appearances'),
             max_val=Max('total_appearances'),
@@ -456,24 +542,26 @@ class AFMEntityScoringService:
         )
         
         # === Amount ===
-        # Need to aggregate amounts per entity, then compute stats
-        amount_sums = DecisionAmountField.objects.filter(
-            associated_relationship__entity=OuterRef('pk'),
-            amount__isnull=False
-        ).values('associated_relationship__entity').annotate(
-            total=Sum('amount')
-        ).values('total')
-        
-        entities_with_amount = AFMEntity.objects.annotate(
-            total_amount_subq=Subquery(amount_sums)
+        # Aggregate amounts per entity first, then compute stats
+        # This is much faster than using subqueries
+        amount_per_entity = list(
+            DecisionAmountField.objects.filter(amount__isnull=False)
+            .values('associated_relationship__entity_id')
+            .annotate(total=Sum('amount'))
+            .values_list('total', flat=True)
         )
         
-        amount_agg = entities_with_amount.aggregate(
-            min_val=Min('total_amount_subq'),
-            max_val=Max('total_amount_subq'),
-            avg_val=Avg('total_amount_subq'),
-            std_val=StdDev('total_amount_subq')
-        )
+        if amount_per_entity:
+            amount_values = [float(a) for a in amount_per_entity]
+            amount_agg = {
+                'min_val': min(amount_values),
+                'max_val': max(amount_values),
+                'avg_val': sum(amount_values) / len(amount_values),
+                'std_val': float(np.std(amount_values)) if len(amount_values) > 1 else 0.0,
+            }
+        else:
+            amount_agg = {'min_val': 0, 'max_val': 1, 'avg_val': 0, 'std_val': 1}
+        
         stats['features']['amount'] = self._build_feature_stats(
             'amount',
             amount_agg,
@@ -481,23 +569,24 @@ class AFMEntityScoringService:
         )
         
         # === Organizations ===
-        # Need subquery for org counts
-        org_counts = DecisionEntityRelationship.objects.filter(
-            entity=OuterRef('pk')
-        ).values('entity').annotate(
-            org_count=Count('decision__organization', distinct=True)
-        ).values('org_count')
-        
-        entities_with_org_count = AFMEntity.objects.annotate(
-            unique_org_count=Subquery(org_counts)
+        # Aggregate org counts per entity
+        org_counts_per_entity = list(
+            DecisionEntityRelationship.objects
+            .values('entity_id')
+            .annotate(org_count=Count('decision__organization', distinct=True))
+            .values_list('org_count', flat=True)
         )
         
-        org_agg = entities_with_org_count.aggregate(
-            min_val=Min('unique_org_count'),
-            max_val=Max('unique_org_count'),
-            avg_val=Avg('unique_org_count'),
-            std_val=StdDev('unique_org_count')
-        )
+        if org_counts_per_entity:
+            org_agg = {
+                'min_val': min(org_counts_per_entity),
+                'max_val': max(org_counts_per_entity),
+                'avg_val': sum(org_counts_per_entity) / len(org_counts_per_entity),
+                'std_val': float(np.std(org_counts_per_entity)) if len(org_counts_per_entity) > 1 else 0.0,
+            }
+        else:
+            org_agg = {'min_val': 0, 'max_val': 1, 'avg_val': 0, 'std_val': 1}
+        
         stats['features']['organization'] = self._build_feature_stats(
             'organization',
             org_agg,
@@ -505,27 +594,32 @@ class AFMEntityScoringService:
         )
         
         # === Direct Assignment Count ===
-        # This is more complex - need to count per entity
-        # For performance, we'll use a simplified approach with conservative estimates
-        direct_count_agg = DecisionClassification.objects.filter(
-            is_direct_assignment=True
-        ).aggregate(
-            total=Count('decision')
+        # Aggregate direct assignment counts per entity
+        direct_counts_per_entity = list(
+            DecisionEntityRelationship.objects.filter(
+                decision__classification__is_direct_assignment=True
+            )
+            .values('entity_id')
+            .annotate(count=Count('decision', distinct=True))
+            .values_list('count', flat=True)
         )
         
-        # Conservative estimate: max possible is total direct assignments
-        max_direct = direct_count_agg['total'] or 1
+        if direct_counts_per_entity:
+            max_direct = max(direct_counts_per_entity)
+            direct_agg = {
+                'min_val': min(direct_counts_per_entity),
+                'max_val': max_direct,
+                'avg_val': sum(direct_counts_per_entity) / len(direct_counts_per_entity),
+                'std_val': float(np.std(direct_counts_per_entity)) if len(direct_counts_per_entity) > 1 else 0.0,
+            }
+        else:
+            direct_agg = {'min_val': 0, 'max_val': 1, 'avg_val': 0, 'std_val': 1}
         
-        stats['features']['direct_assignment_count'] = {
-            'min': 0,
-            'max': max(max_direct, 1),  # Ensure at least 1 to avoid division by zero
-            'mean': max_direct / 2,  # Rough estimate
-            'std': max_direct / 4,  # Rough estimate
-            'median': max_direct / 2,
-            'iqr': max_direct / 2,
-            'min_log': 0,
-            'max_log': math.log1p(max_direct),
-        }
+        stats['features']['direct_assignment_count'] = self._build_feature_stats(
+            'direct_assignment_count',
+            direct_agg,
+            strategy
+        )
         
         # === Direct Assignment Percentage ===
         # Percentage ranges from 0 to 100

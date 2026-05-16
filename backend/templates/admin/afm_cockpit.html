@@ -661,44 +661,42 @@
     </div>
     
     <script>
-    // Search functionality for the table
-    document.getElementById('searchInput').addEventListener('keyup', function() {
-        const searchTerm = this.value.toLowerCase();
+    // Unified filtering function that respects both search and GEMI filter
+    function applyFilters() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        const hideFailed = document.getElementById('hideFailedGemi').checked;
         const table = document.getElementById('unfetchedTable');
         const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
         
         for (let i = 0; i < rows.length; i++) {
             const afmCell = rows[i].querySelector('.afm-cell');
             const nameCell = rows[i].querySelector('.name-cell');
+            const statusBadge = rows[i].querySelector('.status-badge.status-failed');
             
             if (afmCell && nameCell) {
                 const afmText = afmCell.textContent || afmCell.innerText;
                 const nameText = nameCell.textContent || nameCell.innerText;
                 
-                if (afmText.toLowerCase().indexOf(searchTerm) > -1 || 
-                    nameText.toLowerCase().indexOf(searchTerm) > -1) {
-                    rows[i].style.display = '';
-                } else {
-                    rows[i].style.display = 'none';
-                }
+                // Check if row matches search
+                const matchesSearch = searchTerm === '' || 
+                    afmText.toLowerCase().indexOf(searchTerm) > -1 || 
+                    nameText.toLowerCase().indexOf(searchTerm) > -1;
+                
+                // Check if row should be hidden due to failed GEMI lookup
+                const hasFailedGemi = statusBadge !== null;
+                const shouldHideFailed = hideFailed && hasFailedGemi;
+                
+                // Show row only if it matches search AND is not hidden by filter
+                rows[i].style.display = (matchesSearch && !shouldHideFailed) ? '' : 'none';
             }
         }
-    });
+    }
+    
+    // Search functionality for the table
+    document.getElementById('searchInput').addEventListener('keyup', applyFilters);
     
     // Filter to hide failed GEMI lookups
-    document.getElementById('hideFailedGemi').addEventListener('change', function() {
-        const hideFailed = this.checked;
-        const table = document.getElementById('unfetchedTable');
-        const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
-        
-        for (let i = 0; i < rows.length; i++) {
-            const statusBadge = rows[i].querySelector('.status-badge.status-failed');
-            if (statusBadge) {
-                // This row has a failed GEMI lookup
-                rows[i].style.display = hideFailed ? 'none' : '';
-            }
-        }
-    });
+    document.getElementById('hideFailedGemi').addEventListener('change', applyFilters);
     
     // Trigger the filter on page load (since checkbox is checked by default)
     document.getElementById('hideFailedGemi').dispatchEvent(new Event('change'));

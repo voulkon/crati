@@ -183,14 +183,31 @@ class BackupService:
                     stderr=subprocess.PIPE
                 )
                 
+                # Progress tracking
+                bytes_uploaded = [0]  # Use list to allow mutation in nested function
+                last_log_time = [timezone.now()]
+                
+                def progress_callback(bytes_transferred):
+                    """Update progress in logs every 10MB or 10 seconds"""
+                    bytes_uploaded[0] += bytes_transferred
+                    now = timezone.now()
+                    
+                    # Log every 10MB or every 10 seconds
+                    if bytes_uploaded[0] % (10 * 1024 * 1024) < bytes_transferred or \
+                       (now - last_log_time[0]).total_seconds() >= 10:
+                        mb_uploaded = bytes_uploaded[0] / (1024 * 1024)
+                        backup.logs += f"📤 Uploaded {mb_uploaded:.1f} MB...\n"
+                        backup.save()
+                        last_log_time[0] = now
+                        logger.info(f"Streaming backup {backup_id}: {mb_uploaded:.1f} MB uploaded")
+                
                 # Stream to S3 using upload_fileobj
-                # We need to wrap the PIPE in a file-like object
                 try:
                     self.s3_client.upload_fileobj(
                         process.stdout,
                         self.bucket_name,
                         s3_key,
-                        Callback=lambda bytes_transferred: None  # Could add progress tracking here
+                        Callback=progress_callback
                     )
                     
                     # Wait for process to complete and check for errors

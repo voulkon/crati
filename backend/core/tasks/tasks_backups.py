@@ -1,4 +1,5 @@
 from celery import shared_task
+from celery.exceptions import SoftTimeLimitExceeded, WorkerLostError
 from core.models import Backup
 from core.services.backup_service import BackupService
 from loguru import logger
@@ -41,6 +42,14 @@ def create_backup_task(self, backup_id):
             
         logger.info(f"Backup {backup_id} completed successfully")
         
+    except (SoftTimeLimitExceeded, WorkerLostError) as e:
+        # Task was terminated or worker lost
+        logger.warning(f"Backup task {backup_id} was terminated: {e}")
+        if backup:
+            backup.status = Backup.Status.FAILED
+            backup.logs += f"\n🚫 Task was terminated/cancelled\n"
+            backup.save()
+        raise
     except Backup.DoesNotExist:
         logger.error(f"Backup {backup_id} does not exist")
         raise
@@ -90,6 +99,10 @@ def restore_backup_task(self, backup_id):
         else:
             logger.info(f"Restore {backup_id} completed successfully")
             
+    except (SoftTimeLimitExceeded, WorkerLostError) as e:
+        # Task was terminated or worker lost
+        logger.warning(f"Restore task {backup_id} was terminated: {e}")
+        raise
     except Backup.DoesNotExist:
         logger.error(f"Backup {backup_id} does not exist")
         raise

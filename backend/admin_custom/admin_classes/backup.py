@@ -10,9 +10,9 @@ from core.tasks import create_backup_task, restore_backup_task
 from core.services.database_stats_service import DatabaseStatsService
 
 class BackupAdmin(admin.ModelAdmin):
-    list_display = ('id', 'backup_type', 'created_at', 'status_badge', 'size_display', 's3_location', 'streaming_method', 'cancel_action')
+    list_display = ('id', 'backup_type', 'created_at', 'status_badge', 'task_state_display', 'size_display', 's3_location', 'streaming_method', 'cancel_action')
     list_filter = ('backup_type', 'status', 'created_at', 'use_streaming')
-    readonly_fields = ('status', 's3_key', 'size_bytes', 'logs_display', 'snapshot_name', 'created_at', 'updated_at', 's3_full_path', 'celery_task_id')
+    readonly_fields = ('status', 's3_key', 'size_bytes', 'logs_display', 'snapshot_name', 'created_at', 'updated_at', 's3_full_path', 'celery_task_id', 'task_state_display')
     actions = ['restore_backup', 'cancel_backup_action']
     change_list_template = "admin/backup_change_list.html"
     
@@ -29,6 +29,43 @@ class BackupAdmin(admin.ModelAdmin):
             color, obj.get_status_display()
         )
     status_badge.short_description = 'Status'
+    
+    def task_state_display(self, obj):
+        """Show the Celery task state for running backups"""
+        if not obj.celery_task_id:
+            return '-'
+        
+        from celery.result import AsyncResult
+        from diavgeia_project.celery import app
+        
+        try:
+            result = AsyncResult(obj.celery_task_id, app=app)
+            state = result.state
+            
+            state_colors = {
+                'PENDING': '#ffc107',
+                'STARTED': '#2196F3',
+                'RETRY': '#FF9800',
+                'FAILURE': '#f44336',
+                'SUCCESS': '#4CAF50',
+                'REVOKED': '#9E9E9E'
+            }
+            color = state_colors.get(state, '#999')
+            
+            # For REVOKED state, show it clearly
+            if state == 'REVOKED':
+                return format_html(
+                    '<span style="background-color: {}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">🚫 CANCELLED</span>',
+                    color
+                )
+            
+            return format_html(
+                '<span style="background-color: {}; color: white; padding: 2px 6px; border-radius: 3px; font-size: 11px;">{}</span>',
+                color, state
+            )
+        except Exception:
+            return '-'
+    task_state_display.short_description = 'Task State'
     
     def size_display(self, obj):
         if not obj.size_bytes:
@@ -183,14 +220,35 @@ class BackupAdmin(admin.ModelAdmin):
             from diavgeia_project.celery import app
             
             result = AsyncResult(backup.celery_task_id, app=app)
-            result.revoke(terminate=True)
+            task_state_before = result.state
+            result.revoke(terminate=True, signal='SIGKILL')  # Use SIGKILL for forceful termination
             
             # Update backup status
             backup.status = Backup.Status.FAILED
-            backup.logs += f"\n[{timezone.now()}] Backup cancelled by user\n"
+            backup.logs += f"\n{'='*60}\n"
+            backup.logs += f"[{timezone.now()}] 🚫 BACKUP CANCELLED BY USER\n"
+            backup.logs += f"Task state before cancellation: {task_state_before}\n"
+            backup.logs += f"Task revoked with SIGKILL signal\n"
+            backup.logs += f"{'='*60}\n"
             backup.save()
             
-            self.message_user(request, f"Backup #{backup_id} has been cancelled", messages.SUCCESS)
+            # Wait a moment and check if revocation was successful
+            import time
+            time.sleep(0.5)
+            task_state_after = result.state
+            
+            if task_state_after == 'REVOKED':
+                self.message_user(
+                    request, 
+                    f"✅ Backup #{backup_id} has been successfully cancelled (Task state: {task_state_after})", 
+                    messages.SUCCESS
+                )
+            else:
+                self.message_user(
+                    request, 
+                    f"⚠️ Cancellation signal sent to backup #{backup_id}. Task state: {task_state_after}. Check logs for confirmation.", 
+                    messages.WARNING
+                )
             
         except Backup.DoesNotExist:
             self.message_user(request, f"Backup #{backup_id} not found", messages.ERROR)
@@ -219,10 +277,15 @@ class BackupAdmin(admin.ModelAdmin):
             
             try:
                 result = AsyncResult(backup.celery_task_id, app=app)
-                result.revoke(terminate=True)
+                task_state_before = result.state
+                result.revoke(terminate=True, signal='SIGKILL')
                 
                 backup.status = Backup.Status.FAILED
-                backup.logs += f"\n[{timezone.now()}] Backup cancelled by user via bulk action\n"
+                backup.logs += f"\n{'='*60}\n"
+                backup.logs += f"[{timezone.now()}] 🚫 BACKUP CANCELLED BY USER (bulk action)\n"
+                backup.logs += f"Task state before cancellation: {task_state_before}\n"
+                backup.logs += f"Task revoked with SIGKILL signal\n"
+                backup.logs += f"{'='*60}\n"
                 backup.save()
                 
                 cancelled += 1
@@ -230,7 +293,7 @@ class BackupAdmin(admin.ModelAdmin):
                 errors.append(f"Backup #{backup.id}: {str(e)}")
         
         if cancelled:
-            self.message_user(request, f"Successfully cancelled {cancelled} backup(s)", messages.SUCCESS)
+            self.message_user(request, f"✅ Successfully cancelled {cancelled} backup(s)", messages.SUCCESS)
         if errors:
             for error in errors:
                 self.message_user(request, error, messages.WARNING)

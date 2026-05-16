@@ -630,7 +630,7 @@
                         <input type="checkbox" class="row-checkbox" data-afm="{{ score.entity.afm }}" style="vertical-align: middle;">
                     </td>
                     <td><strong>{{ score.total_score|floatformat:1 }}</strong></td>
-                    <td><strong class="afm-cell">{{ score.entity.afm }}</strong></td>
+                    <td><strong class="afm-cell"><a href="/entity/afm/{{ score.entity.afm }}" target="_blank" style="color: inherit; text-decoration: none;">{{ score.entity.afm }}</a></strong></td>
                     <td class="name-cell">{{ score.entity.name|default:"—"|truncatewords:8 }}</td>
                     <td>{{ score.total_appearances }}</td>
                     <td>€{{ score.total_amount|floatformat:0 }}</td>

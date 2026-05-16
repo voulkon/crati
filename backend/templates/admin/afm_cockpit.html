@@ -582,13 +582,37 @@
         <h2>
             All Eligible Entities ({{ eligible_count }} total)
             <span style="float: right; font-size: 14px; font-weight: normal;">
+                <label style="margin-right: 15px; cursor: pointer;">
+                    <input type="checkbox" id="hideFailedGemi" checked style="vertical-align: middle; margin-right: 5px;">
+                    Hide Failed GEMI Lookups
+                </label>
                 <input type="text" id="searchInput" placeholder="Search by AFM or Name..." 
                        style="padding: 6px 10px; border: 1px solid var(--border-color, #ccc); border-radius: 4px; width: 300px;">
             </span>
         </h2>
+        
+        <!-- Bulk Actions -->
+        <div style="padding: 15px; background: var(--darkened-bg); border-bottom: 1px solid var(--border-color, #ccc);">
+            <span style="font-weight: 500; margin-right: 15px;">Bulk Actions:</span>
+            <button type="button" id="bulkAddBtn" class="button" style="font-size: 12px; padding: 5px 12px;" disabled>
+                Add Selected to Queue
+            </button>
+            <label style="font-size: 12px; margin-left: 10px;">
+                <input type="checkbox" id="bulkPriority" style="vertical-align: middle;">
+                With Priority
+            </label>
+            <button type="button" id="bulkExcludeBtn" class="button" style="font-size: 12px; padding: 5px 12px; background: #6c757d; color: white; margin-left: 10px;" disabled>
+                Exclude Selected
+            </button>
+            <span id="selectedCount" style="margin-left: 15px; color: var(--body-quiet-color); font-size: 12px;"></span>
+        </div>
+        
         <table id="unfetchedTable">
             <thead>
                 <tr>
+                    <th style="width: 30px;">
+                        <input type="checkbox" id="selectAll" style="vertical-align: middle;">
+                    </th>
                     <th>Score</th>
                     <th>AFM</th>
                     <th>Name</th>
@@ -597,12 +621,14 @@
                     <th>Orgs</th>
                     <th>Direct Assign</th>
                     <th>GEMI Status</th>
-                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for score in top_unfetched %}
                 <tr>
+                    <td>
+                        <input type="checkbox" class="row-checkbox" data-afm="{{ score.entity.afm }}" style="vertical-align: middle;">
+                    </td>
                     <td><strong>{{ score.total_score|floatformat:1 }}</strong></td>
                     <td><strong class="afm-cell">{{ score.entity.afm }}</strong></td>
                     <td class="name-cell">{{ score.entity.name|default:"—"|truncatewords:8 }}</td>
@@ -621,20 +647,6 @@
                         {% else %}
                             <span class="status-badge status-pending">Not attempted</span>
                         {% endif %}
-                    </td>
-                    <td>
-                        <form method="POST" action="{% url 'admin:afm_add_to_queue' %}" style="display: inline;">
-                            {% csrf_token %}
-                            <input type="hidden" name="afm" value="{{ score.entity.afm }}">
-                            <button type="submit" class="button" style="font-size: 11px; padding: 3px 8px;" 
-                                    title="Add to queue with normal priority">
-                                Add
-                            </button>
-                            <label style="font-size: 11px; margin-left: 5px;">
-                                <input type="checkbox" name="jump_queue" style="vertical-align: middle;">
-                                Priority
-                            </label>
-                        </form>
                     </td>
                 </tr>
                 {% empty %}
@@ -671,6 +683,125 @@
                 }
             }
         }
+    });
+    
+    // Filter to hide failed GEMI lookups
+    document.getElementById('hideFailedGemi').addEventListener('change', function() {
+        const hideFailed = this.checked;
+        const table = document.getElementById('unfetchedTable');
+        const rows = table.getElementsByTagName('tbody')[0].getElementsByTagName('tr');
+        
+        for (let i = 0; i < rows.length; i++) {
+            const statusBadge = rows[i].querySelector('.status-badge.status-failed');
+            if (statusBadge) {
+                // This row has a failed GEMI lookup
+                rows[i].style.display = hideFailed ? 'none' : '';
+            }
+        }
+    });
+    
+    // Trigger the filter on page load (since checkbox is checked by default)
+    document.getElementById('hideFailedGemi').dispatchEvent(new Event('change'));
+    
+    // Bulk selection functionality
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+    const bulkAddBtn = document.getElementById('bulkAddBtn');
+    const bulkExcludeBtn = document.getElementById('bulkExcludeBtn');
+    const selectedCountSpan = document.getElementById('selectedCount');
+    
+    function updateBulkButtons() {
+        const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+        const count = checkedBoxes.length;
+        
+        bulkAddBtn.disabled = count === 0;
+        bulkExcludeBtn.disabled = count === 0;
+        selectedCountSpan.textContent = count > 0 ? `${count} selected` : '';
+    }
+    
+    // Select all checkbox
+    selectAllCheckbox.addEventListener('change', function() {
+        const visibleRows = Array.from(rowCheckboxes).filter(cb => {
+            return cb.closest('tr').style.display !== 'none';
+        });
+        visibleRows.forEach(cb => cb.checked = this.checked);
+        updateBulkButtons();
+    });
+    
+    // Individual row checkboxes
+    rowCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateBulkButtons);
+    });
+    
+    // Bulk Add to Queue
+    bulkAddBtn.addEventListener('click', function() {
+        const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+        const afms = Array.from(checkedBoxes).map(cb => cb.dataset.afm);
+        const withPriority = document.getElementById('bulkPriority').checked;
+        
+        if (afms.length === 0) return;
+        
+        if (!confirm(`Add ${afms.length} AFM(s) to queue${withPriority ? ' with priority' : ''}?`)) return;
+        
+        // Create form and submit
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{% url "admin:afm_bulk_add_to_queue" %}';
+        
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = '{{ csrf_token }}';
+        form.appendChild(csrfInput);
+        
+        afms.forEach(afm => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'afms';
+            input.value = afm;
+            form.appendChild(input);
+        });
+        
+        const priorityInput = document.createElement('input');
+        priorityInput.type = 'hidden';
+        priorityInput.name = 'jump_queue';
+        priorityInput.value = withPriority ? 'on' : '';
+        form.appendChild(priorityInput);
+        
+        document.body.appendChild(form);
+        form.submit();
+    });
+    
+    // Bulk Exclude
+    bulkExcludeBtn.addEventListener('click', function() {
+        const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+        const afms = Array.from(checkedBoxes).map(cb => cb.dataset.afm);
+        
+        if (afms.length === 0) return;
+        
+        if (!confirm(`Mark ${afms.length} AFM(s) as excluded?\n\nThis will treat them as fake/typo companies and they will no longer appear in eligible entities.`)) return;
+        
+        // Create form and submit
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{% url "admin:afm_bulk_mark_excluded" %}';
+        
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = '{{ csrf_token }}';
+        form.appendChild(csrfInput);
+        
+        afms.forEach(afm => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'afms';
+            input.value = afm;
+            form.appendChild(input);
+        });
+        
+        document.body.appendChild(form);
+        form.submit();
     });
     </script>
 

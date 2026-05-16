@@ -398,8 +398,11 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
             path('cockpit/populate/', self.admin_site.admin_view(self.populate_queue_view), name='afm_populate_queue'),
             path('cockpit/process/', self.admin_site.admin_view(self.process_batch_view), name='afm_process_batch'),
             path('cockpit/add-to-queue/', self.admin_site.admin_view(self.add_to_queue_view), name='afm_add_to_queue'),
+            path('cockpit/bulk-add-to-queue/', self.admin_site.admin_view(self.bulk_add_to_queue_view), name='afm_bulk_add_to_queue'),
             path('cockpit/remove-from-queue/', self.admin_site.admin_view(self.remove_from_queue_view), name='afm_remove_from_queue'),
             path('cockpit/boost-priority/', self.admin_site.admin_view(self.boost_priority_view), name='afm_boost_priority'),
+            path('cockpit/mark-excluded/', self.admin_site.admin_view(self.mark_excluded_view), name='afm_mark_excluded'),
+            path('cockpit/bulk-mark-excluded/', self.admin_site.admin_view(self.bulk_mark_excluded_view), name='afm_bulk_mark_excluded'),
             path('cockpit/status/', self.admin_site.admin_view(self.queue_status_api), name='afm_queue_status_api'),
         ]
         return custom_urls + urls
@@ -691,6 +694,113 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
                 
             except Exception as e:
                 messages.error(request, f"Failed to boost priority: {str(e)}")
+        
+        return redirect('admin:afm_cockpit')
+    
+    def mark_excluded_view(self, request):
+        """Mark an entity as manually excluded (fake/typo company)."""
+        if request.method == 'POST':
+            try:
+                afm = request.POST.get('afm')
+                
+                if not afm:
+                    messages.error(request, "AFM is required")
+                    return redirect('admin:afm_cockpit')
+                
+                # Get the entity
+                from core.models.entities import AFMEntity
+                entity = AFMEntity.objects.get(afm=afm)
+                
+                # Mark as "looked up and found nothing" (excluded)
+                from django.utils import timezone
+                entity.gemi_lookup_attempted = timezone.now()
+                entity.gemi_lookup_success = True  # Pretend success but with 0 companies
+                entity.gemi_companies_count = 0
+                entity.save(update_fields=['gemi_lookup_attempted', 'gemi_lookup_success', 'gemi_companies_count'])
+                
+                # Also remove from queue if present
+                queue_service = AFMFetchQueueService()
+                queue_service.redis_client.zrem(queue_service.PENDING_KEY, afm)
+                
+                messages.success(
+                    request,
+                    f"AFM {afm} marked as excluded (treated as fake/typo company). "
+                    f"It will no longer appear in eligible entities."
+                )
+                
+            except AFMEntity.DoesNotExist:
+                messages.error(request, f"AFM {afm} not found")
+            except Exception as e:
+                messages.error(request, f"Failed to mark as excluded: {str(e)}")
+        
+        return redirect('admin:afm_cockpit')
+    
+    def bulk_add_to_queue_view(self, request):
+        """Bulk add multiple AFMs to the queue."""
+        if request.method == 'POST':
+            try:
+                afms = request.POST.getlist('afms')
+                jump_queue = request.POST.get('jump_queue') == 'on'
+                
+                if not afms:
+                    messages.error(request, "No AFMs selected")
+                    return redirect('admin:afm_cockpit')
+                
+                queue_service = AFMFetchQueueService()
+                added_count = 0
+                already_exists_count = 0
+                
+                for afm in afms:
+                    added = queue_service.add_single_afm(afm=afm, jump_queue=jump_queue)
+                    if added:
+                        added_count += 1
+                    else:
+                        already_exists_count += 1
+                
+                priority_msg = " with PRIORITY" if jump_queue else ""
+                msg = f"Added {added_count} AFM(s) to queue{priority_msg}."
+                if already_exists_count > 0:
+                    msg += f" {already_exists_count} already in queue or processed."
+                
+                messages.success(request, msg)
+                
+            except Exception as e:
+                messages.error(request, f"Failed to add AFMs: {str(e)}")
+        
+        return redirect('admin:afm_cockpit')
+    
+    def bulk_mark_excluded_view(self, request):
+        """Bulk mark multiple entities as excluded."""
+        if request.method == 'POST':
+            try:
+                afms = request.POST.getlist('afms')
+                
+                if not afms:
+                    messages.error(request, "No AFMs selected")
+                    return redirect('admin:afm_cockpit')
+                
+                from core.models.entities import AFMEntity
+                from django.utils import timezone
+                
+                # Update all selected entities
+                updated_count = AFMEntity.objects.filter(afm__in=afms).update(
+                    gemi_lookup_attempted=timezone.now(),
+                    gemi_lookup_success=True,
+                    gemi_companies_count=0
+                )
+                
+                # Remove from queue if present
+                queue_service = AFMFetchQueueService()
+                for afm in afms:
+                    queue_service.redis_client.zrem(queue_service.PENDING_KEY, afm)
+                
+                messages.success(
+                    request,
+                    f"Marked {updated_count} AFM(s) as excluded. They will no longer appear in eligible entities."
+                )
+                
+            except Exception as e:
+                messages.error(request, f"Failed to mark as excluded: {str(e)}")
         
         return redirect('admin:afm_cockpit')
     

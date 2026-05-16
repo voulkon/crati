@@ -241,7 +241,8 @@ class Command(BaseCommand):
         try:
             stats = queue_service.populate_queue_from_scores(
                 limit=options['limit'],
-                force_refresh=options['force_refresh']
+                force_refresh=options['force_refresh'],
+                auto_trigger=False  # Management command - user controls workflow explicitly
             )
             
             self.stdout.write(self.style.SUCCESS('✓ Queue populated!'))

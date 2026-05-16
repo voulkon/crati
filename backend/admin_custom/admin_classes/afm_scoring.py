@@ -560,13 +560,15 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
                 queue_service = AFMFetchQueueService()
                 stats = queue_service.populate_queue_from_scores(
                     limit=limit,
-                    force_refresh=force
+                    force_refresh=force,
+                    auto_trigger=False  # Don't auto-trigger on bulk populate - user can manually start
                 )
                 
                 messages.success(
                     request,
                     f"Queue populated! Added: {stats['added']}, "
-                    f"Total pending: {stats['total_pending']}"
+                    f"Total pending: {stats['total_pending']}. "
+                    f"Click 'Start Processing' to begin fetching."
                 )
                 
             except Exception as e:
@@ -619,18 +621,22 @@ class AFMEntityScoreAdmin(admin.ModelAdmin):
                     return redirect('admin:afm_cockpit')
                 
                 queue_service = AFMFetchQueueService()
-                added = queue_service.add_single_afm(afm=afm, jump_queue=jump_queue)
+                added = queue_service.add_single_afm(
+                    afm=afm, 
+                    jump_queue=jump_queue,
+                    auto_trigger=True  # Auto-trigger for single AFM additions
+                )
                 
                 if added:
                     if jump_queue:
                         messages.success(
                             request,
-                            f"AFM {afm} added to queue with PRIORITY (will be processed first)!"
+                            f"AFM {afm} added to queue with PRIORITY and processing started!"
                         )
                     else:
                         messages.success(
                             request,
-                            f"AFM {afm} added to queue!"
+                            f"AFM {afm} added to queue and processing started!"
                         )
                 else:
                     messages.warning(

@@ -67,9 +67,6 @@ class AFMFetchQueueService:
     # Lock timeout (prevent stale locks)
     LOCK_TIMEOUT = 600  # 10 minutes
     
-    # GEMI rate limit
-    MAX_REQUESTS_PER_MINUTE = getattr(settings, 'GEMI_MAX_REQUESTS_PER_MINUTE', 6)
-    
     def __init__(self):
         """Initialize Redis connection."""
         self.redis_client = get_redis_connection("default")
@@ -77,7 +74,8 @@ class AFMFetchQueueService:
     def populate_queue_from_scores(
         self, 
         limit: Optional[int] = None,
-        force_refresh: bool = False
+        force_refresh: bool = False,
+        auto_trigger: bool = True
     ) -> Dict[str, Any]:
         """
         Populate Redis queue from AFMEntityScore table.
@@ -88,6 +86,7 @@ class AFMFetchQueueService:
         Args:
             limit: Maximum number of entities to queue (None = all eligible)
             force_refresh: Clear existing queue before populating
+            auto_trigger: If True, automatically trigger processing task after adding items
             
         Returns:
             Statistics about queue population
@@ -141,6 +140,18 @@ class AFMFetchQueueService:
         self._update_stats(queue_populated_at=timezone.now().isoformat())
         
         logger.info(f"Queue population completed", extra=stats)
+        
+        # Auto-trigger processing if items were added
+        if auto_trigger and added > 0:
+            try:
+                from core.tasks.tasks_entities import process_afm_fetch_queue
+                task = process_afm_fetch_queue.delay()
+                logger.info(f"Auto-triggered queue processing task: {task.id}")
+                stats['processing_task_id'] = task.id
+            except Exception as e:
+                logger.error(f"Failed to auto-trigger queue processing: {e}")
+                stats['auto_trigger_error'] = str(e)
+        
         return stats
     
     def process_batch(
@@ -155,12 +166,12 @@ class AFMFetchQueueService:
         
         Args:
             batch_size: Number of AFMs to process in this batch
-            max_requests_per_minute: Override default rate limit
+            max_requests_per_minute: Override default rate limit (uses GemiService.MAX_REQUESTS_PER_MINUTE if None)
             
         Returns:
             Processing statistics
         """
-        rate_limit = max_requests_per_minute or self.MAX_REQUESTS_PER_MINUTE
+        rate_limit = max_requests_per_minute or GemiService.MAX_REQUESTS_PER_MINUTE
         
         # Try to acquire global lock
         lock_acquired = self.redis_client.set(
@@ -395,7 +406,7 @@ class AFMFetchQueueService:
         if kwargs:
             self.redis_client.hset(self.STATS_KEY, mapping=kwargs)
     
-    def add_single_afm(self, afm: str, priority_score: Optional[float] = None, jump_queue: bool = False) -> bool:
+    def add_single_afm(self, afm: str, priority_score: Optional[float] = None, jump_queue: bool = False, auto_trigger: bool = True) -> bool:
         """
         Manually add a single AFM to the queue.
         
@@ -403,6 +414,7 @@ class AFMFetchQueueService:
             afm: AFM to add
             priority_score: Optional score value (defaults to entity's total_score)
             jump_queue: If True, assign maximum score to process first
+            auto_trigger: If True, automatically trigger processing task after adding
             
         Returns:
             True if added, False if already queued/processed
@@ -437,4 +449,14 @@ class AFMFetchQueueService:
         )
         
         logger.info(f"Added {afm} to queue with score {priority_score}" + (" (PRIORITY JUMP)" if jump_queue else ""))
+        
+        # Auto-trigger processing if requested
+        if auto_trigger:
+            try:
+                from core.tasks.tasks_entities import process_afm_fetch_queue
+                task = process_afm_fetch_queue.delay()
+                logger.info(f"Auto-triggered queue processing task: {task.id}")
+            except Exception as e:
+                logger.error(f"Failed to auto-trigger queue processing: {e}")
+        
         return True

@@ -21,6 +21,10 @@ class GemiService:
     _companies_service = None
     _rate_limit_key = "gemi_api_calls"
     
+    # GEMI API rate limit (requests per minute)
+    # This is the single source of truth for all services that interact with GEMI
+    MAX_REQUESTS_PER_MINUTE = getattr(settings, 'GEMI_MAX_REQUESTS_PER_MINUTE', 6)
+    
     @classmethod
     def get_companies_service(cls) -> CompaniesService:
         """Get or create the GEMI companies service instance."""

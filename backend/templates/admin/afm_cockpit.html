@@ -726,9 +726,39 @@
         updateBulkButtons();
     });
     
-    // Individual row checkboxes
+    // Individual row checkboxes with Shift-click range selection
+    let lastCheckedCheckbox = null;
+    
     rowCheckboxes.forEach(cb => {
-        cb.addEventListener('change', updateBulkButtons);
+        cb.addEventListener('click', function(e) {
+            // Shift-click range selection
+            if (e.shiftKey && lastCheckedCheckbox) {
+                const checkboxArray = Array.from(rowCheckboxes);
+                const fromIndex = checkboxArray.indexOf(lastCheckedCheckbox);
+                const toIndex = checkboxArray.indexOf(this);
+                
+                if (fromIndex !== -1 && toIndex !== -1) {
+                    const start = Math.min(fromIndex, toIndex);
+                    const end = Math.max(fromIndex, toIndex);
+                    
+                    for (let i = start; i <= end; i++) {
+                        // Only check visible rows
+                        if (checkboxArray[i].closest('tr').style.display !== 'none') {
+                            checkboxArray[i].checked = true;
+                        }
+                    }
+                }
+            }
+            
+            // Track this as the last checked checkbox (only if checked)
+            if (this.checked) {
+                lastCheckedCheckbox = this;
+            } else {
+                lastCheckedCheckbox = null;
+            }
+            
+            updateBulkButtons();
+        });
     });
     
     // Bulk Add to Queue

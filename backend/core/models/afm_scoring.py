@@ -106,11 +106,16 @@ class AFMScoringConfig(models.Model):
     
     # === Normalization strategy ===
     
+    use_simple_scoring = models.BooleanField(
+        default=True,
+        help_text="Use simple percentage-based scoring (faster) instead of sophisticated normalization"
+    )
+    
     normalization_strategy = models.CharField(
         max_length=20,
         choices=NormalizationStrategy.choices,
         default=NormalizationStrategy.ROBUST,
-        help_text="Normalization method for feature scaling"
+        help_text="Normalization method for feature scaling (only used if use_simple_scoring=False)"
     )
     
     # === Filtering criteria (minimum thresholds) ===

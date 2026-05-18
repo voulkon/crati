@@ -10,11 +10,12 @@ from core.tasks import create_backup_task, restore_backup_task
 from core.services.database_stats_service import DatabaseStatsService
 
 class BackupAdmin(admin.ModelAdmin):
-    list_display = ('id', 'backup_type', 'created_at', 'status_badge', 'task_state_display', 'size_display', 's3_location', 'streaming_method', 'cancel_action')
+    list_display = ('id', 'backup_type', 'created_at', 'status_badge', 'task_state_display', 'progress_display', 'size_display', 's3_location', 'streaming_method', 'cancel_action')
     list_filter = ('backup_type', 'status', 'created_at', 'use_streaming')
     readonly_fields = ('status', 's3_key', 'size_bytes', 'logs_display', 'snapshot_name', 'created_at', 'updated_at', 's3_full_path', 'celery_task_id', 'task_state_display')
     actions = ['restore_backup', 'cancel_backup_action']
     change_list_template = "admin/backup_change_list.html"
+    change_form_template = "admin/backup_change_form.html"
     
     def status_badge(self, obj):
         colors = {
@@ -66,6 +67,38 @@ class BackupAdmin(admin.ModelAdmin):
         except Exception:
             return '-'
     task_state_display.short_description = 'Task State'
+    
+    def progress_display(self, obj):
+        """Extract and display latest progress from logs"""
+        if obj.status not in [Backup.Status.PENDING, Backup.Status.IN_PROGRESS]:
+            return '-'
+        
+        if not obj.logs:
+            return format_html('<span style="color: #999;">Starting...</span>')
+        
+        # Extract latest progress info from logs
+        import re
+        # Look for "📤 Uploaded X MB..." pattern
+        progress_pattern = r'📤 Uploaded (\d+\.\d+) MB'
+        matches = re.findall(progress_pattern, obj.logs)
+        
+        if matches:
+            latest_mb = matches[-1]  # Get the most recent progress
+            return format_html(
+                '<span style="color: #2196F3; font-weight: bold;">📤 {} MB</span>',
+                latest_mb
+            )
+        
+        # Check for other status messages
+        if 'Starting streaming pg_dump' in obj.logs:
+            return format_html('<span style="color: #FF9800;">🔄 Streaming...</span>')
+        elif 'Starting pg_dump' in obj.logs:
+            return format_html('<span style="color: #FF9800;">💾 Dumping...</span>')
+        elif 'Uploading to S3' in obj.logs:
+            return format_html('<span style="color: #2196F3;">⬆️ Uploading...</span>')
+        
+        return format_html('<span style="color: #999;">In progress...</span>')
+    progress_display.short_description = 'Progress'
     
     def size_display(self, obj):
         if not obj.size_bytes:

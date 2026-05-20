@@ -28,6 +28,7 @@ if DATABASE_URL:
             },
             "CONN_MAX_AGE": CONN_MAX_AGE,  # Persist connections to reduce handshake overhead
             "CONN_HEALTH_CHECKS": True,  # Enable connection health checks
+            "DISABLE_SERVER_SIDE_CURSORS": True,  # Required for PgBouncer transaction pooling
         }
     }
 else:
@@ -46,5 +47,6 @@ else:
             },
             "CONN_MAX_AGE": CONN_MAX_AGE,  # Persist connections to reduce handshake overhead
             "CONN_HEALTH_CHECKS": True,  # Enable connection health checks
+            "DISABLE_SERVER_SIDE_CURSORS": True,  # Required for PgBouncer transaction pooling
         }
     }

@@ -96,11 +96,21 @@ from .tasks_search_management import (
     manage_postgres_search_task
 )
 
+from .tasks_auto_import import (
+    auto_daily_import_task,
+    trigger_next_backfill,
+    find_next_oldest_missing_day,
+)
+
 # This ensures all tasks are available when importing from core.tasks
 __all__ = [
     "backfill_search_vectors_task",
     "cleanup_search_vectors_task",
     "manage_postgres_search_task",
+    # Auto Import (Autofarming)
+    "auto_daily_import_task",
+    "trigger_next_backfill",
+    "find_next_oldest_missing_day",
     # Documents
     "process_document_task",
     "process_scanned_document_task",

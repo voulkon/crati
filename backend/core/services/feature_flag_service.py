@@ -173,6 +173,42 @@ class FeatureFlagService:
             'value_type': 'choice',
             'choices': ['none', 'selections_only', 'filtered', 'all'],
         },
+        'AUTO_DAILY_IMPORT_ENABLED': {
+            'name': 'Auto Daily Import (Fresh Data)',
+            'description': 'Automatically import decisions for the previous day at scheduled time. '
+                          'Runs daily at the time specified in AUTO_DAILY_IMPORT_TIME. '
+                          'This task will eventually include summary generation and email notifications.',
+            'default': False,
+            'env_var': 'AUTO_DAILY_IMPORT_ENABLED',
+            'category': 'data_ingestion',
+            'requires_restart': False,
+        },
+        'AUTO_DAILY_IMPORT_TIME': {
+            'name': 'Auto Daily Import Time',
+            'description': 'Time (HH:MM format) when the daily import task runs. '
+                          'Default is "00:30" (12:30 AM). '
+                          'Must be set via environment variable AUTO_DAILY_IMPORT_TIME '
+                          '(cannot use database value because Celery beat schedule is '
+                          'defined before Django apps are loaded). '
+                          'Requires worker/beat restart to take effect.',
+            'default': '00:30',
+            'env_var': 'AUTO_DAILY_IMPORT_TIME',
+            'category': 'data_ingestion',
+            'requires_restart': True,
+            'value_type': 'string',
+        },
+        'AUTO_BACKFILL_ENABLED': {
+            'name': 'Auto Backfill (Continuous Autofarming)',
+            'description': 'Continuously import historical data by finding the next oldest missing day. '
+                          'When enabled, after each import job completes, automatically finds and queues '
+                          'the next oldest day with missing data. This runs continuously until all historical '
+                          'gaps are filled. Uses actual Decision records to verify coverage. '
+                          'Enabling this flag will immediately trigger the first backfill task.',
+            'default': False,
+            'env_var': 'AUTO_BACKFILL_ENABLED',
+            'category': 'data_ingestion',
+            'requires_restart': False,
+        },
     }
     
     def __init__(self):

@@ -159,6 +159,17 @@ class FeatureFlag(models.Model):
     
     def save(self, *args, **kwargs):
         """Override save to invalidate cache and validate prerequisites when flag changes."""
+        # Track if this is an update and what the old value was
+        is_update = self.pk is not None
+        old_enabled = None
+        
+        if is_update:
+            try:
+                old_instance = FeatureFlag.objects.get(pk=self.pk)
+                old_enabled = old_instance.enabled if old_instance.value_type == 'boolean' else None
+            except FeatureFlag.DoesNotExist:
+                pass
+        
         # Validate prerequisites for ENTITY_SEARCH_METHOD
         if self.key == 'ENTITY_SEARCH_METHOD' and self.value_type in ('choice', 'string'):
             from core.services.prerequisite_check_service import prerequisite_check
@@ -176,11 +187,25 @@ class FeatureFlag(models.Model):
                     )
         
         super().save(*args, **kwargs)
+        
         # Invalidate cache for this flag
         cache_key = f"feature_flag:{self.key}"
         cache.delete(cache_key)
         # Also invalidate the all flags cache
         cache.delete("feature_flags:all")
+        
+        # Trigger backfill when AUTO_BACKFILL_ENABLED is turned on
+        if self.key == 'AUTO_BACKFILL_ENABLED' and self.value_type == 'boolean':
+            # Check if we just enabled it (changed from False to True)
+            if self.enabled and (old_enabled is False or old_enabled is None):
+                # Trigger the first backfill asynchronously
+                # Import here to avoid circular imports
+                from core.tasks.tasks_auto_import import trigger_next_backfill
+                from loguru import logger
+                
+                logger.info("AUTO_BACKFILL_ENABLED was just enabled - triggering first backfill")
+                trigger_next_backfill.delay()
+
     
     def delete(self, *args, **kwargs):
         """Override delete to invalidate cache."""

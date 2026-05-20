@@ -140,6 +140,29 @@ app.conf.update(
     worker_prefetch_multiplier=1,  # Fetch 1 task per worker process (concurrency * 1)
 )
 
+# Helper to get auto import schedule time from environment
+def get_auto_import_time():
+    """
+    Get the scheduled time for auto daily import from environment variable.
+    
+    Note: Cannot use feature_flags here because Django apps aren't loaded yet
+    at module import time (when beat schedule is defined).
+    
+    The feature flag AUTO_DAILY_IMPORT_TIME has requires_restart=True for this reason.
+    Set via environment variable: AUTO_DAILY_IMPORT_TIME="03:00"
+    
+    Falls back to: Environment variable → Default "00:30"
+    """
+    import os
+    time_str = os.environ.get('AUTO_DAILY_IMPORT_TIME', '00:30')
+    try:
+        hour, minute = time_str.split(':')
+        return int(hour), int(minute)
+    except (ValueError, AttributeError):
+        return 0, 30  # Default to 00:30
+
+auto_import_hour, auto_import_minute = get_auto_import_time()
+
 app.conf.beat_schedule = {
     # "persist-analytics-daily": {
     #     "task": "api.tasks.persist_analytics_task",
@@ -204,6 +227,13 @@ app.conf.beat_schedule = {
     'cleanup-old-health-checks': {
         'task': 'core.tasks.health_check_tasks.cleanup_old_health_checks',
         'schedule': crontab(hour=1, minute=0, day_of_week=0),  # Weekly on Sunday at 1 AM
+    },
+
+    # Auto Daily Import (Fresh Data) - Runs at configurable time (default 00:30)
+    # Time configured via AUTO_DAILY_IMPORT_TIME feature flag
+    'auto-daily-import': {
+        'task': 'core.tasks.tasks_auto_import.auto_daily_import_task',
+        'schedule': crontab(hour=auto_import_hour, minute=auto_import_minute),
     },
 
 }

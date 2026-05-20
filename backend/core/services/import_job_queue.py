@@ -295,13 +295,14 @@ class ImportJobQueue:
         Called when an ImportJob completes (success or failure).
         
         Triggers dispatch of next queued job if capacity available.
+        Also triggers continuous backfill if AUTO_BACKFILL_ENABLED is true.
         
         Args:
             job_id: ID of completed ImportJob
         """
         logger.info(f"ImportJobQueue: Job #{job_id} completed, checking queue")
         
-        # Try to dispatch next job
+        # Try to dispatch next job from the pending queue
         dispatched = self.dispatch_next_job()
         
         if dispatched:
@@ -315,6 +316,13 @@ class ImportJobQueue:
                     f"ImportJobQueue: {pending_count} jobs pending, "
                     f"waiting for capacity"
                 )
+            else:
+                # No pending jobs - trigger continuous backfill if enabled
+                # This creates the autofarming loop
+                from core.tasks.tasks_auto_import import trigger_next_backfill
+                logger.debug("ImportJobQueue: No pending jobs, triggering backfill check")
+                trigger_next_backfill.delay()
+
     
     def get_queue_status(self) -> Dict[str, Any]:
         """

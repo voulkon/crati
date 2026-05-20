@@ -69,6 +69,8 @@ class ImportJobAdmin(admin.ModelAdmin):
         "stuck_indicator",
         "created_by",
         "created_at",
+        "start_date_day",
+        "end_date_day",
         "decisions_count",
         "chunk_progress_display",
         "pipeline_progress_display",
@@ -82,6 +84,7 @@ class ImportJobAdmin(admin.ModelAdmin):
         "warning_health_checks_link",
         "failed_health_checks_link",
     )
+    list_per_page = 10
     list_filter = ("status", "created_by", "created_at")
     search_fields = ("organization__label", "signer__first_name", "signer__last_name", "celery_task_id")
     date_hierarchy = "created_at"
@@ -160,6 +163,22 @@ class ImportJobAdmin(admin.ModelAdmin):
             return f"Signer: {obj.signer}"
         return "All"
     entity_name.short_description = "Entity"
+
+    def start_date_day(self, obj):
+        """Display the day of the week for start_date"""
+        if obj.start_date:
+            return obj.start_date.strftime("%A")
+        return "-"
+    start_date_day.short_description = "Start Day"
+    start_date_day.admin_order_field = "start_date"
+
+    def end_date_day(self, obj):
+        """Display the day of the week for end_date"""
+        if obj.end_date:
+            return obj.end_date.strftime("%A")
+        return "-"
+    end_date_day.short_description = "End Day"
+    end_date_day.admin_order_field = "end_date"
 
     def stuck_indicator(self, obj):
         """Visual indicator for stuck jobs"""

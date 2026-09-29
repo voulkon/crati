@@ -8,31 +8,36 @@ import { CollapsibleSection, DashboardSectionLoading } from './DashboardGrid';
 import { formatCompactAmount } from '../utils/format';
 import { buildEntityUrl } from '../utils/entityLinks';
 
-const PAGE_SIZE = 6;
+const PAGE_SIZE = 5;
 
 /**
- * OrganizationsSection — Infinite-scroll list of most active organizations.
+ * TopBandedDaGiversSection — Organizations issuing the most €30k–€38k
+ * direct assignments. Mirror of TopBandedDaReceiversSection: same banded
+ * population, but grouped by the issuing (giver) organization instead of
+ * the recipient entity.
  *
- * Fetches from /explore/organizations/ with offset-based pagination.
- * Uses useInfiniteScroll to auto-load more as the user scrolls.
+ * Ranked by frequency (most assignments issued first). Fetches from
+ * /decisions/top-banded-da-givers/ with limit/offset pagination and
+ * appends pages as the user scrolls.
  */
-const OrganizationsSection = ({
+const TopBandedDaGiversSection = ({
   onSeeAll,
   collapsible = false,
   className = '',
+  directOnly = false,
 }) => {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { dateRange } = useDateRange();
 
-  const [organizations, setOrganizations] = useState([]);
+  const [rows, setRows] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
 
-  // Fetch a page of organizations (append mode after initial load)
-  const fetchOrganizations = useCallback(async (offset, append = false) => {
+  const fetchRows = useCallback(async (offset, append = false) => {
     if (!dateRange) return;
 
     try {
@@ -44,20 +49,21 @@ const OrganizationsSection = ({
       }
 
       const response = await apiClient.get(
-        `/explore/organizations/?start_date=${dateRange.start_date}&end_date=${dateRange.end_date}&limit=${PAGE_SIZE}&offset=${offset}`
+        `/decisions/top-banded-da-givers/?start_date=${dateRange.start_date}&end_date=${dateRange.end_date}&limit=${PAGE_SIZE}&offset=${offset}`
       );
 
       const data = response.data;
 
       if (append) {
-        setOrganizations(prev => [...prev, ...(data.organizations || [])]);
+        setRows(prev => [...prev, ...(data.results || [])]);
       } else {
-        setOrganizations(data.organizations || []);
+        setRows(data.results || []);
       }
 
-      setHasMore(data.has_more ?? false);
+      setTotalCount(data.pagination?.total_count ?? 0);
+      setHasMore(data.pagination?.has_more ?? false);
     } catch (err) {
-      console.error('Failed to load organizations:', err);
+      console.error('Failed to load banded direct-assignment givers:', err);
       if (!append) setError(err.response?.data?.error || err.message);
     } finally {
       setLoading(false);
@@ -65,19 +71,19 @@ const OrganizationsSection = ({
     }
   }, [dateRange]);
 
-  // Reset and reload when dateRange changes
   useEffect(() => {
-    setOrganizations([]);
+    setRows([]);
+    setTotalCount(0);
     setHasMore(true);
-    fetchOrganizations(0, false);
+    fetchRows(0, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateRange]);
 
   const loadMore = useCallback(() => {
     if (hasMore && !loadingMore && !loading) {
-      fetchOrganizations(organizations.length, true);
+      fetchRows(rows.length, true);
     }
-  }, [hasMore, loadingMore, loading, organizations.length, fetchOrganizations]);
+  }, [hasMore, loadingMore, loading, rows.length, fetchRows]);
 
   const { sentinelRef } = useInfiniteScroll({
     hasMore,
@@ -86,6 +92,8 @@ const OrganizationsSection = ({
     onLoadMore: loadMore,
   });
 
+  const title = t('homepage.repeatBandedDaGivers');
+
   if (loading) {
     return <DashboardSectionLoading message={t('homepage.loading')} />;
   }
@@ -93,7 +101,7 @@ const OrganizationsSection = ({
   if (error) {
     return (
       <CollapsibleSection
-        title={t('homepage.mostActiveOrganizations')}
+        title={title}
         onSeeAll={onSeeAll}
         collapsible={collapsible}
         className={className}
@@ -107,41 +115,42 @@ const OrganizationsSection = ({
 
   return (
     <CollapsibleSection
-      title={t('homepage.mostActiveOrganizations')}
-      onSeeAll={organizations.length > 0 ? onSeeAll : undefined}
+      title={title}
+      onSeeAll={rows.length > 0 ? onSeeAll : undefined}
       collapsible={collapsible}
       className={className}
     >
       <div className="dashboard-section-info">
-        <span>{organizations.length} {t('homepage.decisions')}</span>
+        <span>{totalCount} {t('homepage.organizations')}</span>
       </div>
       <div className="dashboard-section-scroll">
-        {organizations.length === 0 ? (
+        {rows.length === 0 ? (
           <p className="dashboard-empty">{t('exploration.noResults')}</p>
         ) : (
           <>
-            {organizations.map((org, index) => (
+            {rows.map((row, index) => (
               <button
-                key={org.uid}
+                key={row.organization_uid}
                 className="dashboard-item-card"
-                onClick={() => navigate(buildEntityUrl('organization', org.uid, dateRange))}
+                onClick={() => navigate(buildEntityUrl('organization', row.organization_uid, dateRange, { directOnly }))}
               >
                 <div className="dashboard-item-left">
                   <span className="dashboard-rank">#{index + 1}</span>
                 </div>
                 <div className="dashboard-item-body">
                   <div className="dashboard-item-title">
-                    {org.label}
+                    {row.organization_label}
                   </div>
-                  <div className="dashboard-item-meta">
-                    <span>{org.count} {t('homepage.decisions')}</span>
+                  <div className="dashboard-item-subtitle">
+                    {row.decision_count} {t('homepage.assignments')}
                   </div>
                 </div>
-                <span className="dashboard-item-amount">{formatCompactAmount(org.total_amount)}</span>
+                <span className="dashboard-item-amount">
+                  {formatCompactAmount(row.banded_amount_sum)}
+                </span>
               </button>
             ))}
 
-            {/* Infinite-scroll sentinel */}
             {hasMore && (
               <div ref={sentinelRef} className="dashboard-scroll-sentinel">
                 {loadingMore && (
@@ -153,12 +162,8 @@ const OrganizationsSection = ({
               </div>
             )}
 
-            {/* Manual "Load more" fallback */}
             {hasMore && !loadingMore && (
-              <button
-                className="dashboard-load-more"
-                onClick={loadMore}
-              >
+              <button className="dashboard-load-more" onClick={loadMore}>
                 {t('exploration.loadMore')}
               </button>
             )}
@@ -169,4 +174,4 @@ const OrganizationsSection = ({
   );
 };
 
-export default OrganizationsSection;
+export default TopBandedDaGiversSection;
